@@ -4,7 +4,7 @@
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 These instructions will help you set up the project on your local machine.
 
@@ -19,6 +19,12 @@ Make sure you have these installed:
 - Git
 
 ---
+
+### 1️⃣ Clone the Repository
+
+```bash
+git clone <your-repo-url>
+cd DMC-ERP  
 
 ### 1️⃣ Clone the Repository
 
