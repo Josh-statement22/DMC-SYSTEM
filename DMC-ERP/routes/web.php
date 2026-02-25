@@ -1,49 +1,42 @@
 <?php
-
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
-/*
-|--------------------------------------------------------------------------
-| LOGIN ROUTES
-|--------------------------------------------------------------------------
-*/
+Route::middleware('web')->group(function () {
 
-// Login Page
-Route::get('/login', function() {
-    return view('login');
-})->name('login');
+    // Login Page
+    Route::get('/login', function () {
+        return view('login');
+    })->name('login');
 
-// Handle Login Form POST
-Route::post('/login', function (Request $request) {
+    // Handle Login
+    Route::post('/login', function (Request $request) {
 
-    // Dummy authentication
-    if ($request->email === 'admin@dmc.com' && $request->password === 'password123') {
+        $user = User::where('employee_id', $request->employee_id)->first(); // <- FIXED
 
-        session(['is_admin' => true]);
+        if ($user && Hash::check($request->password, $user->password)) {
+            session([
+                'user_id' => $user->id,
+                'is_admin' => $user->role_id == 1
+            ]);
 
-        // 👉 Redirect sa NEW admin dashboard
-        return redirect()->route('admin.dashboard');
-    }
-
-    return back()->with('error', 'Invalid credentials');
-});
-
-
-/*
-|--------------------------------------------------------------------------
-| ADMIN ROUTES
-|--------------------------------------------------------------------------
-*/
-
-Route::prefix('admin')->group(function () {
-
-    Route::get('/dashboard', function () {
-
-        if (!session('is_admin')) {
-            return redirect('/login');
+            if ($user->role_id == 1) {
+                return redirect()->route('admin.dashboard');
+            } else {
+                return redirect()->route('staff.dashboard');
+            }
         }
 
+        return back()->with('error', 'Invalid employee ID or password');
+    });
+
+    Route::prefix('admin')->group(function () {
+    Route::get('/dashboard', function () {
+        if (!session('is_admin')) {
+            return redirect()->route('login');
+        }
         return view('admin.dashboard');
     })->name('admin.dashboard');
 
@@ -53,6 +46,7 @@ Route::prefix('admin')->group(function () {
 
     Route::get('/purchase', function () {
         return view('admin.purchase');
-    })->name('admin.purchase');
+    })->name('admin.purchase'); // <- DITO
+});
 
 });

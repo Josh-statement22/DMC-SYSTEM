@@ -44,7 +44,7 @@ bg-gradient-to-br from-blue-950 via-blue-700 to-blue-200">
                         <i data-feather="user"></i>
                     </span>
 
-                    <input type="text" name="email" placeholder=" "
+                    <input type="text" name="employee_id" placeholder=" "
                         class="peer w-full pl-12 pr-4 pt-6 pb-3 bg-gray-50 
                                border border-gray-300 rounded-xl
                                focus:outline-none focus:ring-2 
@@ -57,7 +57,7 @@ bg-gradient-to-br from-blue-950 via-blue-700 to-blue-200">
                                    peer-placeholder-shown:text-gray-400
                                    peer-focus:top-2 peer-focus:text-xs
                                    peer-focus:text-blue-600 transition-all">
-                        Username
+                        Employee ID
                     </label>
                 </div>
 
