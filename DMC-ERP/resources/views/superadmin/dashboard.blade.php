@@ -28,7 +28,14 @@
                     <i class="fa fa-search absolute right-3 top-3 text-gray-400"></i>
                 </div>
 
-<div class="p-8">
+                <form action="{{ route('logout') }}" method="POST" class="inline">
+                    @csrf
+                    <button type="submit"
+                        class="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 transition flex items-center gap-2">
+                        <i class="fa fa-sign-out"></i> Logout
+                    </button>
+                </form>
+            </div>
 
     <button onclick="openModal()"
         class="bg-[#001BB7] text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition">

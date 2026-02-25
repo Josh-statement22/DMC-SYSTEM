@@ -1,29 +1,34 @@
 <?php
 
 namespace Database\Seeders;
+
 use Illuminate\Database\Seeder;
-use App\Models\User;
-use App\Models\Role;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class AdminSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
-    public function run(): void
+    public function run()
     {
-        // Create roles
-    $superadmin = Role::firstOrCreate(['name' => 'Superadmin']);
-    $staff = Role::firstOrCreate(['name' => 'Staff']);
-
-    // Create superadmin user
-    User::create([
-        'employee_id' => '202600001',
-        'name' => 'Superadmin',
-        'email' => 'admin@dmc.com',
-        'password' => Hash::make('password123'),
-        'role_id' => $superadmin->id
-    ]);
+        DB::table('users')->insert([
+            [
+                'employee_id' => '202600001',
+                'password' => Hash::make('superadmin123'),
+                'role_id' => 1,
+                'name' => 'Superadmin',
+                'email' => 'superadmin@example.com',
+                'created_at' => now(),
+                'updated_at' => now()
+            ],
+            [
+                'employee_id' => '202600002',
+                'password' => Hash::make('admin123'),
+                'role_id' => 2,
+                'name' => 'Admin',
+                'email' => 'admin@example.com',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]
+        ]);
     }
 }

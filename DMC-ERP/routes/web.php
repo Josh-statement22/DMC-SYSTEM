@@ -1,92 +1,96 @@
 <?php
+
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
-use App\Models\User;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 
-Route::middleware('web')->group(function () {
+/*
+|--------------------------------------------------------------------------
+| Login Page
+|--------------------------------------------------------------------------
+*/
 
-    // Login Page
-    Route::get('/login', function () {
-        return view('login');
-    })->name('login');
-
-    // Handle Login
-    Route::post('/login', function (Request $request) {
-
-        $user = User::where('employee_id', $request->employee_id)->first();
-
-        if ($user && Hash::check($request->password, $user->password)) {
-                session([
-                    'user_id' => $user->id,
-                    'role_id' => $user->role_id,
-                    'is_superadmin' => $user->role_id == 1,
-                    'is_admin' => $user->role_id == 2
-                ]);
-
-                if ($user->role_id == 1) {
-                    return redirect('/superadmin');
-                } else {
-                    return redirect('/admin/dashboard');
-                }
-        }
-
-        return back()->with('error', 'Invalid employee ID or password');
-    });
-
-
-     /*
-    |--------------------------------------------------------------------------
-    | SUPERADMIN ROUTE
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get('/superadmin', function () {
-
-        $roleId = session('role_id');
-        if (empty($roleId) || $roleId != 1) {
-            return redirect()->route('login');
-        }
-
-        return view('superadmin.dashboard');
-
-    })->name('superadmin.dashboard');
-
-
-      /*
-    |--------------------------------------------------------------------------
-    | ADMIN ROUTES
-    |--------------------------------------------------------------------------
-    */
-    //Dashboard Routes (Admin)
-
-    Route::prefix('admin')->group(function () {
-    Route::get('/dashboard', function () {
-        $roleId = session('role_id');
-        if (empty($roleId) || $roleId != 2) {
-            return redirect()->route('login');
-        }
-        return view('admin.dashboard');
-    })->name('admin.dashboard');
-
-    // Pricelist Page
-    Route::get('/pricelist', function () {
-        $roleId = session('role_id');
-        if (empty($roleId) || $roleId != 2) {
-            return redirect()->route('login');
-        }
-        return view('admin.pricelist');
-    })->name('admin.pricelist');
-
-    // Purchases Page
-    Route::get('/purchase', function () {
-        $roleId = session('role_id');
-        if (empty($roleId) || $roleId != 2) {
-            return redirect()->route('login');
-        }
-        return view('admin.purchase');
-    })->name('admin.purchase'); 
-
+Route::get('/', function () {
+    return view('login');
 });
 
+Route::get('/login', function () {
+    return view('login');
+})->name('login');
+
+
+/*
+|--------------------------------------------------------------------------
+| Login Handler
+|--------------------------------------------------------------------------
+*/
+
+Route::post('/login', function (Request $request) {
+    $credentials = $request->validate([
+        'employee_id' => 'required',
+        'password' => 'required'
+    ]);
+
+    if (Auth::attempt($credentials)) {
+        $request->session()->regenerate();
+        
+        $user = Auth::user();
+        
+        // Redirect based on role_id
+        if ($user->role_id == 1) {
+            return redirect('/superadmin/dashboard');
+        }
+        
+        if ($user->role_id == 2) {
+            return redirect('/admin/dashboard');
+        }
+        
+        // If unknown role
+        Auth::logout();
+        return back()->with('error', 'Unauthorized role');
+    }
+
+    return back()->with('error', 'Invalid credentials');
 });
+
+
+/*
+|--------------------------------------------------------------------------
+| Superadmin Dashboard
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/superadmin/dashboard', function () {
+    return view('superadmin.dashboard');
+})->middleware('auth')->name('superadmin.dashboard');
+
+
+/*
+|--------------------------------------------------------------------------
+| Admin Dashboard
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/admin/dashboard', function () {
+    return view('admin.dashboard');
+})->middleware('auth')->name('admin.dashboard');
+
+Route::get('/admin/pricelist', function () {
+    return view('admin.pricelist');
+})->middleware('auth')->name('admin.pricelist');
+
+Route::get('/admin/purchase', function () {
+    return view('admin.purchase');
+})->middleware('auth')->name('admin.purchase');
+
+
+/*
+|--------------------------------------------------------------------------
+| Logout
+|--------------------------------------------------------------------------
+*/
+
+Route::post('/logout', function () {
+    Auth::logout();
+    return redirect('/login');
+})->name('logout');

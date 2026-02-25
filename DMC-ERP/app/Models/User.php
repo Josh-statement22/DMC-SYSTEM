@@ -15,6 +15,11 @@ class User extends Authenticatable
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
+     * The name of the "username" column.
+     */
+    protected string $username = 'employee_id';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -48,6 +53,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'employee_id' => 'integer',
         ];
     }
 
