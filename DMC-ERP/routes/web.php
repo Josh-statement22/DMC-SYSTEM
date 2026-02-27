@@ -61,8 +61,75 @@ Route::post('/login', function (Request $request) {
 */
 
 Route::get('/superadmin/dashboard', function () {
-    return view('superadmin.dashboard');
+    $perPage = 10;
+    $page = request('page', 1);
+    $allUsers = \App\Models\User::with('role')->get();
+    
+    $totalUsers = $allUsers->count();
+    $totalPages = ceil($totalUsers / $perPage);
+    $startIndex = ($page - 1) * $perPage;
+    $users = $allUsers->slice($startIndex, $perPage)->values();
+    
+    return view('superadmin.dashboard', [
+        'users' => $users,
+        'currentPage' => $page,
+        'totalPages' => $totalPages,
+        'totalUsers' => $totalUsers
+    ]);
 })->middleware('auth')->name('superadmin.dashboard');
+
+Route::post('/superadmin/users/store', function (Request $request) {
+    $validated = $request->validate([
+        'employee_id' => 'required|unique:users,employee_id',
+        'name' => 'required|string|max:255',
+        'email' => 'nullable|email|unique:users,email',
+        'password' => 'required|min:6',
+        'role_id' => 'required|exists:roles,id'
+    ]);
+
+    $validated['password'] = \Illuminate\Support\Facades\Hash::make($validated['password']);
+
+    \App\Models\User::create($validated);
+
+    return redirect()->route('superadmin.dashboard')->with('success', 'User created successfully');
+})->middleware('auth')->name('superadmin.users.store');
+
+Route::delete('/superadmin/users/{id}', function ($id) {
+    $user = \App\Models\User::findOrFail($id);
+    $userName = $user->name;
+    $user->delete();
+
+    return redirect()->route('superadmin.dashboard')->with('success', "User '{$userName}' has been removed successfully");
+})->middleware('auth')->name('superadmin.users.destroy');
+
+Route::put('/superadmin/users/{id}', function (Request $request, $id) {
+    $user = \App\Models\User::findOrFail($id);
+
+    $rules = [
+        'employee_id' => 'required|unique:users,employee_id,' . $id,
+        'name' => 'required|string|max:255',
+        'email' => 'nullable|email|unique:users,email,' . $id,
+        'role_id' => 'required|exists:roles,id'
+    ];
+
+    // Only validate password if provided
+    if ($request->filled('password')) {
+        $rules['password'] = 'required|min:6|confirmed';
+    }
+
+    $validated = $request->validate($rules);
+
+    // Hash password if provided
+    if ($request->filled('password')) {
+        $validated['password'] = \Illuminate\Support\Facades\Hash::make($validated['password']);
+    } else {
+        unset($validated['password']);
+    }
+
+    $user->update($validated);
+
+    return redirect()->route('superadmin.dashboard')->with('success', "User '{$user->name}' has been updated successfully");
+})->middleware('auth')->name('superadmin.users.update');
 
 
 /*
