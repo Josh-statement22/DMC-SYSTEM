@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
@@ -142,13 +143,72 @@ Route::get('/admin/dashboard', function () {
     return view('admin.dashboard');
 })->middleware('auth')->name('admin.dashboard');
 
-Route::get('/admin/pricelist', function () {
-    return view('admin.pricelist');
+Route::get('/admin/pricelist', function (Request $request) {
+    $projects = DB::table('projects')
+        ->orderBy('project_name')
+        ->pluck('project_name');
+
+    $selectedProject = $request->query('project');
+
+    if (!$selectedProject || !$projects->contains($selectedProject)) {
+        $selectedProject = $projects->first();
+    }
+
+    $items = collect();
+
+    if ($selectedProject) {
+        $items = DB::table('items')
+            ->where('project', $selectedProject)
+            ->orderBy('item_number')
+            ->get();
+    }
+
+    return view('admin.pricelist', compact('projects', 'selectedProject', 'items'));
 })->middleware('auth')->name('admin.pricelist');
 
 Route::get('/admin/purchase', function () {
     return view('admin.purchase');
 })->middleware('auth')->name('admin.purchase');
+
+Route::get('/admin/additem', function () {
+    $projects = DB::table('projects')->orderBy('project_name')->get();
+    return view('admin.additem', compact('projects'));
+})->middleware('auth')->name('admin.additem');
+
+Route::post('/admin/additem', function () {
+    request()->validate([
+        'project_name' => 'required|string|max:255',
+        'item_number' => 'required|string|max:255',
+        'item_name' => 'required|string|max:255',
+        'item_description' => 'required|string',
+        'supplier' => 'required|string|max:255',
+        'quantity' => 'required|integer|min:0',
+        'price' => 'required|numeric|min:0',
+    ]);
+
+    $projectName = request('project_name');
+
+    // Auto-create project if it doesn't exist
+    DB::table('projects')->insertOrIgnore([
+        'project_name' => $projectName,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('items')->insert([
+        'project' => $projectName,
+        'item_number' => request('item_number'),
+        'item_name' => request('item_name'),
+        'item_description' => request('item_description'),
+        'supplier' => request('supplier'),
+        'quantity' => request('quantity'),
+        'price' => request('price'),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return redirect()->route('admin.additem')->with('success', 'Item added successfully!');
+})->middleware('auth')->name('admin.additem.store');
 
 
 /*

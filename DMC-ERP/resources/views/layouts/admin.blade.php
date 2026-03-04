@@ -102,6 +102,14 @@
                 <span class="menu-text">Purchase Orders</span>
             </a>
 
+            <a href="{{ route('admin.additem') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium
+               {{ request()->routeIs('admin.additem') ? $active : $normal }}">
+
+                <i data-feather="plus-circle"></i>
+                <span class="menu-text">Add Item</span>
+            </a>
+
         </nav>
 
         <div class="p-4 border-t text-xs text-gray-400 text-center">
@@ -198,6 +206,8 @@
         dropdown.classList.toggle('invisible')
     }
 </script>
+
+@stack('scripts')
 
 </body>
 </html>
