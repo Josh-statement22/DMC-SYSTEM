@@ -166,6 +166,59 @@ Route::get('/admin/pricelist', function (Request $request) {
     return view('admin.pricelist', compact('projects', 'selectedProject', 'items'));
 })->middleware('auth')->name('admin.pricelist');
 
+Route::post('/admin/items/upload-image', function () {
+    request()->validate([
+        'item_id' => 'required|integer|exists:items,id',
+        'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp,heic,heif|max:10240', // Max 10MB
+    ]);
+
+    try {
+        $itemId = request('item_id');
+        $item = DB::table('items')->where('id', $itemId)->first();
+        
+        if (!$item) {
+            return response()->json(['success' => false, 'message' => 'Item not found'], 404);
+        }
+
+        // Create slug for project name
+        $projectSlug = strtolower(preg_replace('/\s+/', '_', trim($item->project)));
+        
+        // Create slug for item name
+        $itemSlug = strtolower(preg_replace('/\s+/', '_', trim($item->item_name)));
+        
+        // Get file extension
+        $extension = request()->file('image')->getClientOriginalExtension();
+        $filename = $itemSlug . '.' . $extension;
+
+        // Create directory structure
+        $projectDir = 'items/projects/' . $projectSlug;
+        
+        // Store the file
+        $path = request()->file('image')->storeAs($projectDir, $filename, 'public');
+
+        // Update database
+        DB::table('items')
+            ->where('id', $itemId)
+            ->update([
+                'image_path' => $path,
+                'updated_at' => now(),
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Image uploaded successfully',
+            'image_path' => $path
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Image upload failed: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Upload failed: ' . $e->getMessage()
+        ], 500);
+    }
+})->middleware('auth');
+
 Route::get('/admin/purchase', function () {
     return view('admin.purchase');
 })->middleware('auth')->name('admin.purchase');
@@ -184,9 +237,46 @@ Route::post('/admin/additem', function () {
         'supplier' => 'required|string|max:255',
         'quantity' => 'required|integer|min:0',
         'price' => 'required|numeric|min:0',
+        'base64_image' => 'nullable|string',
     ]);
 
     $projectName = request('project_name');
+    $itemName = request('item_name');
+    $imagePath = null;
+
+    // Handle image upload
+    if (request('base64_image')) {
+        try {
+            // Create slug for project name (lowercase, spaces to underscores)
+            $projectSlug = strtolower(preg_replace('/\s+/', '_', trim($projectName)));
+            
+            // Create slug for item name (lowercase, spaces to underscores)
+            $itemSlug = strtolower(preg_replace('/\s+/', '_', trim($itemName))) . '.jpg';
+
+            // Create directory structure if it doesn't exist
+            $projectDir = storage_path('app/public/items/projects/' . $projectSlug);
+            if (!is_dir($projectDir)) {
+                mkdir($projectDir, 0755, true);
+            }
+
+            // Extract base64 data
+            $base64Image = request('base64_image');
+            if (strpos($base64Image, 'data:image') === 0) {
+                $base64Image = substr($base64Image, strpos($base64Image, ',') + 1);
+            }
+
+            // Decode and save image
+            $imageData = base64_decode($base64Image);
+            $filepath = $projectDir . '/' . $itemSlug;
+
+            file_put_contents($filepath, $imageData);
+
+            // Store relative path in database
+            $imagePath = 'items/projects/' . $projectSlug . '/' . $itemSlug;
+        } catch (\Exception $e) {
+            \Log::error('Image upload failed: ' . $e->getMessage());
+        }
+    }
 
     // Auto-create project if it doesn't exist
     DB::table('projects')->insertOrIgnore([
@@ -203,12 +293,107 @@ Route::post('/admin/additem', function () {
         'supplier' => request('supplier'),
         'quantity' => request('quantity'),
         'price' => request('price'),
+        'image_path' => $imagePath,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
 
     return redirect()->route('admin.additem')->with('success', 'Item added successfully!');
 })->middleware('auth')->name('admin.additem.store');
+
+Route::get('/admin/priceanalysis', function () {
+    return view('admin.priceanalysis');
+})->middleware('auth')->name('admin.priceanalysis');
+
+Route::get('/admin/liquidation', function () {
+    return view('admin.liquidation');
+})->middleware('auth')->name('admin.liquidation');
+
+
+/*
+|--------------------------------------------------------------------------
+| API - Search Items
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/api/search-items', function (Request $request) {
+    $query = $request->query('q', '');
+    
+    if (strlen($query) < 1) {
+        return response()->json([]);
+    }
+
+    // Get all matching items
+    $itemDetails = DB::table('items')
+        ->where('item_number', 'LIKE', '%' . $query . '%')
+        ->orWhere('item_name', 'LIKE', '%' . $query . '%')
+        ->select('item_number', 'item_name', 'project', 'supplier', 'price', 'quantity')
+        ->get();
+
+    if ($itemDetails->isEmpty()) {
+        return response()->json([]);
+    }
+
+    // Group by item number and name
+    $groupedItems = [];
+    foreach ($itemDetails as $item) {
+        $key = $item->item_number . '|' . $item->item_name;
+        
+        if (!isset($groupedItems[$key])) {
+            $groupedItems[$key] = [
+                'number' => $item->item_number,
+                'name' => $item->item_name,
+                'project' => $item->project,
+                'image' => '/images/placeholder.jpg',
+                'suppliers' => []
+            ];
+        }
+
+        // Add supplier if not already added
+        $supplierExists = false;
+        foreach ($groupedItems[$key]['suppliers'] as $s) {
+            if ($s['supplier'] === $item->supplier) {
+                $supplierExists = true;
+                break;
+            }
+        }
+
+        if (!$supplierExists) {
+            $groupedItems[$key]['suppliers'][] = [
+                'supplier' => $item->supplier,
+                'price' => (float)$item->price,
+                'quantity' => $item->quantity
+            ];
+        }
+    }
+
+    // Sort suppliers by price in each item
+    foreach ($groupedItems as &$item) {
+        usort($item['suppliers'], function($a, $b) {
+            return $a['price'] <=> $b['price'];
+        });
+    }
+
+    return response()->json(array_values($groupedItems));
+})->middleware('auth')->name('api.search-items');
+
+Route::get('/api/projects', function () {
+    $projects = DB::table('projects')
+        ->select('id', 'project_name as name')
+        ->orderBy('project_name')
+        ->get();
+    
+    return response()->json($projects);
+})->middleware('auth')->name('api.projects');
+
+// DEBUG TEST
+Route::get('/test-items', function () {
+    $items = DB::table('items')->limit(5)->get();
+    return response()->json([
+        'total' => DB::table('items')->count(),
+        'sample' => $items
+    ]);
+})->middleware('auth');
 
 
 /*

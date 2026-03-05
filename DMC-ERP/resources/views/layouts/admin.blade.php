@@ -110,6 +110,22 @@
                 <span class="menu-text">Add Item</span>
             </a>
 
+            <a href="{{ route('admin.priceanalysis') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium
+               {{ request()->routeIs('admin.priceanalysis') ? $active : $normal }}">
+
+                <i data-feather="bar-chart-2"></i>
+                <span class="menu-text">Price Analysis</span>
+            </a>
+
+            <a href="{{ route('admin.liquidation') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium
+               {{ request()->routeIs('admin.liquidation') ? $active : $normal }}">
+
+                <i data-feather="trash-2"></i>
+                <span class="menu-text">Liquidation</span>
+            </a>
+
         </nav>
 
         <div class="p-4 border-t text-xs text-gray-400 text-center">
