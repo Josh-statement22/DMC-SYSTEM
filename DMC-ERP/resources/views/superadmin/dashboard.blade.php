@@ -5,7 +5,356 @@
     <title>Super Admin - DMC ERP</title>
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .user-management-hero {
+            position: relative;
+            overflow: hidden;
+            border-radius: 28px;
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            background: linear-gradient(135deg, #0f2f75 0%, #123c9b 50%, #ebf3ff 50%, #f8fbff 100%);
+            box-shadow: 0 22px 52px rgba(15, 23, 42, 0.12);
+        }
+
+        .user-management-hero::before,
+        .user-management-hero::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            pointer-events: none;
+        }
+
+        .user-management-hero::before {
+            top: -6rem;
+            right: -4rem;
+            width: 15rem;
+            height: 15rem;
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        .user-management-hero::after {
+            bottom: -5rem;
+            left: 42%;
+            width: 12rem;
+            height: 12rem;
+            background: rgba(147, 197, 253, 0.22);
+        }
+
+        .user-management-shell {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: stretch;
+            justify-content: space-between;
+            gap: 2rem;
+            padding: 2rem;
+        }
+
+        .user-management-copy {
+            flex: 1 1 24rem;
+            max-width: 44rem;
+            color: #fff;
+        }
+
+        .user-management-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 0.95rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.14);
+            color: #dbeafe;
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+
+        .user-management-copy h1 {
+            margin-top: 1rem;
+            font-size: clamp(2.1rem, 3.4vw, 3.25rem);
+            line-height: 1.02;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .user-management-copy p {
+            margin-top: 1rem;
+            max-width: 38rem;
+            color: rgba(239, 246, 255, 0.84);
+            font-size: 1rem;
+            line-height: 1.75;
+        }
+
+        .user-management-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+            margin-top: 1.75rem;
+        }
+
+        .user-management-stat {
+            padding: 1rem 1.1rem;
+            border-radius: 22px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+        }
+
+        .user-management-stat span {
+            display: block;
+            color: rgba(219, 234, 254, 0.86);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .user-management-stat strong {
+            display: block;
+            margin-top: 0.45rem;
+            color: #fff;
+            font-size: 1.9rem;
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .user-management-toolbar {
+            display: flex;
+            flex: 1 1 20rem;
+            max-width: 29rem;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 1rem;
+            margin-left: auto;
+        }
+
+        .user-management-note {
+            width: 100%;
+            padding: 1rem 1.1rem;
+            border-radius: 22px;
+            border: 1px solid rgba(191, 219, 254, 0.8);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+        }
+
+        .user-management-note-label {
+            display: block;
+            color: #123c9b;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .user-management-note p {
+            margin-top: 0.5rem;
+            color: #475569;
+            font-size: 0.92rem;
+            line-height: 1.65;
+        }
+
+        .user-management-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.9rem;
+            width: 100%;
+        }
+
+        .toolbar-search {
+            position: relative;
+            flex: 1 1 18rem;
+            max-width: 24rem;
+            width: 100%;
+        }
+
+        .toolbar-search-icon {
+            position: absolute;
+            top: 50%;
+            left: 1rem;
+            color: #64748b;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .toolbar-search-input {
+            width: 100%;
+            height: 3.75rem;
+            border: 1px solid rgba(148, 163, 184, 0.34);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 0 3.15rem 0 3rem;
+            color: #0f172a;
+            font-size: 0.98rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .toolbar-search-input:focus {
+            outline: none;
+            border-color: #123c9b;
+            box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.12), 0 16px 32px rgba(15, 23, 42, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .toolbar-clear-btn {
+            position: absolute;
+            top: 50%;
+            right: 0.75rem;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 2.2rem;
+            height: 2.2rem;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: #64748b;
+            transform: translateY(-50%);
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .toolbar-clear-btn:hover {
+            background: #eff6ff;
+            color: #123c9b;
+        }
+
+        .toolbar-primary-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            height: 3.75rem;
+            padding: 0 1.45rem;
+            border: none;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #0f2f75 0%, #123c9b 100%);
+            color: #fff;
+            font-size: 0.98rem;
+            font-weight: 700;
+            box-shadow: 0 18px 30px rgba(18, 60, 155, 0.26);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        }
+
+        .toolbar-primary-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 22px 36px rgba(18, 60, 155, 0.3);
+            filter: brightness(1.02);
+        }
+
+        .toolbar-primary-btn:active {
+            transform: translateY(0);
+        }
+
+        .user-management-summary {
+            width: 100%;
+            margin: 0;
+            color: #334155;
+            font-size: 0.88rem;
+            text-align: right;
+        }
+
+        .user-management-summary strong {
+            color: #0f2f75;
+        }
+
+        .table-shell {
+            overflow: hidden;
+            border: 1px solid rgba(226, 232, 240, 0.92);
+            border-radius: 24px;
+            background: #fff;
+            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+        }
+
+        .table-shell-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .table-shell-title {
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .table-shell-copy {
+            margin-top: 0.35rem;
+            color: #64748b;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .table-shell-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.6rem 0.95rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #123c9b;
+            font-size: 0.85rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 1024px) {
+            .user-management-hero {
+                background: linear-gradient(180deg, #0f2f75 0%, #123c9b 58%, #f8fbff 58%, #f8fbff 100%);
+            }
+
+            .user-management-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .user-management-toolbar {
+                align-items: stretch;
+                max-width: none;
+            }
+
+            .user-management-controls {
+                justify-content: flex-start;
+            }
+
+            .user-management-summary {
+                text-align: left;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .user-management-shell {
+                padding: 1.5rem;
+            }
+
+            .user-management-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .user-management-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .toolbar-search {
+                max-width: none;
+            }
+
+            .toolbar-primary-btn {
+                width: 100%;
+            }
+
+            .table-shell-header {
+                flex-direction: column;
+            }
+        }
+    </style>
 </head>
 
 <body class="bg-gray-100 font-sans">
@@ -40,25 +389,92 @@
             </div>
         @endif
 
-        <!-- Header + Search -->
-        <div class="flex items-center justify-between mb-6">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800">User Management</h1>
-            </div>
+ <!-- Header Container -->
+<div class="user-management-hero mb-8">
+    <div class="user-management-shell">
+        <div class="user-management-copy">
+            <span class="user-management-kicker">
+                <i class="fa fa-shield-halved"></i>
+                Administration Console
+            </span>
 
-            <div class="flex items-center gap-4">
-                <div class="relative">
-                    <input type="text" id="searchInput" placeholder="Search by ID, Employee ID, or Name"
-                        class="w-64 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600">
-                    <i class="fa fa-search absolute right-3 top-3 text-gray-400 pointer-events-none"></i>
+            <h1>User Management</h1>
+
+            <p>
+                Provision new ERP access, review account ownership, and keep every employee record aligned with the right role and contact details.
+            </p>
+
+            <div class="user-management-stats">
+                <div class="user-management-stat">
+                    <span>Total Accounts</span>
+                    <strong>{{ number_format($totalUsers) }}</strong>
                 </div>
 
-                <button onclick="openModal()"
-                    class="bg-[#001BB7] text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition">
-                    + Add User
-                </button>
+                <div class="user-management-stat">
+                    <span>Superadmins</span>
+                    <strong>{{ number_format($superadminCount) }}</strong>
+                </div>
+
+                <div class="user-management-stat">
+                    <span>Admins</span>
+                    <strong>{{ number_format($adminCount) }}</strong>
+                </div>
             </div>
         </div>
+
+        <div class="user-management-toolbar">
+            <div class="user-management-note">
+                <span class="user-management-note-label">Workspace Details</span>
+                <p>
+                    Search across numeric ID, employee ID, name, email address, or role. Results stay consistent with pagination so you can jump directly to the right account.
+                </p>
+            </div>
+
+            <div class="user-management-controls">
+                <div class="toolbar-search">
+                    <span class="toolbar-search-icon">
+                        <i class="fa fa-search text-base"></i>
+                    </span>
+
+                    <input
+                        type="text"
+                        id="searchInput"
+                        value="{{ $search }}"
+                        placeholder="Search ID, employee ID, name, email, or role"
+                        autocomplete="off"
+                        class="toolbar-search-input"
+                    >
+
+                    <button
+                        type="button"
+                        id="clearSearchBtn"
+                        class="toolbar-clear-btn"
+                        aria-label="Clear search"
+                    >
+                        <i class="fa fa-times text-sm"></i>
+                    </button>
+                </div>
+
+                <button
+                    type="button"
+                    onclick="openModal()"
+                    class="toolbar-primary-btn"
+                >
+                    <i class="fa fa-user-plus text-sm"></i>
+                    Add User
+                </button>
+            </div>
+
+            <p id="resultSummary" class="user-management-summary">
+                @if($search !== '')
+                    Showing <strong>{{ number_format($filteredUsers) }}</strong> {{ $filteredUsers === 1 ? 'matching account' : 'matching accounts' }} for "<strong>{{ $search }}</strong>".
+                @else
+                    Showing <strong>{{ number_format($filteredUsers) }}</strong> {{ $filteredUsers === 1 ? 'account' : 'accounts' }} in the directory.
+                @endif
+            </p>
+        </div>
+    </div>
+</div>
 
 <div id="addUserModal"
      class="fixed inset-0 bg-black/50 hidden items-center justify-center">
@@ -474,8 +890,23 @@
 
     // Real-time search filtering
     const searchInput = document.getElementById('searchInput');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
     const tableRows = document.querySelectorAll('tbody tr:not(#noUsersRow)');
     const tbody = document.querySelector('tbody');
+
+    function toggleClearButton() {
+        if (!clearSearchBtn || !searchInput) {
+            return;
+        }
+
+        if (searchInput.value.trim().length > 0) {
+            clearSearchBtn.classList.remove('hidden');
+            clearSearchBtn.classList.add('flex');
+        } else {
+            clearSearchBtn.classList.add('hidden');
+            clearSearchBtn.classList.remove('flex');
+        }
+    }
     
     // Create "No users found" row if it doesn't exist
     let noUsersRow = document.getElementById('noUsersRow');
@@ -490,6 +921,8 @@
     searchInput.addEventListener('input', function() {
         const searchValue = this.value.toLowerCase();
         let visibleCount = 0;
+
+        toggleClearButton();
 
         tableRows.forEach(row => {
             const id = row.querySelector('td:nth-child(1)')?.textContent.toLowerCase() || '';
@@ -507,6 +940,27 @@
         // Show/hide "No users found" message
         noUsersRow.style.display = visibleCount === 0 ? '' : 'none';
     });
+
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            toggleClearButton();
+            searchInput.dispatchEvent(new Event('input'));
+            searchInput.focus();
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && searchInput.value.trim().length > 0) {
+                searchInput.value = '';
+                toggleClearButton();
+                searchInput.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+
+    toggleClearButton();
 
     // Reopen modal if there are validation errors
     @if($errors->any())

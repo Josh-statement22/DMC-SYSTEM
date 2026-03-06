@@ -61,21 +61,42 @@ Route::post('/login', function (Request $request) {
 |--------------------------------------------------------------------------
 */
 
-Route::get('/superadmin/dashboard', function () {
+Route::get('/superadmin/dashboard', function (Request $request) {
     $perPage = 10;
-    $page = request('page', 1);
-    $allUsers = \App\Models\User::with('role')->get();
-    
-    $totalUsers = $allUsers->count();
-    $totalPages = ceil($totalUsers / $perPage);
+    $page = max(1, (int) $request->query('page', 1));
+    $search = trim((string) $request->query('search', ''));
+
+    $userQuery = \App\Models\User::with('role')->orderBy('name');
+
+    if ($search !== '') {
+        $userQuery->where(function ($query) use ($search) {
+            $query->where('id', 'like', "%{$search}%")
+                ->orWhere('employee_id', 'like', "%{$search}%")
+                ->orWhere('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")
+                ->orWhereHas('role', function ($roleQuery) use ($search) {
+                    $roleQuery->where('name', 'like', "%{$search}%");
+                });
+        });
+    }
+
+    $allUsers = $userQuery->get();
+    $filteredUsers = $allUsers->count();
+    $totalUsers = \App\Models\User::count();
+    $totalPages = max(1, (int) ceil($filteredUsers / $perPage));
+    $page = min($page, $totalPages);
     $startIndex = ($page - 1) * $perPage;
     $users = $allUsers->slice($startIndex, $perPage)->values();
-    
+
     return view('superadmin.dashboard', [
         'users' => $users,
         'currentPage' => $page,
         'totalPages' => $totalPages,
-        'totalUsers' => $totalUsers
+        'totalUsers' => $totalUsers,
+        'filteredUsers' => $filteredUsers,
+        'search' => $search,
+        'superadminCount' => \App\Models\User::where('role_id', 1)->count(),
+        'adminCount' => \App\Models\User::where('role_id', 2)->count(),
     ]);
 })->middleware('auth')->name('superadmin.dashboard');
 
