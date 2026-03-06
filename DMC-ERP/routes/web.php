@@ -145,21 +145,37 @@ Route::get('/admin/dashboard', function () {
 
 Route::get('/admin/pricelist', function (Request $request) {
     $projects = DB::table('projects')
+        ->select('id', 'project_name')
         ->orderBy('project_name')
-        ->pluck('project_name');
+        ->get();
 
-    $selectedProject = $request->query('project');
+    $selectedProjectId = (int) $request->query('project');
+    $projectIds = $projects->pluck('id');
 
-    if (!$selectedProject || !$projects->contains($selectedProject)) {
-        $selectedProject = $projects->first();
+    if (!$selectedProjectId || !$projectIds->contains($selectedProjectId)) {
+        $selectedProjectId = optional($projects->first())->id;
     }
+
+    $selectedProject = optional($projects->firstWhere('id', $selectedProjectId))->project_name;
 
     $items = collect();
 
-    if ($selectedProject) {
-        $items = DB::table('items')
-            ->where('project', $selectedProject)
-            ->orderBy('item_number')
+    if ($selectedProjectId) {
+        $items = DB::table('project_items')
+            ->join('items', 'project_items.item_id', '=', 'items.id')
+            ->leftJoin('suppliers', 'project_items.supplier_id', '=', 'suppliers.id')
+            ->where('project_items.project_id', $selectedProjectId)
+            ->select(
+                'items.id',
+                'items.item_number',
+                'items.item_name',
+                'items.item_description',
+                'suppliers.supplier_name',
+                'project_items.quantity',
+                'project_items.unit_price as price',
+                'items.image_path'
+            )
+            ->orderBy('items.item_number')
             ->get();
     }
 
@@ -180,9 +196,6 @@ Route::post('/admin/items/upload-image', function () {
             return response()->json(['success' => false, 'message' => 'Item not found'], 404);
         }
 
-        // Create slug for project name
-        $projectSlug = strtolower(preg_replace('/\s+/', '_', trim($item->project)));
-        
         // Create slug for item name
         $itemSlug = strtolower(preg_replace('/\s+/', '_', trim($item->item_name)));
         
@@ -190,8 +203,8 @@ Route::post('/admin/items/upload-image', function () {
         $extension = request()->file('image')->getClientOriginalExtension();
         $filename = $itemSlug . '.' . $extension;
 
-        // Create directory structure
-        $projectDir = 'items/projects/' . $projectSlug;
+        // Store images in a schema-safe path that does not depend on removed columns.
+        $projectDir = 'items/uploads';
         
         // Store the file
         $path = request()->file('image')->storeAs($projectDir, $filename, 'public');
@@ -230,31 +243,29 @@ Route::get('/admin/additem', function () {
 
 Route::post('/admin/additem', function () {
     request()->validate([
-        'project_name' => 'required|string|max:255',
         'item_number' => 'required|string|max:255',
         'item_name' => 'required|string|max:255',
         'item_description' => 'required|string',
-        'supplier' => 'required|string|max:255',
+        'supplier_name' => 'required|string|max:255',
+        'supplier_phone' => 'required|string|max:255',
+        'supplier_address' => 'required|string',
         'quantity' => 'required|integer|min:0',
         'price' => 'required|numeric|min:0',
+        'purchase_date' => 'required|date',
         'base64_image' => 'nullable|string',
     ]);
 
-    $projectName = request('project_name');
     $itemName = request('item_name');
     $imagePath = null;
 
     // Handle image upload
     if (request('base64_image')) {
         try {
-            // Create slug for project name (lowercase, spaces to underscores)
-            $projectSlug = strtolower(preg_replace('/\s+/', '_', trim($projectName)));
-            
             // Create slug for item name (lowercase, spaces to underscores)
-            $itemSlug = strtolower(preg_replace('/\s+/', '_', trim($itemName))) . '.jpg';
+            $itemSlug = strtolower(preg_replace('/\s+/', '_', trim($itemName))) . '_' . uniqid() . '.jpg';
 
             // Create directory structure if it doesn't exist
-            $projectDir = storage_path('app/public/items/projects/' . $projectSlug);
+            $projectDir = storage_path('app/public/items');
             if (!is_dir($projectDir)) {
                 mkdir($projectDir, 0755, true);
             }
@@ -272,27 +283,41 @@ Route::post('/admin/additem', function () {
             file_put_contents($filepath, $imageData);
 
             // Store relative path in database
-            $imagePath = 'items/projects/' . $projectSlug . '/' . $itemSlug;
+            $imagePath = 'items/' . $itemSlug;
         } catch (\Exception $e) {
             \Log::error('Image upload failed: ' . $e->getMessage());
         }
     }
 
-    // Auto-create project if it doesn't exist
-    DB::table('projects')->insertOrIgnore([
-        'project_name' => $projectName,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
+    // Create/find supplier first, then store supplier_id in items table.
+    $supplierId = DB::table('suppliers')->where('supplier_name', request('supplier_name'))->value('id');
+
+    if (!$supplierId) {
+        $supplierId = DB::table('suppliers')->insertGetId([
+            'supplier_name' => request('supplier_name'),
+            'phone_number' => request('supplier_phone'),
+            'address' => request('supplier_address'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    } else {
+        DB::table('suppliers')
+            ->where('id', $supplierId)
+            ->update([
+                'phone_number' => request('supplier_phone'),
+                'address' => request('supplier_address'),
+                'updated_at' => now(),
+            ]);
+    }
 
     DB::table('items')->insert([
-        'project' => $projectName,
         'item_number' => request('item_number'),
         'item_name' => request('item_name'),
         'item_description' => request('item_description'),
-        'supplier' => request('supplier'),
+        'supplier_id' => $supplierId,
         'quantity' => request('quantity'),
         'price' => request('price'),
+        'purchase_date' => request('purchase_date'),
         'image_path' => $imagePath,
         'created_at' => now(),
         'updated_at' => now(),
@@ -379,12 +404,130 @@ Route::get('/api/search-items', function (Request $request) {
 
 Route::get('/api/projects', function () {
     $projects = DB::table('projects')
-        ->select('id', 'project_name as name')
+        ->select('id', 'project_name')
         ->orderBy('project_name')
         ->get();
     
     return response()->json($projects);
 })->middleware('auth')->name('api.projects');
+
+// Price Analysis API - Search for items with all supplier prices
+Route::get('/api/price-analysis/search', function (Request $request) {
+    $query = $request->query('q');
+    
+    if (!$query) {
+        return response()->json(['success' => false, 'message' => 'Query required']);
+    }
+
+    // Find ALL matching items by item_number or item_name
+    $matchingItems = DB::table('items')
+        ->where('item_number', 'LIKE', "%{$query}%")
+        ->orWhere('item_name', 'LIKE', "%{$query}%")
+        ->select('item_number', 'item_name', 'item_description', 'image_path')
+        ->distinct()
+        ->limit(10) // Limit to top 10 matches
+        ->get();
+
+    if ($matchingItems->isEmpty()) {
+        return response()->json(['success' => false, 'message' => 'No items found']);
+    }
+
+    // For each unique item, get all suppliers and prices
+    $results = [];
+    foreach ($matchingItems as $matchedItem) {
+        $allPurchases = DB::table('items')
+            ->leftJoin('suppliers', 'items.supplier_id', '=', 'suppliers.id')
+            ->where('items.item_number', $matchedItem->item_number)
+            ->select(
+                'items.id',
+                'items.item_number',
+                'items.item_name',
+                'items.item_description',
+                'items.image_path',
+                'items.price',
+                'items.quantity',
+                'items.purchase_date',
+                'items.supplier_id',
+                'suppliers.supplier_name',
+                'suppliers.phone_number',
+                'suppliers.address'
+            )
+            ->orderBy('items.price', 'asc')
+            ->get();
+
+        // Group suppliers for this item
+        $suppliers = $allPurchases->map(function($purchase) {
+            return [
+                'item_id' => $purchase->id,
+                'supplier_id' => $purchase->supplier_id,
+                'supplier_name' => $purchase->supplier_name ?? 'N/A',
+                'phone_number' => $purchase->phone_number,
+                'address' => $purchase->address,
+                'price' => (float) $purchase->price,
+                'quantity' => $purchase->quantity,
+                'purchase_date' => $purchase->purchase_date
+            ];
+        });
+
+        $results[] = [
+            'item_number' => $matchedItem->item_number,
+            'item_name' => $matchedItem->item_name,
+            'item_description' => $matchedItem->item_description,
+            'image_path' => $matchedItem->image_path,
+            'suppliers' => $suppliers
+        ];
+    }
+
+    return response()->json([
+        'success' => true,
+        'items' => $results
+    ]);
+})->middleware('auth')->name('api.price-analysis.search');
+
+// Price Analysis API - Add item to project
+Route::post('/api/price-analysis/add-to-project', function (Request $request) {
+    $data = $request->validate([
+        'project_id' => 'required|integer|exists:projects,id',
+        'item_id' => 'required|integer|exists:items,id',
+        'supplier_id' => 'required|integer|exists:suppliers,id',
+        'quantity' => 'required|integer|min:1',
+        'unit_price' => 'required|numeric|min:0'
+    ]);
+
+    // Insert/Update in project_items pivot table
+    $existingLink = DB::table('project_items')
+        ->where('project_id', $data['project_id'])
+        ->where('item_id', $data['item_id'])
+        ->where('supplier_id', $data['supplier_id'])
+        ->first();
+
+    if ($existingLink) {
+        // Update quantity and unit_price if already linked
+        DB::table('project_items')
+            ->where('id', $existingLink->id)
+            ->update([
+                'quantity' => DB::raw('quantity + ' . $data['quantity']),
+                'unit_price' => $data['unit_price'],
+                'updated_at' => now()
+            ]);
+    } else {
+        // Create new link
+        DB::table('project_items')->insert([
+            'project_id' => $data['project_id'],
+            'item_id' => $data['item_id'],
+            'supplier_id' => $data['supplier_id'],
+            'quantity' => $data['quantity'],
+            'unit_price' => $data['unit_price'],
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Item added to project successfully'
+    ]);
+})->middleware('auth')->name('api.price-analysis.add-to-project');
 
 // DEBUG TEST
 Route::get('/test-items', function () {

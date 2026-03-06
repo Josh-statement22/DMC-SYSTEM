@@ -11,8 +11,12 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::table('items', function (Blueprint $table) {
-            $table->string('image_path')->nullable()->after('price');
+        Schema::create('suppliers', function (Blueprint $table) {
+            $table->id();
+            $table->string('supplier_name')->unique();
+            $table->string('phone_number')->nullable();
+            $table->text('address')->nullable();
+            $table->timestamps();
         });
     }
 
@@ -21,8 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('items', function (Blueprint $table) {
-            $table->dropColumn('image_path');
-        });
+        Schema::dropIfExists('suppliers');
     }
 };

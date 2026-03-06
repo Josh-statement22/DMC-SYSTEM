@@ -1,7 +1,10 @@
 @extends('layouts.admin')
-@section('title', 'Price Analysis')
+@section('title', 'Price Analysis & Canvassing')
 
 @section('content')
+
+<!-- Add CSRF token for API requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
 
 <div class="space-y-8">
 
@@ -13,12 +16,16 @@
                 <i data-feather="bar-chart-2" class="w-7 h-7 text-white"></i>
             </div>
             <div>
-                <h2 class="text-3xl font-bold text-gray-800">Price Analysis</h2>
-                <p class="text-gray-500">Compare and analyze item prices across projects</p>
+                <h2 class="text-3xl font-bold text-gray-800">Price Analysis & Canvassing</h2>
+                <p class="text-gray-500">Compare suppliers and find the best prices for your items</p>
             </div>
         </div>
+    </div>
+
+    <!-- SEARCH BAR -->
+    <div class="bg-white rounded-2xl shadow-lg p-6">
         <div class="flex gap-3">
-            <div class="flex-1 relative min-w-80" id="searchInputWrapper">
+            <div class="flex-1 relative" id="searchInputWrapper">
                 <div class="absolute left-4 top-3 text-gray-400 pointer-events-none z-10">
                     <i data-feather="search" class="w-5 h-5"></i>
                 </div>
@@ -35,71 +42,78 @@
             <button 
                 id="searchBtn"
                 class="px-6 py-2.5 bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1]
-                       text-white rounded-xl hover:shadow-lg transition-all duration-300 font-semibold"
-                style="white-space: nowrap;">
+                       text-white rounded-xl hover:shadow-lg transition-all duration-300 font-semibold">
                 <i data-feather="search" class="w-4 h-4 inline mr-2"></i>
                 Search
             </button>
         </div>
     </div>
 
-    <!-- STATISTICS CARDS -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        <!-- Lowest Price Card -->
-        <div class="relative overflow-hidden rounded-2xl
-                    bg-gradient-to-r from-orange-500 to-red-600
-                    p-6 shadow-lg text-white
-                    transition-all duration-300
-                    hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(249,115,22,0.4)]">
+    <!-- SEARCH RESULTS -->
+    <div id="searchResults" class="hidden">
+        <!-- ITEM DETAILS CARD -->
+        <div class="bg-white rounded-2xl shadow-lg p-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Item Details</h3>
             
-            <div class="absolute -top-10 -right-10 w-40 h-40 bg-white opacity-10 rounded-full blur-3xl"></div>
-            
-            <div class="relative z-10">
-                <div class="flex items-center space-x-2 mb-3">
-                    <div class="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
-                        <i data-feather="trending-down" class="w-4 h-4"></i>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Item Image -->
+                <div class="md:col-span-1">
+                    <div class="relative bg-gray-100 rounded-xl overflow-hidden" style="height: 250px;">
+                        <img id="itemImage" src="" alt="Item Image" class="w-full h-full object-contain">
                     </div>
-                    <p class="text-xs font-semibold opacity-90">Lowest Price</p>
                 </div>
-                <p class="text-2xl font-extrabold" id="lowestPriceValue">₱ 0.00</p>
-                <p class="text-xs opacity-75 mt-1" id="lowestPriceItem">-</p>
+
+                <!-- Item Info -->
+                <div class="md:col-span-2">
+                    <div class="space-y-3">
+                        <div>
+                            <span class="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full mb-2" id="itemNumber"></span>
+                            <h4 class="text-2xl font-bold text-gray-900" id="itemName"></h4>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-gray-600 mb-1">Description:</p>
+                            <p class="text-gray-700 leading-relaxed" id="itemDescription"></p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Highest Price Card -->
-        <div class="relative overflow-hidden rounded-2xl
-                    bg-gradient-to-r from-emerald-500 to-teal-600
-                    p-6 shadow-lg text-white
-                    transition-all duration-300
-                    hover:scale-[1.02] hover:shadow-[0_20px_60px_rgba(16,185,129,0.4)]">
-            
-            <div class="absolute -top-10 -right-10 w-40 h-40 bg-white opacity-10 rounded-full blur-3xl"></div>
-            
-            <div class="relative z-10">
-                <div class="flex items-center space-x-2 mb-3">
-                    <div class="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
-                        <i data-feather="trending-up" class="w-4 h-4"></i>
-                    </div>
-                    <p class="text-xs font-semibold opacity-90">Highest Price</p>
+        <!-- SUPPLIERS COMPARISON TABLE -->
+        <div class="bg-white rounded-2xl shadow-lg p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold text-gray-800">Supplier Price Comparison</h3>
+                <div class="text-sm text-gray-500">
+                    <span id="supplierCount">0</span> supplier(s) found
                 </div>
-                <p class="text-2xl font-extrabold" id="highestPriceValue">₱ 0.00</p>
-                <p class="text-xs opacity-75 mt-1" id="highestPriceItem">-</p>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b-2 border-gray-200">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Supplier Name</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Price</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Purchase Date</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Contact</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Address</th>
+                            <th class="text-center py-3 px-4 text-sm font-semibold text-gray-600">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suppliersTableBody">
+                        <!-- Suppliers will be loaded here -->
+                    </tbody>
+                </table>
             </div>
         </div>
-
     </div>
 
-    <!-- GRID RESULTS -->
-    <div class="relative overflow-hidden rounded-3xl bg-white p-8 shadow-2xl">
-        <h3 class="text-xl font-bold text-gray-800 mb-6">Search Results</h3>
-        
-        <!-- GRID CONTAINER -->
-        <div id="itemsGrid" class="grid grid-cols-1 mobile:grid-cols-2 tablet:grid-cols-3 lg:grid-cols-4 gap-6">
-            <div class="col-span-full text-center py-12 text-gray-400">
-                <i data-feather="inbox" class="w-16 h-16 mx-auto mb-4 opacity-50"></i>
-                <p class="text-lg">Start by searching for an item to see available options</p>
-            </div>
+    <!-- EMPTY STATE -->
+    <div id="emptyState" class="bg-white rounded-2xl shadow-lg p-12">
+        <div class="text-center text-gray-400">
+            <i data-feather="search" class="w-20 h-20 mx-auto mb-4 opacity-50"></i>
+            <p class="text-lg font-medium">Search for an item to compare supplier prices</p>
+            <p class="text-sm mt-2">Enter an item number or name above to get started</p>
         </div>
     </div>
 
@@ -113,10 +127,12 @@
                 </button>
             </div>
             
-            <div id="modalItemInfo" class="mb-6 p-4 bg-gray-50 rounded-xl">
+            <div id="modalItemInfo" class="mb-6 p-4 bg-gray-50 rounded-xl space-y-2">
                 <p class="text-sm text-gray-600">Item: <span id="modalItemName" class="font-semibold text-gray-900"></span></p>
-                <p class="text-sm text-gray-600 mt-1">Supplier: <span id="modalSupplier" class="font-semibold text-gray-900"></span></p>
-                <p class="text-sm text-gray-600 mt-1">Price: <span id="modalPrice" class="font-semibold text-blue-600"></span></p>
+                <p class="text-sm text-gray-600">Supplier: <span id="modalSupplier" class="font-semibold text-gray-900"></span></p>
+                <p class="text-sm text-gray-600">Price: <span id="modalPrice" class="font-semibold text-blue-600"></span></p>
+                <p class="text-sm text-gray-600">Contact: <span id="modalContact" class="font-semibold text-gray-900"></span></p>
+                <p class="text-sm text-gray-600">Address: <span id="modalAddress" class="font-semibold text-gray-900"></span></p>
             </div>
 
             <form id="addToProjectForm">
@@ -155,19 +171,25 @@
     // DOM Elements
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
-    const itemsGrid = document.getElementById('itemsGrid');
+    const searchResults = document.getElementById('searchResults');
+    const emptyState = document.getElementById('emptyState');
+    const suppliersTableBody = document.getElementById('suppliersTableBody');
     const modal = document.getElementById('addToProjectModal');
     const projectSelect = document.getElementById('projectSelect');
     const addToProjectForm = document.getElementById('addToProjectForm');
 
-    // Create search suggestions container
-    const suggestionsContainer = document.createElement('div');
-    suggestionsContainer.id = 'searchSuggestions';
-    suggestionsContainer.className = 'absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-xl shadow-lg z-50 max-h-96 overflow-y-auto hidden';
-    document.getElementById('searchInputWrapper').appendChild(suggestionsContainer);
-
     let currentSelectedItem = null;
-    let searchTimeout;
+    let currentItemData = null;
+    let searchTimeout = null;
+    let isSearching = false;
+
+    // Debounce function to limit API calls
+    function debounce(func, delay) {
+        return function(...args) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
 
     function formatPrice(value) {
         return new Intl.NumberFormat('en-PH', {
@@ -177,144 +199,283 @@
         }).format(value);
     }
 
-    function updatePriceCards(filteredData) {
-        if (filteredData.length === 0) {
-            document.getElementById('lowestPriceValue').textContent = '₱ 0.00';
-            document.getElementById('lowestPriceItem').textContent = '-';
-            document.getElementById('highestPriceValue').textContent = '₱ 0.00';
-            document.getElementById('highestPriceItem').textContent = '-';
-            return;
-        }
+    function formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-PH', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    }
 
-        // Get all prices from all suppliers
-        let allPrices = [];
-        filteredData.forEach(item => {
-            item.suppliers.forEach(supplier => {
-                allPrices.push({
+    function displayItemDetails(item) {
+        // Show item details
+        document.getElementById('itemImage').src = item.image_path ? `/storage/${item.image_path}` : '/images/placeholder.jpg';
+        document.getElementById('itemNumber').textContent = item.item_number;
+        document.getElementById('itemName').textContent = item.item_name;
+        document.getElementById('itemDescription').textContent = item.item_description;
+
+        // Display suppliers
+        const suppliers = item.suppliers || [];
+        document.getElementById('supplierCount').textContent = suppliers.length;
+
+        // Sort suppliers by price (lowest first)
+        const sortedSuppliers = [...suppliers].sort((a, b) => a.price - b.price);
+
+        suppliersTableBody.innerHTML = sortedSuppliers.map((supplier, index) => {
+            const isLowest = index === 0;
+            const supplierDataJson = JSON.stringify({
+                supplier_id: supplier.supplier_id,
+                item_id: supplier.item_id,
+                supplier_name: supplier.supplier_name,
+                item_name: item.item_name,
+                price: supplier.price,
+                quantity: supplier.quantity,
+                phone_number: supplier.phone_number,
+                address: supplier.address
+            }).replace(/"/g, '&quot;');
+            
+            return `
+                <tr class="border-b border-gray-100 hover:bg-gray-50 ${isLowest ? 'bg-green-50' : ''}">
+                    <td class="py-4 px-4">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-gray-900">${supplier.supplier_name}</span>
+                            ${isLowest ? '<span class="inline-block px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded">LOWEST</span>' : ''}
+                        </div>
+                    </td>
+                    <td class="py-4 px-4">
+                        <span class="text-lg font-bold ${isLowest ? 'text-green-600' : 'text-gray-900'}">${formatPrice(supplier.price)}</span>
+                    </td>
+                    <td class="py-4 px-4 text-gray-700">
+                        ${formatDate(supplier.purchase_date)}
+                    </td>
+                    <td class="py-4 px-4 text-gray-700">
+                        ${supplier.phone_number || 'N/A'}
+                    </td>
+                    <td class="py-4 px-4 text-gray-700 max-w-xs">
+                        <div class="flex items-start gap-1">
+                            <i data-feather="map-pin" class="w-4 h-4 mt-0.5 flex-shrink-0"></i>
+                            <span class="text-sm">${supplier.address || 'N/A'}</span>
+                        </div>
+                    </td>
+                    <td class="py-4 px-4 text-center">
+                        <button 
+                            onclick="openAddToProjectModal(JSON.parse(this.getAttribute('data-supplier')))"
+                            data-supplier="${supplierDataJson}"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold">
+                            <i data-feather="plus" class="w-4 h-4 inline mr-1"></i>
+                            Add
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Show results, hide empty state
+        searchResults.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        
+        feather.replace();
+    }
+
+    function displayMultipleItems(items) {
+        // Build HTML for multiple items
+        let html = `
+            <!-- Results Header -->
+            <div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl shadow-lg p-6 mb-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-2xl font-bold mb-1">Search Results</h3>
+                        <p class="text-blue-100">Found <span class="font-bold">${items.length}</span> matching item${items.length > 1 ? 's' : ''}</p>
+                    </div>
+                    <div class="text-right">
+                        <i data-feather="package" class="w-12 h-12 text-blue-200"></i>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        items.forEach((item, itemIndex) => {
+            const suppliers = item.suppliers || [];
+            const sortedSuppliers = [...suppliers].sort((a, b) => a.price - b.price);
+            
+            html += `
+                <!-- Item ${itemIndex + 1} -->
+                <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                    <div class="mb-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <!-- Item Image -->
+                            <div class="md:col-span-1">
+                                <div class="relative bg-gray-100 rounded-xl overflow-hidden" style="height: 180px;">
+                                    <img src="${item.image_path ? '/storage/' + item.image_path : '/images/placeholder.jpg'}" alt="${item.item_name}" class="w-full h-full object-contain">
+                                </div>
+                            </div>
+
+                            <!-- Item Info -->
+                            <div class="md:col-span-3">
+                                <div class="space-y-2">
+                                    <div>
+                                        <span class="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full mb-2">${item.item_number}</span>
+                                        <h4 class="text-xl font-bold text-gray-900">${item.item_name}</h4>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-600 mb-1">Description:</p>
+                                        <p class="text-gray-700 text-sm leading-relaxed">${item.item_description}</p>
+                                    </div>
+                                    <div class="text-sm text-gray-500">
+                                        <span class="font-semibold">${suppliers.length}</span> supplier(s) available
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Suppliers Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b-2 border-gray-200">
+                                    <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Supplier Name</th>
+                                    <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Price</th>
+                                    <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Purchase Date</th>
+                                    <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Contact</th>
+                                    <th class="text-left py-3 px-4 text-sm font-semibold text-gray-600">Address</th>
+                                    <th class="text-center py-3 px-4 text-sm font-semibold text-gray-600">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            sortedSuppliers.forEach((supplier, index) => {
+                const isLowest = index === 0;
+                const supplierDataJson = JSON.stringify({
+                    supplier_id: supplier.supplier_id,
+                    item_id: supplier.item_id,
+                    supplier_name: supplier.supplier_name,
+                    item_name: item.item_name,
                     price: supplier.price,
-                    itemName: item.name,
-                    supplier: supplier.supplier
-                });
+                    quantity: supplier.quantity,
+                    phone_number: supplier.phone_number,
+                    address: supplier.address
+                }).replace(/"/g, '&quot;');
+                
+                html += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 ${isLowest ? 'bg-green-50' : ''}">
+                        <td class="py-4 px-4">
+                            <div class="flex items-center gap-2">
+                                <span class="font-semibold text-gray-900">${supplier.supplier_name}</span>
+                                ${isLowest ? '<span class="inline-block px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded">LOWEST</span>' : ''}
+                            </div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <span class="text-lg font-bold ${isLowest ? 'text-green-600' : 'text-gray-900'}">${formatPrice(supplier.price)}</span>
+                        </td>
+                        <td class="py-4 px-4 text-gray-700">
+                            ${formatDate(supplier.purchase_date)}
+                        </td>
+                        <td class="py-4 px-4 text-gray-700">
+                            ${supplier.phone_number || 'N/A'}
+                        </td>
+                        <td class="py-4 px-4 text-gray-700 max-w-xs">
+                            <div class="flex items-start gap-1">
+                                <i data-feather="map-pin" class="w-4 h-4 mt-0.5 flex-shrink-0"></i>
+                                <span class="text-sm">${supplier.address || 'N/A'}</span>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            <button 
+                                onclick="openAddToProjectModal(JSON.parse(this.getAttribute('data-supplier')))"
+                                data-supplier="${supplierDataJson}"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold">
+                                <i data-feather="plus" class="w-4 h-4 inline mr-1"></i>
+                                Add
+                            </button>
+                        </td>
+                    </tr>
+                `;
             });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         });
 
-        if (allPrices.length > 0) {
-            const lowest = allPrices.reduce((min, p) => p.price < min.price ? p : min);
-            const highest = allPrices.reduce((max, p) => p.price > max.price ? p : max);
-
-            document.getElementById('lowestPriceValue').textContent = formatPrice(lowest.price);
-            document.getElementById('lowestPriceItem').textContent = `${lowest.itemName} (${lowest.supplier})`;
-            document.getElementById('highestPriceValue').textContent = formatPrice(highest.price);
-            document.getElementById('highestPriceItem').textContent = `${highest.itemName} (${highest.supplier})`;
-        }
-    }
-
-    function renderGrid(filteredData) {
-        if (filteredData.length === 0) {
-            itemsGrid.innerHTML = `
-                <div class="col-span-full text-center py-12 text-gray-400">
-                    <i data-feather="inbox" class="w-16 h-16 mx-auto mb-4 opacity-50"></i>
-                    <p class="text-lg">No items found</p>
-                </div>
-            `;
-            feather.replace();
-            return;
-        }
-
-        itemsGrid.innerHTML = filteredData.map(item => {
-            // Sort suppliers by price (lowest first)
-            const sortedSuppliers = [...item.suppliers].sort((a, b) => a.price - b.price);
-            const lowestPrice = sortedSuppliers[0].price;
-
-            return `
-                <div class="group bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-lg hover:border-blue-300 transition-all duration-300">
-                    <!-- IMAGE -->
-                    <div class="relative h-48 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-                        <img src="${item.image || '/images/placeholder.jpg'}" alt="${item.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                        <div class="absolute top-3 right-3 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-semibold">
-                            ${item.number}
-                        </div>
-                    </div>
-
-                    <!-- CONTENT -->
-                    <div class="p-5">
-                        <!-- ITEM NAME AND PRICE -->
-                        <h4 class="font-semibold text-gray-900 text-sm mb-1 line-clamp-2">${item.name}</h4>
-                        <p class="text-2xl font-bold text-blue-600 mb-4">${formatPrice(lowestPrice)}</p>
-
-                        <!-- SUPPLIERS -->
-                        <div class="space-y-2 mb-4">
-                            <p class="text-xs font-semibold text-gray-600 uppercase">Suppliers</p>
-                            ${sortedSuppliers.slice(0, 3).map((supplier, idx) => `
-                                <div class="flex items-center justify-between p-2.5 rounded-lg ${idx === 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50'} text-xs">
-                                    <div>
-                                        <p class="font-semibold text-gray-900">${supplier.supplier}${idx === 0 ? ' ✓' : ''}</p>
-                                        <p class="text-gray-600">${formatPrice(supplier.price)}</p>
-                                    </div>
-                                    <button 
-                                        class="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
-                                        onclick="openAddToProjectModal('${item.name}', '${supplier.supplier}', ${supplier.price})">
-                                        Add
-                                    </button>
-                                </div>
-                            `).join('')}
-                        </div>
-
-                        <!-- MORE SUPPLIERS -->
-                        ${sortedSuppliers.length > 3 ? `
-                            <p class="text-xs text-gray-500 text-center">+${sortedSuppliers.length - 3} more suppliers</p>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
-
+        // Update the search results area
+        searchResults.innerHTML = html;
+        searchResults.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        
         feather.replace();
     }
 
-    function displaySuggestions(items) {
-        if (items.length === 0) {
-            suggestionsContainer.classList.add('hidden');
-            return;
-        }
-
-        suggestionsContainer.innerHTML = items.map(item => {
-            const lowestPrice = item.suppliers.length > 0 ? item.suppliers[0].price : 0;
-            return `
-                <div class="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
-                     onclick="selectSuggestion('${item.number}', '${item.name}', ${JSON.stringify(item).replace(/'/g, "&apos;")})">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="font-semibold text-gray-900 text-sm">${item.number} - ${item.name}</p>
-                            <p class="text-xs text-gray-600">${item.suppliers.length} supplier${item.suppliers.length !== 1 ? 's' : ''} • From ${formatPrice(lowestPrice)}</p>
-                        </div>
-                        <i data-feather="arrow-right" class="w-4 h-4 text-gray-400"></i>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        suggestionsContainer.classList.remove('hidden');
+    function showNoResults(query) {
+        emptyState.innerHTML = `
+            <div class="text-center text-gray-400">
+                <i data-feather="search" class="w-20 h-20 mx-auto mb-4 opacity-50"></i>
+                <p class="text-lg font-medium">No items found matching "${query}"</p>
+                <p class="text-sm mt-2">Try a different search term or check for typos</p>
+            </div>
+        `;
         feather.replace();
+        searchResults.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+    }
+
+    function showDefaultState() {
+        emptyState.innerHTML = `
+            <div class="text-center text-gray-400">
+                <i data-feather="search" class="w-20 h-20 mx-auto mb-4 opacity-50"></i>
+                <p class="text-lg font-medium">Search for an item to compare supplier prices</p>
+                <p class="text-sm mt-2">Enter an item number or name above to get started</p>
+            </div>
+        `;
+        feather.replace();
+        searchResults.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+    }
+
+    function showSearchingState() {
+        emptyState.innerHTML = `
+            <div class="text-center text-gray-400">
+                <div class="w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+                <p class="text-lg font-medium">Searching...</p>
+            </div>
+        `;
+        searchResults.classList.add('hidden');
+        emptyState.classList.remove('hidden');
     }
 
     function performSearch(query) {
         console.log('Performing search for:', query);
         
+        // Clear any pending searches
+        clearTimeout(searchTimeout);
+        
+        // If query is empty, show default state
         if (query.trim().length === 0) {
-            suggestionsContainer.classList.add('hidden');
-            itemsGrid.innerHTML = `
-                <div class="col-span-full text-center py-12 text-gray-400">
-                    <i data-feather="inbox" class="w-16 h-16 mx-auto mb-4 opacity-50"></i>
-                    <p class="text-lg">Start by searching for an item to see available options</p>
-                </div>
-            `;
-            updatePriceCards([]);
+            showDefaultState();
             return;
         }
 
-        // Make API call
-        const url = `/api/search-items?q=${encodeURIComponent(query)}`;
+        // Minimum 1 character for search (allows partial matching from first character)
+        if (query.trim().length < 1) {
+            return;
+        }
+
+        // Show searching state
+        if (!isSearching) {
+            showSearchingState();
+        }
+        isSearching = true;
+
+        // Make API call to search items
+        const url = `/api/price-analysis/search?q=${encodeURIComponent(query)}`;
         console.log('API URL:', url);
 
         fetch(url)
@@ -324,75 +485,67 @@
             })
             .then(data => {
                 console.log('API Response Data:', data);
-                displaySuggestions(data);
-                if (data.length > 0) {
-                    renderGrid(data);
-                    updatePriceCards(data);
+                isSearching = false;
+                
+                if (data.success && data.items && data.items.length > 0) {
+                    // Multiple items returned
+                    if (data.items.length === 1) {
+                        // Single item - use original display
+                        currentItemData = data.items[0];
+                        displayItemDetails(data.items[0]);
+                    } else {
+                        // Multiple items - use new display
+                        displayMultipleItems(data.items);
+                    }
+                } else if (data.success && data.item) {
+                    // Fallback for old API format (single item)
+                    currentItemData = data.item;
+                    displayItemDetails(data.item);
                 } else {
-                    suggestionsContainer.classList.add('hidden');
-                    itemsGrid.innerHTML = `
-                        <div class="col-span-full text-center py-12 text-gray-400">
-                            <i data-feather="inbox" class="w-16 h-16 mx-auto mb-4 opacity-50"></i>
-                            <p class="text-lg">No items found matching your search</p>
-                        </div>
-                    `;
+                    // No results found
+                    showNoResults(query);
                 }
             })
             .catch(error => {
                 console.error('Search error:', error);
-                alert('Error searching items: ' + error.message);
+                isSearching = false;
+                showDefaultState();
             });
     }
 
-    function selectSuggestion(itemNumber, itemName, itemData) {
-        searchInput.value = itemName;
-        suggestionsContainer.classList.add('hidden');
-        renderGrid([itemData]);
-        updatePriceCards([itemData]);
-    }
+    // Live search - debounced input event
+    const debouncedSearch = debounce((query) => {
+        performSearch(query);
+    }, 200); // 200ms delay for faster response
 
-    // Real-time search as typing
     searchInput.addEventListener('input', (e) => {
-        clearTimeout(searchTimeout);
-        const query = e.target.value.trim();
-        console.log('Input event triggered, query:', query);
-        
-        if (query.length === 0) {
-            suggestionsContainer.classList.add('hidden');
-        } else {
-            // Debounce search to avoid too many requests
-            searchTimeout = setTimeout(() => {
-                performSearch(query);
-            }, 300);
-        }
+        const query = e.target.value;
+        debouncedSearch(query);
     });
 
-    // Search button click
+    // Search button click - immediate search
     searchBtn.addEventListener('click', () => {
+        clearTimeout(searchTimeout);
         performSearch(searchInput.value);
     });
 
-    // Enter key
+    // Enter key - immediate search
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
+            e.preventDefault();
             clearTimeout(searchTimeout);
             performSearch(searchInput.value);
         }
     });
 
-    // Hide suggestions when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('#searchInput') && !e.target.closest('#searchSuggestions')) {
-            suggestionsContainer.classList.add('hidden');
-        }
-    });
-
-    function openAddToProjectModal(itemName, supplier, price) {
-        currentSelectedItem = { itemName, supplier, price };
+    function openAddToProjectModal(supplierData) {
+        currentSelectedItem = supplierData;
         
-        document.getElementById('modalItemName').textContent = itemName;
-        document.getElementById('modalSupplier').textContent = supplier;
-        document.getElementById('modalPrice').textContent = formatPrice(price);
+        document.getElementById('modalItemName').textContent = supplierData.item_name;
+        document.getElementById('modalSupplier').textContent = supplierData.supplier_name;
+        document.getElementById('modalPrice').textContent = formatPrice(supplierData.price);
+        document.getElementById('modalContact').textContent = supplierData.phone_number || 'N/A';
+        document.getElementById('modalAddress').textContent = supplierData.address || 'N/A';
         document.getElementById('quantityInput').value = 1;
         
         modal.classList.remove('hidden');
@@ -414,13 +567,12 @@
                 projects.forEach(project => {
                     const option = document.createElement('option');
                     option.value = project.id;
-                    option.textContent = project.name;
+                    option.textContent = project.project_name;
                     projectSelect.appendChild(option);
                 });
             })
             .catch(error => {
-                console.error('Error loading projects:', error);
-                // Fallback: keep empty state if API fails
+                    console.error('Error loading projects:', error);
                 projectSelect.innerHTML = '<option value="">-- Choose a project --</option>';
             });
     }
@@ -437,17 +589,45 @@
             return;
         }
 
-        // TODO: Send to backend API
-        console.log('Adding to project:', {
-            itemName: currentSelectedItem.itemName,
-            supplier: currentSelectedItem.supplier,
-            price: currentSelectedItem.price,
-            projectId: projectId,
-            quantity: quantity
-        });
+        // Prepare data to send
+        const data = {
+            project_id: parseInt(projectId),
+            item_id: currentSelectedItem.item_id,
+            supplier_id: currentSelectedItem.supplier_id,
+            quantity: parseInt(quantity),
+            unit_price: parseFloat(currentSelectedItem.price)
+        };
 
-        alert('Item added to project successfully!');
-        closeAddToProjectModal();
+        console.log('Adding to project:', data);
+
+        // Get CSRF token
+        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        // Send to backend API
+        fetch('/api/price-analysis/add-to-project', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('Item added to project successfully!');
+                closeAddToProjectModal();
+                searchInput.value = '';
+                searchResults.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            } else {
+                alert('Error: ' + (result.message || 'Failed to add item'));
+            }
+        })
+        .catch(error => {
+            console.error('Error adding to project:', error);
+            alert('Error adding item to project: ' + error.message);
+        });
     });
 
     // Close modal when clicking outside
