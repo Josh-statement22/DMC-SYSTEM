@@ -238,22 +238,41 @@ Route::get('/admin/purchase', function () {
 
 Route::get('/admin/additem', function () {
     $projects = DB::table('projects')->orderBy('project_name')->get();
-    return view('admin.additem', compact('projects'));
+    $categories = DB::table('categories')->orderBy('category_name')->get();
+    return view('admin.additem', compact('projects', 'categories'));
 })->middleware('auth')->name('admin.additem');
 
 Route::post('/admin/additem', function () {
-    request()->validate([
-        'item_number' => 'required|string|max:255',
-        'item_name' => 'required|string|max:255',
-        'item_description' => 'required|string',
-        'supplier_name' => 'required|string|max:255',
-        'supplier_phone' => 'required|string|max:255',
-        'supplier_address' => 'required|string',
-        'quantity' => 'required|integer|min:0',
-        'price' => 'required|numeric|min:0',
-        'purchase_date' => 'required|date',
-        'base64_image' => 'nullable|string',
-    ]);
+    // Validate based on whether user is creating a new category or selecting existing
+    if (request('category_id') === 'add_new') {
+        request()->validate([
+            'item_number' => 'required|string|max:255',
+            'item_name' => 'required|string|max:255',
+            'item_description' => 'required|string',
+            'supplier_name' => 'required|string|max:255',
+            'supplier_phone' => 'required|string|max:255',
+            'supplier_address' => 'required|string',
+            'quantity' => 'required|integer|min:0',
+            'price' => 'required|numeric|min:0',
+            'purchase_date' => 'required|date',
+            'new_category' => 'required|string|max:255',
+            'base64_image' => 'nullable|string',
+        ]);
+    } else {
+        request()->validate([
+            'item_number' => 'required|string|max:255',
+            'item_name' => 'required|string|max:255',
+            'item_description' => 'required|string',
+            'category_id' => 'required|integer|exists:categories,id',
+            'supplier_name' => 'required|string|max:255',
+            'supplier_phone' => 'required|string|max:255',
+            'supplier_address' => 'required|string',
+            'quantity' => 'required|integer|min:0',
+            'price' => 'required|numeric|min:0',
+            'purchase_date' => 'required|date',
+            'base64_image' => 'nullable|string',
+        ]);
+    }
 
     $itemName = request('item_name');
     $imagePath = null;
@@ -289,6 +308,17 @@ Route::post('/admin/additem', function () {
         }
     }
 
+    // Handle category: create new if add_new is selected
+    if (request('category_id') === 'add_new') {
+        $categoryId = DB::table('categories')->insertGetId([
+            'category_name' => request('new_category'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    } else {
+        $categoryId = request('category_id');
+    }
+
     // Create/find supplier first, then store supplier_id in items table.
     $supplierId = DB::table('suppliers')->where('supplier_name', request('supplier_name'))->value('id');
 
@@ -314,6 +344,7 @@ Route::post('/admin/additem', function () {
         'item_number' => request('item_number'),
         'item_name' => request('item_name'),
         'item_description' => request('item_description'),
+        'category_id' => $categoryId,
         'supplier_id' => $supplierId,
         'quantity' => request('quantity'),
         'price' => request('price'),
@@ -537,6 +568,123 @@ Route::get('/test-items', function () {
         'sample' => $items
     ]);
 })->middleware('auth');
+
+/*
+|--------------------------------------------------------------------------
+| Price Analysis - Category-Based Navigation
+|--------------------------------------------------------------------------
+*/
+
+// Get all categories
+Route::get('/api/categories', function () {
+    $categories = DB::table('categories')
+        ->select('id', 'category_name')
+        ->orderBy('category_name', 'asc')
+        ->get();
+    
+    return response()->json([
+        'success' => true,
+        'categories' => $categories
+    ]);
+})->middleware('auth')->name('api.categories');
+
+// Get items by category
+Route::get('/api/categories/{categoryId}/items', function ($categoryId) {
+    $category = DB::table('categories')
+        ->where('id', $categoryId)
+        ->select('id', 'category_name')
+        ->first();
+    
+    if (!$category) {
+        return response()->json(['success' => false, 'message' => 'Category not found'], 404);
+    }
+    
+    $items = DB::table('items')
+        ->where('category_id', $categoryId)
+        ->select('id', 'item_number', 'item_name', 'item_description', 'image_path')
+        ->distinct()
+        ->get();
+    
+    return response()->json([
+        'success' => true,
+        'category' => $category,
+        'items' => $items
+    ]);
+})->middleware('auth')->name('api.categories.items');
+
+// Get item details with suppliers
+Route::get('/api/categories/items/{itemId}/details', function ($itemId) {
+    $item = DB::table('items')
+        ->where('id', $itemId)
+        ->select('id', 'item_number', 'item_name', 'item_description', 'image_path', 'category_id')
+        ->first();
+    
+    if (!$item) {
+        return response()->json(['success' => false, 'message' => 'Item not found'], 404);
+    }
+    
+    // Get all suppliers for this item
+    $suppliers = DB::table('items')
+        ->leftJoin('suppliers', 'items.supplier_id', '=', 'suppliers.id')
+        ->where('items.item_number', $item->item_number)
+        ->select(
+            'items.id',
+            'items.price',
+            'items.quantity',
+            'items.purchase_date',
+            'items.supplier_id',
+            'suppliers.supplier_name',
+            'suppliers.phone_number',
+            'suppliers.address'
+        )
+        ->orderBy('items.price', 'asc')
+        ->get();
+    
+    $suppliers = $suppliers->map(function($purchase) {
+        return [
+            'item_id' => $purchase->id,
+            'supplier_id' => $purchase->supplier_id,
+            'supplier_name' => $purchase->supplier_name ?? 'N/A',
+            'phone_number' => $purchase->phone_number,
+            'address' => $purchase->address,
+            'price' => (float) $purchase->price,
+            'quantity' => $purchase->quantity,
+            'purchase_date' => $purchase->purchase_date
+        ];
+    });
+    
+    return response()->json([
+        'success' => true,
+        'item' => [
+            'id' => $item->id,
+            'item_number' => $item->item_number,
+            'item_name' => $item->item_name,
+            'item_description' => $item->item_description,
+            'image_path' => $item->image_path,
+            'suppliers' => $suppliers
+        ]
+    ]);
+})->middleware('auth')->name('api.items.details');
+
+// Create new category
+Route::post('/api/categories', function (Request $request) {
+    $validated = $request->validate([
+        'category_name' => 'required|string|max:255|unique:categories,category_name'
+    ]);
+    
+    $category = DB::table('categories')->insertGetId([
+        'category_name' => $validated['category_name'],
+        'created_at' => now(),
+        'updated_at' => now()
+    ]);
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Category created successfully',
+        'category_id' => $category,
+        'category_name' => $validated['category_name']
+    ]);
+})->middleware('auth')->name('api.categories.store');
 
 
 /*

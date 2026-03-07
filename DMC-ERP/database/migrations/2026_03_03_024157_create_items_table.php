@@ -15,10 +15,11 @@ return new class extends Migration
             $table->id();
             $table->string('item_number');
             $table->string('item_name');
+            $table->foreignId('category_id')->constrained('categories')->onDelete('cascade');
             $table->text('item_description');
-            $table->string('supplier_name')->nullable();
-            $table->integer('quantity');
+            $table->foreignId('supplier_id')->constrained('suppliers')->onDelete('cascade');
             $table->decimal('price', 10, 2);
+            $table->integer('quantity');
             $table->date('purchase_date')->nullable();
             $table->string('image_path')->nullable();
             $table->timestamps();

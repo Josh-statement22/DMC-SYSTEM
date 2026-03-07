@@ -95,6 +95,44 @@
                               placeholder="Enter item description"></textarea>
                 </div>
 
+                <!-- Category Selection -->
+                <div>
+                    <label for="category_select" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Category
+                    </label>
+                    <div class="relative">
+                        <select id="category_select"
+                                name="category_id"
+                                required
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                       focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                       transition-all duration-200 appearance-none">
+                            <option value="">-- Select a Category --</option>
+                            @foreach($categories as $category)
+                                <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                            @endforeach
+                            <option value="add_new">+ Add New Category</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                            <i data-feather="chevron-down" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Category Input (Hidden by default) -->
+                <div id="new_category_div" class="hidden">
+                    <label for="new_category" class="block text-sm font-semibold text-gray-700 mb-2">
+                        New Category Name
+                    </label>
+                    <input type="text"
+                           id="new_category"
+                           name="new_category"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                  focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                  transition-all duration-200"
+                           placeholder="Enter new category name">
+                </div>
+
                 <!-- Supplier Name -->
                 <div>
                     <label for="supplier_name" class="block text-sm font-semibold text-gray-700 mb-2">
@@ -364,10 +402,55 @@
         }
     }
 
+    // Category Dropdown Logic
+    function initializeCategories() {
+        const categorySelect = document.getElementById('category_select');
+        const newCategoryDiv = document.getElementById('new_category_div');
+        const newCategoryInput = document.getElementById('new_category');
+        const form = document.querySelector('form');
+
+        // Handle dropdown change
+        categorySelect.addEventListener('change', function() {
+            if (this.value === 'add_new') {
+                // Show input field for new category
+                newCategoryDiv.classList.remove('hidden');
+                newCategoryInput.focus();
+                newCategoryInput.value = '';
+            } else {
+                // Hide input field for existing categories
+                newCategoryDiv.classList.add('hidden');
+            }
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', function(e) {
+            const selectedValue = categorySelect.value;
+            const inputValue = newCategoryInput.value.trim();
+
+            // Validate category selection
+            if (selectedValue === 'add_new') {
+                // Must have entered a category name
+                if (!inputValue) {
+                    e.preventDefault();
+                    alert('Please enter a new category name.');
+                    newCategoryInput.focus();
+                    return;
+                }
+            } else if (!selectedValue) {
+                // No category selected
+                e.preventDefault();
+                alert('Please select a category.');
+                categorySelect.focus();
+                return;
+            }
+        });
+    }
+
     // Wait for DOM to be fully loaded
     document.addEventListener('DOMContentLoaded', function() {
         feather.replace();
         initializeToasts();
+        initializeCategories();
     });
 </script>
 @endpush
