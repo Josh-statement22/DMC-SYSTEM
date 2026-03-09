@@ -11,10 +11,12 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::table('projects', function (Blueprint $table) {
-            // Add project_date column after project_name
-            $table->date('project_date')->nullable()->after('project_name');
-        });
+        if (!Schema::hasColumn('projects', 'project_date')) {
+            Schema::table('projects', function (Blueprint $table) {
+                // Add project_date column after project_name
+                $table->date('project_date')->nullable()->after('project_name');
+            });
+        }
     }
 
     /**
@@ -22,9 +24,11 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('projects', function (Blueprint $table) {
-            // Drop project_date column
-            $table->dropColumn('project_date');
-        });
+        if (Schema::hasColumn('projects', 'project_date')) {
+            Schema::table('projects', function (Blueprint $table) {
+                // Drop project_date column
+                $table->dropColumn('project_date');
+            });
+        }
     }
 };

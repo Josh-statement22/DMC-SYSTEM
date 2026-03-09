@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('projects', function (Blueprint $table) {
             $table->id();
             $table->string('project_name')->unique();
+            $table->date('project_date')->nullable();
             $table->timestamps();
         });
     }

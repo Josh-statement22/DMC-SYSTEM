@@ -122,6 +122,7 @@
                 <p class="text-sm text-gray-600">Item: <span id="modalItemName" class="font-semibold text-gray-900"></span></p>
                 <p class="text-sm text-gray-600">Supplier: <span id="modalSupplier" class="font-semibold text-gray-900"></span></p>
                 <p class="text-sm text-gray-600">Price: <span id="modalPrice" class="font-semibold text-blue-600"></span></p>
+                <p class="text-sm text-gray-600">Quantity: <span id="modalQuantity" class="font-semibold text-gray-900"></span></p>
                 <p class="text-sm text-gray-600">Contact: <span id="modalContact" class="font-semibold text-gray-900"></span></p>
                 <p class="text-sm text-gray-600">Address: <span id="modalAddress" class="font-semibold text-gray-900"></span></p>
             </div>
@@ -132,6 +133,18 @@
                     <select id="projectSelect" required class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">-- Choose a project --</option>
                     </select>
+                </div>
+
+                <!-- New Project Fields (hidden by default) -->
+                <div id="newProjectFields" class="hidden mb-4 p-4 bg-blue-50 rounded-xl space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">New Project Name</label>
+                        <input type="text" id="newProjectName" class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter project name"/>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Project Date</label>
+                        <input type="date" id="newProjectDate" class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                    </div>
                 </div>
 
                 <div class="mb-6">
@@ -193,6 +206,29 @@
             month: 'short', 
             day: 'numeric' 
         });
+    }
+
+    function showToast(type, message) {
+        const isSuccess = type === 'success';
+        const toast = document.createElement('div');
+        toast.className = `fixed top-6 right-6 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 z-50 ${isSuccess ? 'bg-green-500' : 'bg-red-500'}`;
+
+        toast.innerHTML = `
+            <i data-feather="${isSuccess ? 'check-circle' : 'alert-circle'}" class="w-6 h-6 flex-shrink-0"></i>
+            <div>
+                <h4 class="font-semibold">${isSuccess ? 'Success!' : 'Error!'}</h4>
+                <p class="text-sm ${isSuccess ? 'text-green-100' : 'text-red-100'}">${message}</p>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+        feather.replace();
+
+        setTimeout(() => {
+            toast.style.transition = 'opacity 0.3s ease-out';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
     }
 
     // View management
@@ -440,6 +476,7 @@
         document.getElementById('modalItemName').textContent = supplierData.item_name;
         document.getElementById('modalSupplier').textContent = supplierData.supplier_name;
         document.getElementById('modalPrice').textContent = formatPrice(supplierData.price);
+        document.getElementById('modalQuantity').textContent = supplierData.quantity ?? 'N/A';
         document.getElementById('modalContact').textContent = supplierData.phone_number || 'N/A';
         document.getElementById('modalAddress').textContent = supplierData.address || 'N/A';
         document.getElementById('quantityInput').value = 1;
@@ -452,6 +489,9 @@
         modal.classList.add('hidden');
         currentSelectedItem = null;
         addToProjectForm.reset();
+        document.getElementById('newProjectFields').classList.add('hidden');
+        document.getElementById('newProjectName').value = '';
+        document.getElementById('newProjectDate').value = '';
     }
 
     // Load projects
@@ -460,6 +500,22 @@
             const response = await fetch('/api/projects');
             const projects = await response.json();
             projectSelect.innerHTML = '<option value="">-- Choose a project --</option>';
+            
+            // Add "Add New Project" option
+            const addNewOption = document.createElement('option');
+            addNewOption.value = 'add_new';
+            addNewOption.textContent = '+ Add New Project';
+            addNewOption.style.fontWeight = 'bold';
+            addNewOption.style.color = '#2563eb';
+            projectSelect.appendChild(addNewOption);
+            
+            // Add separator
+            const separator = document.createElement('option');
+            separator.disabled = true;
+            separator.textContent = '──────────────';
+            projectSelect.appendChild(separator);
+            
+            // Add existing projects
             projects.forEach(project => {
                 const option = document.createElement('option');
                 option.value = project.id;
@@ -471,49 +527,143 @@
         }
     }
 
+    // Handle project selection change
+    projectSelect.addEventListener('change', function() {
+        const newProjectFields = document.getElementById('newProjectFields');
+        const newProjectNameInput = document.getElementById('newProjectName');
+        const newProjectDateInput = document.getElementById('newProjectDate');
+        
+        if (this.value === 'add_new') {
+            newProjectFields.classList.remove('hidden');
+            newProjectNameInput.required = true;
+            newProjectDateInput.required = true;
+        } else {
+            newProjectFields.classList.add('hidden');
+            newProjectNameInput.required = false;
+            newProjectDateInput.required = false;
+            newProjectNameInput.value = '';
+            newProjectDateInput.value = '';
+        }
+    });
+
+    // Create new project
+    async function createNewProject(name, date) {
+        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        try {
+            const response = await fetch('/api/projects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': token
+                },
+                body: JSON.stringify({
+                    project_name: name,
+                    project_date: date
+                })
+            });
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned an invalid response');
+            }
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                return result.project;
+            } else {
+                throw new Error(result.message || 'Failed to create project');
+            }
+        } catch (error) {
+            throw error;
+        }
+    }
+
     // Handle form submission
-    addToProjectForm.addEventListener('submit', (e) => {
+    addToProjectForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const projectId = projectSelect.value;
+        let projectId = projectSelect.value;
         const quantity = document.getElementById('quantityInput').value;
 
         if (!projectId) {
-            alert('Please select a project');
+            showToast('error', 'Please select a project');
             return;
         }
 
-        const data = {
-            project_id: parseInt(projectId),
-            item_id: currentSelectedItem.item_id,
-            supplier_id: currentSelectedItem.supplier_id,
-            quantity: parseInt(quantity),
-            unit_price: parseFloat(currentSelectedItem.price)
-        };
+        try {
+            // If user selected "Add New Project", create it first
+            if (projectId === 'add_new') {
+                const newProjectName = document.getElementById('newProjectName').value.trim();
+                const newProjectDate = document.getElementById('newProjectDate').value;
+                
+                if (!newProjectName || !newProjectDate) {
+                    showToast('error', 'Please fill in all new project fields');
+                    return;
+                }
+                
+                try {
+                    // Create the new project
+                    const newProject = await createNewProject(newProjectName, newProjectDate);
+                    projectId = newProject.id;
+                    
+                    // Reload projects list and select the new one
+                    await loadProjects();
+                    projectSelect.value = projectId;
+                    
+                    // Hide new project fields
+                    document.getElementById('newProjectFields').classList.add('hidden');
+                } catch (projectError) {
+                    showToast('error', projectError.message || 'Failed to create project');
+                    return;
+                }
+            }
 
-        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const data = {
+                project_id: parseInt(projectId),
+                item_id: currentSelectedItem.item_id,
+                supplier_id: currentSelectedItem.supplier_id,
+                quantity: parseInt(quantity),
+                unit_price: parseFloat(currentSelectedItem.price)
+            };
 
-        fetch('/api/price-analysis/add-to-project', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': token
-            },
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                alert('Item added to project successfully!');
+            const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            const response = await fetch('/api/price-analysis/add-to-project', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': token
+                },
+                body: JSON.stringify(data)
+            });
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned an invalid response');
+            }
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                showToast('success', 'Item added to project successfully!');
                 closeAddToProjectModal();
             } else {
-                alert('Error: ' + (result.message || 'Failed to add item'));
+                // Handle validation errors or server errors
+                const errorMessage = result.message || 'Failed to add item';
+                if (result.remaining_stock !== undefined) {
+                    showToast('error', `${errorMessage}. Only ${result.remaining_stock} unit(s) available.`);
+                } else {
+                    showToast('error', errorMessage);
+                }
             }
-        })
-        .catch(error => {
-            console.error('Error adding to project:', error);
-            alert('Error adding item to project: ' + error.message);
-        });
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('error', error.message || 'Something went wrong');
+        }
     });
 
     // Close modal when clicking outside

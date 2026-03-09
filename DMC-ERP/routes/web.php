@@ -442,6 +442,36 @@ Route::get('/api/projects', function () {
     return response()->json($projects);
 })->middleware('auth')->name('api.projects');
 
+Route::post('/api/projects', function (Request $request) {
+    try {
+        $request->validate([
+            'project_name' => 'required|string|max:255|unique:projects',
+            'project_date' => 'required|date'
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', array_map(fn($errors) => implode(', ', $errors), $e->errors()))
+        ], 422);
+    }
+    
+    $projectId = DB::table('projects')->insertGetId([
+        'project_name' => $request->project_name,
+        'project_date' => $request->project_date,
+        'created_at' => now(),
+        'updated_at' => now()
+    ]);
+    
+    return response()->json([
+        'success' => true,
+        'project' => [
+            'id' => $projectId,
+            'project_name' => $request->project_name,
+            'project_date' => $request->project_date
+        ]
+    ]);
+})->middleware('auth')->name('api.projects.store');
+
 // Price Analysis API - Search for items with all supplier prices
 Route::get('/api/price-analysis/search', function (Request $request) {
     $query = $request->query('q');
@@ -517,13 +547,46 @@ Route::get('/api/price-analysis/search', function (Request $request) {
 
 // Price Analysis API - Add item to project
 Route::post('/api/price-analysis/add-to-project', function (Request $request) {
-    $data = $request->validate([
-        'project_id' => 'required|integer|exists:projects,id',
-        'item_id' => 'required|integer|exists:items,id',
-        'supplier_id' => 'required|integer|exists:suppliers,id',
-        'quantity' => 'required|integer|min:1',
-        'unit_price' => 'required|numeric|min:0'
-    ]);
+    try {
+        $data = $request->validate([
+            'project_id' => 'required|integer|exists:projects,id',
+            'item_id' => 'required|integer|exists:items,id',
+            'supplier_id' => 'required|integer|exists:suppliers,id',
+            'quantity' => 'required|integer|min:1',
+            'unit_price' => 'required|numeric|min:0'
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed: ' . implode(', ', array_map(fn($errors) => implode(', ', $errors), $e->errors()))
+        ], 422);
+    }
+
+    $item = DB::table('items')
+        ->select('id', 'quantity')
+        ->where('id', $data['item_id'])
+        ->first();
+
+    if (!$item) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Item not found'
+        ], 404);
+    }
+
+    $allocatedQuantity = (int) DB::table('project_items')
+        ->where('item_id', $data['item_id'])
+        ->sum('quantity');
+
+    $remainingStock = (int) $item->quantity - $allocatedQuantity;
+
+    if ((int) $data['quantity'] > $remainingStock) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Requested quantity exceeds remaining stock',
+            'remaining_stock' => max(0, $remainingStock)
+        ], 422);
+    }
 
     // Insert/Update in project_items pivot table
     $existingLink = DB::table('project_items')
@@ -537,7 +600,7 @@ Route::post('/api/price-analysis/add-to-project', function (Request $request) {
         DB::table('project_items')
             ->where('id', $existingLink->id)
             ->update([
-                'quantity' => DB::raw('quantity + ' . $data['quantity']),
+                'quantity' => (int) $existingLink->quantity + (int) $data['quantity'],
                 'unit_price' => $data['unit_price'],
                 'updated_at' => now()
             ]);
