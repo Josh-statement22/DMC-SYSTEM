@@ -50,42 +50,6 @@
             <form action="{{ route('admin.additem.store') }}" method="POST" class="space-y-6">
                 @csrf
 
-                <!-- Project Dropdown -->
-                <div>
-                    <label for="project_select" class="block text-sm font-semibold text-gray-700 mb-2">
-                        Project
-                    </label>
-                    <div class="relative">
-                        <select id="project_select"
-                                class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                                       focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                                       transition-all duration-200 appearance-none">
-                            <option value="">-- Select a Project --</option>
-                            @foreach($projects as $proj)
-                                <option value="{{ $proj->project_name }}">{{ $proj->project_name }}</option>
-                            @endforeach
-                            <option value="add_new" style="font-weight: bold;">+ Add New Project</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
-                            <i data-feather="chevron-down" class="w-5 h-5 text-gray-400"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Project Name Input (Hidden by default) -->
-                <div id="new_project_div" class="hidden">
-                    <label for="project_name" class="block text-sm font-semibold text-gray-700 mb-2">
-                        New Project Name
-                    </label>
-                    <input type="text"
-                           id="project_name"
-                           name="project_name"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                                  focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                                  transition-all duration-200"
-                           placeholder="Enter new project name">
-                </div>
-
                 <!-- Item Number -->
                 <div>
                     <label for="item_number" class="block text-sm font-semibold text-gray-700 mb-2">
@@ -131,19 +95,87 @@
                               placeholder="Enter item description"></textarea>
                 </div>
 
-                <!-- Supplier -->
+                <!-- Category Selection -->
                 <div>
-                    <label for="supplier" class="block text-sm font-semibold text-gray-700 mb-2">
-                        Supplier
+                    <label for="category_select" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Category
+                    </label>
+                    <div class="relative">
+                        <select id="category_select"
+                                name="category_id"
+                                required
+                                class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                       focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                       transition-all duration-200 appearance-none">
+                            <option value="">-- Select a Category --</option>
+                            @foreach($categories as $category)
+                                <option value="{{ $category->id }}">{{ $category->category_name }}</option>
+                            @endforeach
+                            <option value="add_new">+ Add New Category</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                            <i data-feather="chevron-down" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Category Input (Hidden by default) -->
+                <div id="new_category_div" class="hidden">
+                    <label for="new_category" class="block text-sm font-semibold text-gray-700 mb-2">
+                        New Category Name
                     </label>
                     <input type="text"
-                           id="supplier"
-                           name="supplier"
+                           id="new_category"
+                           name="new_category"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                  focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                  transition-all duration-200"
+                           placeholder="Enter new category name">
+                </div>
+
+                <!-- Supplier Name -->
+                <div>
+                    <label for="supplier_name" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Supplier Name
+                    </label>
+                    <input type="text"
+                           id="supplier_name"
+                           name="supplier_name"
                            required
                            class="w-full px-4 py-3 border border-gray-300 rounded-xl
                                   focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
                                   transition-all duration-200"
                            placeholder="Enter supplier name">
+                </div>
+
+                <!-- Supplier Phone Number -->
+                <div>
+                    <label for="supplier_phone" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Phone Number
+                    </label>
+                    <input type="text"
+                           id="supplier_phone"
+                           name="supplier_phone"
+                           required
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                  focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                  transition-all duration-200"
+                           placeholder="Enter phone number">
+                </div>
+
+                <!-- Supplier Address -->
+                <div>
+                    <label for="supplier_address" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Address
+                    </label>
+                    <textarea id="supplier_address"
+                              name="supplier_address"
+                              required
+                              rows="2"
+                              class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                     focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                     transition-all duration-200"
+                              placeholder="Enter supplier address"></textarea>
                 </div>
 
                 <!-- Quantity -->
@@ -177,6 +209,20 @@
                                   focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
                                   transition-all duration-200"
                            placeholder="Enter price">
+                </div>
+
+                <!-- Purchase Date -->
+                <div>
+                    <label for="purchase_date" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Purchase Date
+                    </label>
+                    <input type="date"
+                           id="purchase_date"
+                           name="purchase_date"
+                           required
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                                  focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                                  transition-all duration-200">
                 </div>
 
                 <!-- Image Upload -->
@@ -356,56 +402,55 @@
         }
     }
 
-    // Wait for DOM to be fully loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        feather.replace();
-        initializeToasts();
-
-        // Get DOM elements
-        const projectSelect = document.getElementById('project_select');
-        const newProjectDiv = document.getElementById('new_project_div');
-        const projectInput = document.getElementById('project_name');
+    // Category Dropdown Logic
+    function initializeCategories() {
+        const categorySelect = document.getElementById('category_select');
+        const newCategoryDiv = document.getElementById('new_category_div');
+        const newCategoryInput = document.getElementById('new_category');
         const form = document.querySelector('form');
 
         // Handle dropdown change
-        projectSelect.addEventListener('change', function() {
+        categorySelect.addEventListener('change', function() {
             if (this.value === 'add_new') {
-                // Show input field for new project
-                newProjectDiv.classList.remove('hidden');
-                projectInput.focus();
-                projectInput.value = ''; // Clear the input
+                // Show input field for new category
+                newCategoryDiv.classList.remove('hidden');
+                newCategoryInput.focus();
+                newCategoryInput.value = '';
             } else {
-                // Hide input field for existing projects and SET THE VALUE
-                newProjectDiv.classList.add('hidden');
-                projectInput.value = this.value; // SET VALUE IMMEDIATELY FOR EXISTING PROJECT
+                // Hide input field for existing categories
+                newCategoryDiv.classList.add('hidden');
             }
         });
 
         // Handle form submission
         form.addEventListener('submit', function(e) {
-            const selectedValue = projectSelect.value;
-            const inputValue = projectInput.value.trim();
+            const selectedValue = categorySelect.value;
+            const inputValue = newCategoryInput.value.trim();
 
-            // Check if user is adding new project
+            // Validate category selection
             if (selectedValue === 'add_new') {
-                // Must have entered a project name
+                // Must have entered a category name
                 if (!inputValue) {
                     e.preventDefault();
-                    alert('Please enter a project name');
-                    projectInput.focus();
+                    alert('Please enter a new category name.');
+                    newCategoryInput.focus();
                     return;
                 }
-                // projectInput.value is already set
-            } else if (selectedValue) {
-                // Existing project selected - value already set on change event
-                projectInput.value = selectedValue;
-            } else {
-                // No project selected
+            } else if (!selectedValue) {
+                // No category selected
                 e.preventDefault();
-                alert('Please select or create a project');
+                alert('Please select a category.');
+                categorySelect.focus();
                 return;
             }
         });
+    }
+
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        feather.replace();
+        initializeToasts();
+        initializeCategories();
     });
 </script>
 @endpush

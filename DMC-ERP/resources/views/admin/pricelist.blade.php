@@ -19,8 +19,8 @@
                 onchange="this.form.submit()"
                 class="bg-white text-gray-700 px-4 py-2 rounded-xl shadow focus:outline-none">
                 @forelse($projects as $project)
-                    <option value="{{ $project }}" {{ $project === $selectedProject ? 'selected' : '' }}>
-                        {{ $project }}
+                    <option value="{{ $project->id }}" {{ $project->project_name === $selectedProject ? 'selected' : '' }}>
+                        {{ $project->project_name }}
                     </option>
                 @empty
                     <option value="">No projects available</option>
@@ -59,7 +59,7 @@
                                 data-item-id="{{ $item->id }}"
                                 data-item-name="{{ $item->item_name }}"
                                 data-item-description="{{ $item->item_description }}"
-                                data-item-supplier="{{ $item->supplier }}"
+                                data-item-supplier="{{ $item->supplier_name ?? 'N/A' }}"
                                 data-item-quantity="{{ $item->quantity }}"
                                 data-item-price="{{ number_format((float) $item->price, 2) }}"
                                 data-item-image="{{ $item->image_path ?? '' }}"
