@@ -15,14 +15,21 @@ class User extends Authenticatable
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
+     * The name of the "username" column.
+     */
+    protected string $username = 'employee_id';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
     protected $fillable = [
+        'employee_id',
         'name',
         'email',
         'password',
+        'role_id',
     ];
 
     /**
@@ -47,6 +54,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'employee_id' => 'integer',
         ];
     }
 
@@ -60,5 +68,13 @@ class User extends Authenticatable
             ->take(2)
             ->map(fn ($word) => Str::substr($word, 0, 1))
             ->implode('');
+    }
+
+    /**
+     * Get the role that owns the user
+     */
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
     }
 }
