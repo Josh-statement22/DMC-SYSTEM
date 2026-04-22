@@ -204,7 +204,6 @@
             position: absolute;
             top: 50%;
             right: 0.75rem;
-            display: none;
             align-items: center;
             justify-content: center;
             width: 2.2rem;
@@ -303,6 +302,30 @@
             font-size: 0.85rem;
             font-weight: 700;
             white-space: nowrap;
+        }
+
+        /* Keep modals above all cards/content and ensure form fields are clickable */
+        #addUserModal,
+        #editUserModal {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #addUserModal.hidden,
+        #editUserModal.hidden {
+            display: none;
+        }
+
+        #addUserModal > div,
+        #editUserModal > div {
+            position: relative;
+            z-index: 100000;
+            pointer-events: auto;
         }
 
         @media (max-width: 1024px) {
@@ -477,7 +500,7 @@
 </div>
 
 <div id="addUserModal"
-     class="fixed inset-0 bg-black/50 hidden items-center justify-center">
+    class="hidden">
 
     <!-- Modal Box -->
     <div class="bg-white w-full max-w-md p-8 rounded-xl shadow-lg">
@@ -540,6 +563,7 @@
                     <option value="">Select Role</option>
                     <option value="1" {{ old('role_id') == 1 ? 'selected' : '' }}>Superadmin</option>
                     <option value="2" {{ old('role_id') == 2 ? 'selected' : '' }}>Admin</option>
+                    <option value="3" {{ old('role_id') == 3 ? 'selected' : '' }}>Accounting</option>
                 </select>
                 @error('role_id')
                     <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
@@ -580,7 +604,7 @@
 
 <!-- Edit User Modal -->
 <div id="editUserModal"
-     class="fixed inset-0 bg-black/50 hidden items-center justify-center">
+    class="hidden">
 
     <!-- Modal Box -->
     <div class="bg-white w-full max-w-md p-8 rounded-xl shadow-lg">
@@ -638,6 +662,7 @@
                     <option value="">Select Role</option>
                     <option value="1">Superadmin</option>
                     <option value="2">Admin</option>
+                    <option value="3">Accounting</option>
                 </select>
             </div>
 
@@ -741,7 +766,12 @@
                         </td>
                         <td class="p-4">
                             <div class="flex justify-center gap-4 text-sm">
-                                <button onclick="openEditModal({{ $user->id }}, '{{ $user->employee_id }}', '{{ $user->name }}', '{{ $user->email }}', {{ $user->role_id }})"
+                                <button onclick="openEditModal(this)"
+                                    data-id="{{ $user->id }}"
+                                    data-employee-id="{{ $user->employee_id }}"
+                                    data-name="{{ $user->name }}"
+                                    data-email="{{ $user->email ?? '' }}"
+                                    data-role-id="{{ $user->role_id }}"
                                         class="flex items-center gap-2 text-gray-600 hover:text-teal-700">
                                     <i class="fa fa-gear"></i> Edit
                                 </button>
@@ -807,20 +837,24 @@
     }
 
     function openModal() {
-        document.getElementById('addUserModal')
-            .classList.remove('hidden');
-        document.getElementById('addUserModal')
-            .classList.add('flex');
+        const modal = document.getElementById('addUserModal');
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
     }
 
     function closeModal() {
-        document.getElementById('addUserModal')
-            .classList.add('hidden');
-        document.getElementById('addUserModal')
-            .classList.remove('flex');
+        const modal = document.getElementById('addUserModal');
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
     }
 
-    function openEditModal(id, employeeId, name, email, roleId) {
+    function openEditModal(button) {
+        const id = button.dataset.id;
+        const employeeId = button.dataset.employeeId;
+        const name = button.dataset.name;
+        const email = button.dataset.email;
+        const roleId = button.dataset.roleId;
+
         document.getElementById('edit_user_id').value = id;
         document.getElementById('edit_employee_id').value = employeeId;
         document.getElementById('edit_name').value = name;
@@ -832,17 +866,15 @@
         // Set form action
         document.getElementById('editUserForm').action = `/superadmin/users/${id}`;
         
-        document.getElementById('editUserModal')
-            .classList.remove('hidden');
-        document.getElementById('editUserModal')
-            .classList.add('flex');
+        const modal = document.getElementById('editUserModal');
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
     }
 
     function closeEditModal() {
-        document.getElementById('editUserModal')
-            .classList.add('hidden');
-        document.getElementById('editUserModal')
-            .classList.remove('flex');
+        const modal = document.getElementById('editUserModal');
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
     }
 
     function togglePassword(element, event) {
@@ -900,11 +932,9 @@
         }
 
         if (searchInput.value.trim().length > 0) {
-            clearSearchBtn.classList.remove('hidden');
-            clearSearchBtn.classList.add('flex');
+            clearSearchBtn.style.display = 'flex';
         } else {
-            clearSearchBtn.classList.add('hidden');
-            clearSearchBtn.classList.remove('flex');
+            clearSearchBtn.style.display = 'none';
         }
     }
     

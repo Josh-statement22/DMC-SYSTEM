@@ -5,6 +5,141 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
+if (!function_exists('redirect_if_role_not_allowed')) {
+    function redirect_if_role_not_allowed(array $allowedRoleIds)
+    {
+        $user = Auth::user();
+
+        if ($user && in_array((int) $user->role_id, $allowedRoleIds, true)) {
+            return null;
+        }
+
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
+        return match ((int) $user->role_id) {
+            1 => redirect('/superadmin/dashboard'),
+            2 => redirect('/admin/dashboard'),
+            3 => redirect('/accounting/dashboard'),
+            default => abort(403),
+        };
+    }
+}
+
+if (!function_exists('buildLiquidationTrackingRecords')) {
+    function buildLiquidationTrackingRecords(?int $employeeId = null)
+    {
+        $expenseTotalsSubquery = DB::raw('(select liquidation_id, sum(amount) as total_expended, count(*) as expense_count from liquidation_expenses group by liquidation_id) as expense_totals');
+
+        $records = DB::table('liquidations')
+            ->join('users', 'liquidations.user_id', '=', 'users.id')
+            ->leftJoin('roles', 'users.role_id', '=', 'roles.id')
+            ->leftJoin($expenseTotalsSubquery, 'liquidations.id', '=', 'expense_totals.liquidation_id')
+            ->select(
+                'liquidations.id',
+                'liquidations.user_id',
+                'users.employee_id',
+                'users.name',
+                DB::raw("COALESCE(roles.name, 'Employee') as role_name"),
+                'liquidations.cutoff_period',
+                'liquidations.status',
+                'liquidations.remarks',
+                'liquidations.document_path',
+                'liquidations.submitted_at',
+                'liquidations.approved_at',
+                'liquidations.created_at',
+                'liquidations.amount as balance_sent',
+                DB::raw('COALESCE(expense_totals.total_expended, 0) as total_expended'),
+                DB::raw('COALESCE(expense_totals.expense_count, 0) as expense_count')
+            )
+            ->when($employeeId, function ($query) use ($employeeId) {
+                $query->where('liquidations.user_id', $employeeId);
+            })
+            ->orderByDesc(DB::raw('COALESCE(liquidations.submitted_at, liquidations.approved_at, liquidations.created_at)'))
+            ->get();
+
+        $expenseRowsByLiquidation = DB::table('liquidation_expenses')
+            ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+            ->select(
+                'liquidation_expenses.liquidation_id',
+                'liquidation_expenses.expense_date',
+                'liquidation_expenses.transaction_details',
+                'liquidation_expenses.description',
+                'liquidation_expenses.amount',
+                'particulars.particulars_category as category_name'
+            )
+            ->orderByDesc('liquidation_expenses.expense_date')
+            ->get()
+            ->groupBy('liquidation_id');
+
+        $cashAdvanceRows = DB::table('cash_advance_requests')
+            ->select(
+                'requester_id',
+                DB::raw("DATE_FORMAT(COALESCE(released_at, reviewed_at, request_date), '%Y-%m') as month_key"),
+                DB::raw('SUM(COALESCE(approved_amount, requested_amount, 0)) as total_released')
+            )
+            ->where('status', 'approved')
+            ->groupBy('requester_id', 'month_key')
+            ->get();
+
+        $releasedByUserMonth = $cashAdvanceRows->mapWithKeys(function ($row) {
+            return [((int) $row->requester_id) . '|' . $row->month_key => (float) $row->total_released];
+        });
+
+        return $records->map(function ($row) use ($expenseRowsByLiquidation, $releasedByUserMonth) {
+            $recordDate = \Carbon\Carbon::parse($row->submitted_at ?? $row->approved_at ?? $row->created_at);
+            $weekStart = $recordDate->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
+            $weekEnd = $recordDate->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
+            $monthKey = $recordDate->format('Y-m');
+            $releasedKey = ((int) $row->user_id) . '|' . $monthKey;
+            $releasedAmount = (float) ($releasedByUserMonth[$releasedKey] ?? 0);
+            $balanceSent = $releasedAmount > 0 ? $releasedAmount : (float) $row->balance_sent;
+            $expenseBreakdown = ($expenseRowsByLiquidation->get($row->id) ?? collect())->map(function ($expense) {
+                return [
+                    'expense_date' => $expense->expense_date,
+                    'category' => $expense->category_name,
+                    'details' => trim((string) $expense->transaction_details),
+                    'description' => trim((string) $expense->description),
+                    'amount' => (float) $expense->amount,
+                    'label' => trim($expense->category_name . ' - ' . $expense->transaction_details . ' (₱' . number_format((float) $expense->amount, 2) . ')'),
+                ];
+            })->values();
+
+            return [
+                'id' => (int) $row->id,
+                'user_id' => (int) $row->user_id,
+                'employee_id' => $row->employee_id,
+                'name' => $row->name,
+                'role_name' => $row->role_name ?: 'Employee',
+                'cutoff_period' => $row->cutoff_period,
+                'status' => $row->status,
+                'remarks' => $row->remarks,
+                'document_path' => $row->document_path,
+                'record_date' => $recordDate->format('Y-m-d'),
+                'record_timestamp' => $recordDate->toIso8601String(),
+                'period_month_key' => $monthKey,
+                'period_month_label' => $recordDate->format('F Y'),
+                'week_start' => $weekStart->format('Y-m-d'),
+                'week_end' => $weekEnd->format('Y-m-d'),
+                'week_label' => $weekStart->format('M j') . '–' . $weekEnd->format('M j'),
+                'balance_sent' => $balanceSent,
+                'total_expenses' => (float) $row->total_expended,
+                'remaining_balance' => $balanceSent - (float) $row->total_expended,
+                'expense_count' => (int) $row->expense_count,
+                'expense_breakdown' => $expenseBreakdown,
+                'search_text' => strtolower(trim(
+                    ($row->employee_id ?? '') . ' ' .
+                    ($row->name ?? '') . ' ' .
+                    ($row->role_name ?? '') . ' ' .
+                    ($row->cutoff_period ?? '') . ' ' .
+                    ($row->status ?? '')
+                )),
+            ];
+        })->values();
+    }
+}
+
 /*
 |--------------------------------------------------------------------------
 | Login Page
@@ -44,6 +179,10 @@ Route::post('/login', function (Request $request) {
         
         if ($user->role_id == 2) {
             return redirect('/admin/dashboard');
+        }
+
+        if ($user->role_id == 3) {
+            return redirect('/accounting/dashboard');
         }
         
         // If unknown role
@@ -161,10 +300,304 @@ Route::put('/superadmin/users/{id}', function (Request $request, $id) {
 */
 
 Route::get('/admin/dashboard', function () {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     return view('admin.dashboard');
 })->middleware('auth')->name('admin.dashboard');
 
+/*
+|--------------------------------------------------------------------------
+| Accounting Dashboard
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/accounting/dashboard', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $employees = DB::table('users')
+        ->select('id', 'name', 'employee_id')
+        ->where('role_id', 2)
+        ->orderBy('name')
+        ->get();
+
+    return view('accounting.dashboard', compact('employees'));
+})->middleware('auth')->name('accounting.dashboard');
+
+Route::get('/accounting/liquidation', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $liquidationRecords = buildLiquidationTrackingRecords();
+
+    return view('accounting.liquidation', compact('liquidationRecords'));
+})->middleware('auth')->name('accounting.liquidation');
+
+Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $selectedEmployee = DB::table('users')
+        ->leftJoin('roles', 'users.role_id', '=', 'roles.id')
+        ->select(
+            'users.id',
+            'users.employee_id',
+            'users.name',
+            DB::raw("COALESCE(roles.name, 'Employee') as role_name")
+        )
+        ->where('users.id', (int) $employee)
+        ->where('users.role_id', 2)
+        ->first();
+
+    abort_if(!$selectedEmployee, 404);
+
+    $liquidationRecords = buildLiquidationTrackingRecords((int) $selectedEmployee->id);
+
+    return view('accounting.liquidation', compact('liquidationRecords', 'selectedEmployee'));
+})->middleware('auth')->name('accounting.liquidation.employee');
+
+Route::get('/accounting/cash-advance/requests', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $requests = DB::table('cash_advance_requests')
+        ->join('users as requesters', 'cash_advance_requests.requester_id', '=', 'requesters.id')
+        ->leftJoin('users as reviewers', 'cash_advance_requests.reviewed_by', '=', 'reviewers.id')
+        ->select(
+            'cash_advance_requests.id',
+            'cash_advance_requests.reference_no',
+            'cash_advance_requests.requester_id',
+            'requesters.employee_id',
+            'requesters.name as employee_name',
+            'cash_advance_requests.requested_amount',
+            'cash_advance_requests.approved_amount',
+            'cash_advance_requests.purpose',
+            'cash_advance_requests.request_date',
+            'cash_advance_requests.date_needed',
+            'cash_advance_requests.status',
+            'cash_advance_requests.accounting_remarks',
+            'cash_advance_requests.submitted_at',
+            'cash_advance_requests.reviewed_at',
+            'cash_advance_requests.released_at',
+            'reviewers.name as reviewer_name'
+        )
+        ->orderByDesc(DB::raw('COALESCE(cash_advance_requests.submitted_at, cash_advance_requests.created_at)'))
+        ->get();
+
+    return response()->json(['requests' => $requests]);
+})->middleware('auth')->name('accounting.cash-advance.requests.index');
+
+Route::post('/cash-advance/requests', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([2])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'purpose' => 'required|string|max:2000',
+        'requested_amount' => 'required|numeric|min:0.01',
+        'date_needed' => 'nullable|date',
+    ]);
+
+    $requestDate = now();
+    $referenceNo = 'CA-' . $requestDate->format('Ymd') . '-' . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
+
+    $requestId = DB::table('cash_advance_requests')->insertGetId([
+        'reference_no' => $referenceNo,
+        'requester_id' => Auth::id(),
+        'requested_amount' => $validated['requested_amount'],
+        'purpose' => trim($validated['purpose']),
+        'request_date' => $requestDate->toDateString(),
+        'date_needed' => $validated['date_needed'] ?? $requestDate->toDateString(),
+        'status' => 'pending',
+        'submitted_at' => $requestDate,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('cash_advance_request_audits')->insert([
+        'cash_advance_request_id' => $requestId,
+        'action' => 'submitted',
+        'old_status' => null,
+        'new_status' => 'pending',
+        'remarks' => null,
+        'acted_by' => Auth::id(),
+        'meta' => json_encode([
+            'requested_amount' => (float) $validated['requested_amount'],
+            'purpose' => trim($validated['purpose']),
+        ]),
+        'acted_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return response()->json([
+        'message' => 'Cash advance request submitted successfully.',
+        'id' => $requestId,
+    ]);
+})->middleware('auth')->name('cash-advance.requests.store');
+
+Route::get('/cash-advance/requests/my', function () {
+    if ($redirect = redirect_if_role_not_allowed([2])) {
+        return $redirect;
+    }
+
+    $requests = DB::table('cash_advance_requests')
+        ->leftJoin('users as reviewers', 'cash_advance_requests.reviewed_by', '=', 'reviewers.id')
+        ->select(
+            'cash_advance_requests.id',
+            'cash_advance_requests.reference_no',
+            'cash_advance_requests.requested_amount',
+            'cash_advance_requests.approved_amount',
+            'cash_advance_requests.purpose',
+            'cash_advance_requests.request_date',
+            'cash_advance_requests.date_needed',
+            'cash_advance_requests.status',
+            'cash_advance_requests.accounting_remarks',
+            'cash_advance_requests.submitted_at',
+            'cash_advance_requests.reviewed_at',
+            'cash_advance_requests.released_at',
+            'reviewers.name as reviewer_name'
+        )
+        ->where('cash_advance_requests.requester_id', Auth::id())
+        ->orderByDesc(DB::raw('COALESCE(cash_advance_requests.submitted_at, cash_advance_requests.created_at)'))
+        ->get();
+
+    return response()->json(['requests' => $requests]);
+})->middleware('auth')->name('cash-advance.requests.my');
+
+Route::patch('/accounting/cash-advance/requests/{requestId}/decision', function (Request $request, $requestId) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'decision' => 'required|in:approved,rejected',
+        'accounting_remarks' => 'nullable|string|max:2000',
+        'approved_amount' => 'nullable|numeric|min:0.01',
+    ]);
+
+    $cashAdvanceRequest = DB::table('cash_advance_requests')
+        ->where('id', (int) $requestId)
+        ->first();
+
+    abort_if(!$cashAdvanceRequest, 404);
+
+    $oldStatus = (string) $cashAdvanceRequest->status;
+    $newStatus = $validated['decision'];
+    $approvedAmount = $newStatus === 'approved'
+        ? (float) ($validated['approved_amount'] ?? $cashAdvanceRequest->approved_amount ?? $cashAdvanceRequest->requested_amount)
+        : null;
+
+    DB::table('cash_advance_requests')
+        ->where('id', (int) $requestId)
+        ->update([
+            'status' => $newStatus,
+            'approved_amount' => $approvedAmount,
+            'accounting_remarks' => $validated['accounting_remarks'] ?? null,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+            'released_at' => $newStatus === 'approved' ? now() : null,
+            'updated_at' => now(),
+        ]);
+
+    DB::table('cash_advance_request_audits')->insert([
+        'cash_advance_request_id' => (int) $requestId,
+        'action' => $newStatus === 'approved' ? 'approved_and_released' : 'rejected',
+        'old_status' => $oldStatus,
+        'new_status' => $newStatus,
+        'remarks' => $validated['accounting_remarks'] ?? null,
+        'acted_by' => Auth::id(),
+        'meta' => json_encode([
+            'approved_amount' => $approvedAmount,
+        ]),
+        'acted_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return response()->json([
+        'message' => $newStatus === 'approved'
+            ? 'Request approved and released successfully.'
+            : 'Request rejected successfully.',
+    ]);
+})->middleware('auth')->name('accounting.cash-advance.requests.decision');
+
+Route::post('/accounting/cash-advance/requests/send', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'requester_id' => 'required|exists:users,id',
+        'amount' => 'required|numeric|min:0.01',
+        'purpose' => 'required|string|max:2000',
+        'release_date' => 'nullable|date',
+    ]);
+
+    $requester = DB::table('users')
+        ->where('id', (int) $validated['requester_id'])
+        ->where('role_id', 2)
+        ->first();
+
+    abort_if(!$requester, 422, 'Selected employee is invalid.');
+
+    $releaseDate = !empty($validated['release_date'])
+        ? \Carbon\Carbon::parse($validated['release_date'])
+        : now();
+    $referenceNo = 'CA-' . $releaseDate->format('Ymd') . '-' . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
+
+    $requestId = DB::table('cash_advance_requests')->insertGetId([
+        'reference_no' => $referenceNo,
+        'requester_id' => (int) $validated['requester_id'],
+        'requested_amount' => $validated['amount'],
+        'approved_amount' => $validated['amount'],
+        'purpose' => trim($validated['purpose']),
+        'request_date' => $releaseDate->toDateString(),
+        'date_needed' => $releaseDate->toDateString(),
+        'status' => 'approved',
+        'accounting_remarks' => 'Directly sent by accounting.',
+        'reviewed_by' => Auth::id(),
+        'submitted_at' => $releaseDate,
+        'reviewed_at' => now(),
+        'released_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('cash_advance_request_audits')->insert([
+        'cash_advance_request_id' => $requestId,
+        'action' => 'sent_directly',
+        'old_status' => null,
+        'new_status' => 'approved',
+        'remarks' => 'Direct send by accounting',
+        'acted_by' => Auth::id(),
+        'meta' => json_encode([
+            'requested_amount' => (float) $validated['amount'],
+            'approved_amount' => (float) $validated['amount'],
+            'purpose' => trim($validated['purpose']),
+        ]),
+        'acted_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return response()->json([
+        'message' => 'Cash advance has been sent and recorded successfully.',
+        'id' => $requestId,
+    ]);
+})->middleware('auth')->name('accounting.cash-advance.requests.send');
+
 Route::get('/admin/pricelist', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     $projects = DB::table('projects')
         ->select('id', 'project_name')
         ->orderBy('project_name')
@@ -204,6 +637,10 @@ Route::get('/admin/pricelist', function (Request $request) {
 })->middleware('auth')->name('admin.pricelist');
 
 Route::post('/admin/items/upload-image', function () {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     request()->validate([
         'item_id' => 'required|integer|exists:items,id',
         'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp,heic,heif|max:10240', // Max 10MB
@@ -254,16 +691,28 @@ Route::post('/admin/items/upload-image', function () {
 })->middleware('auth');
 
 Route::get('/admin/purchase', function () {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     return view('admin.purchase');
 })->middleware('auth')->name('admin.purchase');
 
 Route::get('/admin/additem', function () {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     $projects = DB::table('projects')->orderBy('project_name')->get();
     $categories = DB::table('categories')->orderBy('category_name')->get();
     return view('admin.additem', compact('projects', 'categories'));
 })->middleware('auth')->name('admin.additem');
 
 Route::post('/admin/additem', function () {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     // Validate based on whether user is creating a new category or selecting existing
     if (request('category_id') === 'add_new') {
         request()->validate([
@@ -379,12 +828,153 @@ Route::post('/admin/additem', function () {
 })->middleware('auth')->name('admin.additem.store');
 
 Route::get('/admin/priceanalysis', function () {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
     return view('admin.priceanalysis');
 })->middleware('auth')->name('admin.priceanalysis');
 
 Route::get('/admin/liquidation', function () {
-    return view('admin.liquidation');
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $user = Auth::user();
+    $cutoffPeriod = now()->format('F Y');
+
+    $liquidation = DB::table('liquidations')
+        ->where('user_id', $user->id)
+        ->where('cutoff_period', $cutoffPeriod)
+        ->first();
+
+    if (!$liquidation) {
+        $liquidationId = DB::table('liquidations')->insertGetId([
+            'user_id' => $user->id,
+            'cutoff_period' => $cutoffPeriod,
+            'amount' => 0,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
+    }
+
+    $particulars = \Illuminate\Support\Facades\DB::table('particulars')
+        ->orderBy('particulars_category')
+        ->pluck('particulars_category', 'id');
+
+    $liquidationExpenses = DB::table('liquidation_expenses')
+        ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->where('liquidation_expenses.liquidation_id', $liquidation->id)
+        ->select(
+            'liquidation_expenses.id',
+            'liquidation_expenses.expense_date',
+            'liquidation_expenses.particular_id',
+            'particulars.particulars_category as category_name',
+            'liquidation_expenses.transaction_details',
+            'liquidation_expenses.description',
+            'liquidation_expenses.amount'
+        )
+        ->orderBy('liquidation_expenses.expense_date')
+        ->get();
+
+    return view('admin.liquidation', compact('particulars', 'liquidationExpenses'));
 })->middleware('auth')->name('admin.liquidation');
+
+Route::post('/admin/liquidation/expenses', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'expense_date' => 'required|date',
+        'particular_id' => 'required|exists:particulars,id',
+        'transaction_details' => 'required|string|max:255',
+        'description' => 'nullable|string|max:1000',
+        'amount' => 'required|numeric|min:0.01',
+    ]);
+
+    $user = Auth::user();
+    $cutoffPeriod = now()->format('F Y');
+
+    $liquidation = DB::table('liquidations')
+        ->where('user_id', $user->id)
+        ->where('cutoff_period', $cutoffPeriod)
+        ->first();
+
+    if (!$liquidation) {
+        $liquidationId = DB::table('liquidations')->insertGetId([
+            'user_id' => $user->id,
+            'cutoff_period' => $cutoffPeriod,
+            'amount' => 0,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
+    }
+
+    $expenseId = DB::table('liquidation_expenses')->insertGetId([
+        'liquidation_id' => $liquidation->id,
+        'expense_date' => $validated['expense_date'],
+        'particular_id' => $validated['particular_id'],
+        'transaction_details' => $validated['transaction_details'],
+        'description' => $validated['description'] ?? null,
+        'amount' => $validated['amount'],
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $expense = DB::table('liquidation_expenses')
+        ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->where('liquidation_expenses.id', $expenseId)
+        ->select(
+            'liquidation_expenses.id',
+            'liquidation_expenses.expense_date',
+            'liquidation_expenses.amount',
+            'liquidation_expenses.transaction_details',
+            'liquidation_expenses.description',
+            'particulars.particulars_category as category_name'
+        )
+        ->first();
+
+    return response()->json([
+        'message' => 'Expense saved successfully.',
+        'expense' => $expense,
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.store');
+
+Route::delete('/admin/liquidation/expenses/{expenseId}', function ($expenseId) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $user = Auth::user();
+
+    $expense = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->where('liquidation_expenses.id', $expenseId)
+        ->where('liquidations.user_id', $user->id)
+        ->select('liquidation_expenses.id')
+        ->first();
+
+    if (! $expense) {
+        return response()->json([
+            'message' => 'Expense not found or access denied.',
+        ], 404);
+    }
+
+    DB::table('liquidation_expenses')
+        ->where('id', $expenseId)
+        ->delete();
+
+    return response()->json([
+        'message' => 'Expense deleted successfully.',
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.destroy');
 
 
 /*
