@@ -22,6 +22,8 @@ class CashAdvanceRequest extends Model
         'status',
         'accounting_remarks',
         'reviewed_by',
+        'approved_by_name',
+        'sent_by_name',
         'submitted_at',
         'reviewed_at',
         'released_at',

@@ -118,6 +118,11 @@
             <span class="text-sm font-semibold text-gray-500">Live status from accounting review</span>
         </div>
 
+        <div id="cashAdvanceNotifications" class="space-y-3 mb-6"></div>
+        <p id="cashAdvanceNotificationsEmpty" class="hidden text-sm text-gray-500 mb-6">
+            No released cash advance notifications yet.
+        </p>
+
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead>
@@ -126,6 +131,7 @@
                         <th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Date Approved</th>
                         <th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Purpose</th>
                         <th class="text-right py-3 px-3 text-sm font-semibold text-gray-600">Amount</th>
+                        <th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Approved/Sent By</th>
                         <th class="text-center py-3 px-3 text-sm font-semibold text-gray-600">Status</th>
                         <th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Accounting Remarks</th>
                     </tr>
@@ -570,6 +576,48 @@
         return myCashAdvanceRequestsCache;
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderCashAdvanceNotifications(myRequests) {
+        const notifications = document.getElementById('cashAdvanceNotifications');
+        const empty = document.getElementById('cashAdvanceNotificationsEmpty');
+        if (!notifications || !empty) return;
+
+        const releasedRequests = [...myRequests]
+            .filter(request => (request.status || '').toLowerCase() === 'approved')
+            .sort((a, b) => new Date(b.reviewed_at || b.released_at || 0) - new Date(a.reviewed_at || a.released_at || 0));
+
+        if (releasedRequests.length === 0) {
+            notifications.innerHTML = '';
+            empty.classList.remove('hidden');
+            return;
+        }
+
+        empty.classList.add('hidden');
+        notifications.innerHTML = releasedRequests.slice(0, 4).map(request => {
+            const actedBy = request.reviewer_name ? escapeHtml(request.reviewer_name) : 'Accounting Staff';
+            const purpose = request.purpose ? escapeHtml(request.purpose) : '-';
+            const remarks = request.accounting_remarks ? escapeHtml(request.accounting_remarks) : 'No notes provided';
+
+            return `
+                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p class="text-sm font-semibold text-emerald-900">
+                        ${formatCurrency(request.approved_amount || request.requested_amount || 0)} was approved/sent by ${actedBy}
+                    </p>
+                    <p class="text-sm text-emerald-800 mt-1">Purpose: ${purpose}</p>
+                    <p class="text-sm text-emerald-700 mt-1">Notes: ${remarks}</p>
+                </div>
+            `;
+        }).join('');
+    }
+
     function renderEmployeeRequests() {
         const myRequests = getMyRequests();
         const tbody = document.getElementById('employeeRequestsTableBody');
@@ -580,19 +628,22 @@
         if (myRequests.length === 0) {
             tbody.innerHTML = '';
             emptyState.classList.remove('hidden');
+            renderCashAdvanceNotifications([]);
             renderApprovedSummary([]);
             return;
         }
 
         emptyState.classList.add('hidden');
+        renderCashAdvanceNotifications(myRequests);
         tbody.innerHTML = myRequests.map(request => `
             <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
                 <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.request_date)}</td>
                 <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.reviewed_at)}</td>
-                <td class="py-3 px-3 text-sm text-gray-700">${request.purpose || '-'}</td>
+                <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.purpose || '-')}</td>
                 <td class="py-3 px-3 text-sm text-right font-semibold text-gray-900">${formatCurrency(request.approved_amount || request.requested_amount || 0)}</td>
+                <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.reviewer_name || '-')}</td>
                 <td class="py-3 px-3 text-sm text-center">${getStatusBadge(request.status)}</td>
-                <td class="py-3 px-3 text-sm text-gray-600">${request.accounting_remarks || '-'}</td>
+                <td class="py-3 px-3 text-sm text-gray-600">${escapeHtml(request.accounting_remarks || '-')}</td>
             </tr>
         `).join('');
 

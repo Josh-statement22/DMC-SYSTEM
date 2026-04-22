@@ -67,7 +67,7 @@
 
 				<div>
 					<label class="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
-					<textarea rows="2" placeholder="Optional internal note" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 resize-none"></textarea>
+					<textarea id="sendNotes" rows="2" placeholder="Optional internal note" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 resize-none"></textarea>
 				</div>
 
 				<div class="pt-2 flex items-center justify-end gap-3">
@@ -129,6 +129,7 @@
 						<th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Date</th>
 						<th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Employee</th>
 						<th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Purpose</th>
+						<th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Processed By</th>
 						<th class="text-right py-3 px-3 text-sm font-semibold text-gray-600">Amount</th>
 						<th class="text-center py-3 px-3 text-sm font-semibold text-gray-600">Status</th>
 					</tr>
@@ -556,7 +557,7 @@
 				<div class="rounded-xl border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
 					<div>
 						<p class="text-sm font-semibold text-gray-800">${request.employee_name || 'Unknown Employee'} • ${formatCurrency(request.approved_amount || request.requested_amount || 0)}</p>
-						<p class="text-xs text-gray-500 mt-1">${formatDate(request.reviewed_at)} • ${request.accounting_remarks || 'No remarks'}</p>
+						<p class="text-xs text-gray-500 mt-1">${formatDate(request.reviewed_at)} • Reviewed by ${request.reviewer_name || 'Accounting Staff'} • ${request.accounting_remarks || 'No remarks'}</p>
 					</div>
 					<div>${getStatusPill(request.status)}</div>
 				</div>
@@ -586,12 +587,14 @@
 			const status = (request.status || 'pending').toLowerCase();
 			const statusPill = getStatusPill(status);
 			const dateLabel = status === 'approved' ? (request.reviewed_at || request.request_date) : request.request_date;
+			const processedBy = request.reviewer_name || '-';
 
 			return `
 				<tr class="border-b border-gray-100">
 					<td class="py-3 px-3 text-sm text-gray-700">${formatDate(dateLabel)}</td>
 					<td class="py-3 px-3 text-sm text-gray-800 font-medium">${request.employee_name || 'Unknown Employee'}</td>
 					<td class="py-3 px-3 text-sm text-gray-700">${request.purpose || '-'}</td>
+					<td class="py-3 px-3 text-sm text-gray-700">${processedBy}</td>
 					<td class="py-3 px-3 text-sm text-right font-semibold text-gray-900">${formatCurrency(request.approved_amount || request.requested_amount || 0)}</td>
 					<td class="py-3 px-3 text-center">${statusPill}</td>
 				</tr>
@@ -646,6 +649,7 @@
 			const requesterId = document.getElementById('sendEmployeeId')?.value;
 			const amount = Number(document.getElementById('sendAmount')?.value || 0);
 			const purpose = (document.getElementById('sendPurpose')?.value || '').trim();
+				const accountingRemarks = (document.getElementById('sendNotes')?.value || '').trim();
 			const releaseDate = document.getElementById('sendReleaseDate')?.value;
 
 			if (!requesterId || !purpose || amount <= 0 || !releaseDate) {
@@ -666,6 +670,7 @@
 						requester_id: requesterId,
 						amount,
 						purpose,
+						accounting_remarks: accountingRemarks,
 						release_date: releaseDate,
 					})
 				});

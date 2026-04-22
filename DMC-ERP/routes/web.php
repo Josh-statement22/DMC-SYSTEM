@@ -385,7 +385,9 @@ Route::get('/accounting/cash-advance/requests', function () {
             'cash_advance_requests.submitted_at',
             'cash_advance_requests.reviewed_at',
             'cash_advance_requests.released_at',
-            'reviewers.name as reviewer_name'
+            DB::raw('COALESCE(cash_advance_requests.sent_by_name, cash_advance_requests.approved_by_name, reviewers.name) as reviewer_name'),
+            DB::raw('COALESCE(cash_advance_requests.approved_by_name, reviewers.name) as approved_by_name'),
+            DB::raw('COALESCE(cash_advance_requests.sent_by_name, reviewers.name) as sent_by_name')
         )
         ->orderByDesc(DB::raw('COALESCE(cash_advance_requests.submitted_at, cash_advance_requests.created_at)'))
         ->get();
@@ -462,7 +464,9 @@ Route::get('/cash-advance/requests/my', function () {
             'cash_advance_requests.submitted_at',
             'cash_advance_requests.reviewed_at',
             'cash_advance_requests.released_at',
-            'reviewers.name as reviewer_name'
+            DB::raw('COALESCE(cash_advance_requests.sent_by_name, cash_advance_requests.approved_by_name, reviewers.name) as reviewer_name'),
+            DB::raw('COALESCE(cash_advance_requests.approved_by_name, reviewers.name) as approved_by_name'),
+            DB::raw('COALESCE(cash_advance_requests.sent_by_name, reviewers.name) as sent_by_name')
         )
         ->where('cash_advance_requests.requester_id', Auth::id())
         ->orderByDesc(DB::raw('COALESCE(cash_advance_requests.submitted_at, cash_advance_requests.created_at)'))
@@ -490,6 +494,7 @@ Route::patch('/accounting/cash-advance/requests/{requestId}/decision', function 
 
     $oldStatus = (string) $cashAdvanceRequest->status;
     $newStatus = $validated['decision'];
+    $actorName = (string) (Auth::user()->name ?? 'Accounting Staff');
     $approvedAmount = $newStatus === 'approved'
         ? (float) ($validated['approved_amount'] ?? $cashAdvanceRequest->approved_amount ?? $cashAdvanceRequest->requested_amount)
         : null;
@@ -501,6 +506,8 @@ Route::patch('/accounting/cash-advance/requests/{requestId}/decision', function 
             'approved_amount' => $approvedAmount,
             'accounting_remarks' => $validated['accounting_remarks'] ?? null,
             'reviewed_by' => Auth::id(),
+            'approved_by_name' => $newStatus === 'approved' ? $actorName : null,
+            'sent_by_name' => $newStatus === 'approved' ? $actorName : null,
             'reviewed_at' => now(),
             'released_at' => $newStatus === 'approved' ? now() : null,
             'updated_at' => now(),
@@ -515,6 +522,8 @@ Route::patch('/accounting/cash-advance/requests/{requestId}/decision', function 
         'acted_by' => Auth::id(),
         'meta' => json_encode([
             'approved_amount' => $approvedAmount,
+            'approved_by_name' => $newStatus === 'approved' ? $actorName : null,
+            'sent_by_name' => $newStatus === 'approved' ? $actorName : null,
         ]),
         'acted_at' => now(),
         'created_at' => now(),
@@ -537,6 +546,7 @@ Route::post('/accounting/cash-advance/requests/send', function (Request $request
         'requester_id' => 'required|exists:users,id',
         'amount' => 'required|numeric|min:0.01',
         'purpose' => 'required|string|max:2000',
+        'accounting_remarks' => 'nullable|string|max:2000',
         'release_date' => 'nullable|date',
     ]);
 
@@ -550,6 +560,7 @@ Route::post('/accounting/cash-advance/requests/send', function (Request $request
     $releaseDate = !empty($validated['release_date'])
         ? \Carbon\Carbon::parse($validated['release_date'])
         : now();
+    $actorName = (string) (Auth::user()->name ?? 'Accounting Staff');
     $referenceNo = 'CA-' . $releaseDate->format('Ymd') . '-' . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
 
     $requestId = DB::table('cash_advance_requests')->insertGetId([
@@ -561,8 +572,12 @@ Route::post('/accounting/cash-advance/requests/send', function (Request $request
         'request_date' => $releaseDate->toDateString(),
         'date_needed' => $releaseDate->toDateString(),
         'status' => 'approved',
-        'accounting_remarks' => 'Directly sent by accounting.',
+        'accounting_remarks' => !empty($validated['accounting_remarks'])
+            ? trim($validated['accounting_remarks'])
+            : 'Directly sent by accounting.',
         'reviewed_by' => Auth::id(),
+        'approved_by_name' => $actorName,
+        'sent_by_name' => $actorName,
         'submitted_at' => $releaseDate,
         'reviewed_at' => now(),
         'released_at' => now(),
@@ -575,12 +590,19 @@ Route::post('/accounting/cash-advance/requests/send', function (Request $request
         'action' => 'sent_directly',
         'old_status' => null,
         'new_status' => 'approved',
-        'remarks' => 'Direct send by accounting',
+        'remarks' => !empty($validated['accounting_remarks'])
+            ? trim($validated['accounting_remarks'])
+            : 'Direct send by accounting',
         'acted_by' => Auth::id(),
         'meta' => json_encode([
             'requested_amount' => (float) $validated['amount'],
             'approved_amount' => (float) $validated['amount'],
             'purpose' => trim($validated['purpose']),
+            'approved_by_name' => $actorName,
+            'sent_by_name' => $actorName,
+            'accounting_remarks' => !empty($validated['accounting_remarks'])
+                ? trim($validated['accounting_remarks'])
+                : null,
         ]),
         'acted_at' => now(),
         'created_at' => now(),
