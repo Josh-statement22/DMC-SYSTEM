@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Models\CashAdvanceMonthlyBalance;
 
 if (!function_exists('redirect_if_role_not_allowed')) {
     function redirect_if_role_not_allowed(array $allowedRoleIds)
@@ -318,14 +319,137 @@ Route::get('/accounting/dashboard', function () {
         return $redirect;
     }
 
+    $currentMonth = now();
+
     $employees = DB::table('users')
         ->select('id', 'name', 'employee_id')
         ->where('role_id', 2)
         ->orderBy('name')
         ->get();
 
-    return view('accounting.dashboard', compact('employees'));
+    $currentMonthlyBalance = CashAdvanceMonthlyBalance::query()
+        ->where('year', $currentMonth->year)
+        ->where('month', $currentMonth->month)
+        ->first();
+
+    return view('accounting.dashboard', compact('employees', 'currentMonthlyBalance'));
 })->middleware('auth')->name('accounting.dashboard');
+
+Route::get('/accounting/cash-advance/monthly-balance', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $monthKey = (string) $request->query('month_key', now()->format('Y-m'));
+    $monthDate = \Carbon\Carbon::createFromFormat('Y-m', $monthKey)->startOfMonth();
+
+    $monthlyBalance = CashAdvanceMonthlyBalance::query()
+        ->where('year', $monthDate->year)
+        ->where('month', $monthDate->month)
+        ->first();
+
+    $previousMonthDate = (clone $monthDate)->subMonth();
+    $previousMonthlyBalance = CashAdvanceMonthlyBalance::query()
+        ->where('year', $previousMonthDate->year)
+        ->where('month', $previousMonthDate->month)
+        ->first();
+
+    $carryoverBalance = $monthlyBalance ? (float) $monthlyBalance->carryover_balance : (float) ($previousMonthlyBalance->remaining_balance ?? 0);
+    $openingBalance = $monthlyBalance ? (float) $monthlyBalance->opening_balance : 0.0;
+
+    return response()->json([
+        'balance' => [
+            'id' => $monthlyBalance?->id,
+            'exists' => (bool) $monthlyBalance,
+            'year' => (int) $monthDate->year,
+            'month' => (int) $monthDate->month,
+            'month_key' => $monthDate->format('Y-m'),
+            'month_label' => $monthDate->format('F Y'),
+            'carryover_balance' => $carryoverBalance,
+            'added_budget' => (float) ($monthlyBalance?->added_budget ?? 0),
+            'opening_balance' => $openingBalance,
+            'released_total' => (float) ($monthlyBalance?->released_total ?? 0),
+            'expense_total' => (float) ($monthlyBalance?->expense_total ?? 0),
+            'remaining_balance' => (float) ($monthlyBalance?->remaining_balance ?? 0),
+            'remarks' => $monthlyBalance?->remarks,
+            'prepared_by' => $monthlyBalance?->prepared_by,
+            'finalized_at' => optional($monthlyBalance?->finalized_at)?->toIso8601String(),
+        ],
+    ]);
+})->middleware('auth')->name('accounting.cash-advance.monthly-balance.show');
+
+Route::post('/accounting/cash-advance/monthly-balance', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'month_key' => 'nullable|date_format:Y-m',
+        'carryover_balance' => 'nullable|numeric|min:0',
+        'added_budget' => 'nullable|numeric|min:0',
+        'opening_balance' => 'required|numeric|min:0',
+    ]);
+
+    $monthDate = isset($validated['month_key'])
+        ? \Carbon\Carbon::createFromFormat('Y-m', $validated['month_key'])->startOfMonth()
+        : now()->startOfMonth();
+
+    $openingBalance = round((float) $validated['opening_balance'], 2);
+    $carryoverBalance = array_key_exists('carryover_balance', $validated)
+        ? round((float) $validated['carryover_balance'], 2)
+        : 0.0;
+    $addedBudget = array_key_exists('added_budget', $validated)
+        ? round((float) $validated['added_budget'], 2)
+        : 0.0;
+
+    if (!array_key_exists('carryover_balance', $validated) || $carryoverBalance === 0.0) {
+        $previousMonthDate = (clone $monthDate)->subMonth();
+        $previousMonthlyBalance = CashAdvanceMonthlyBalance::query()
+            ->where('year', $previousMonthDate->year)
+            ->where('month', $previousMonthDate->month)
+            ->first();
+
+        $carryoverBalance = (float) ($previousMonthlyBalance->remaining_balance ?? 0);
+    }
+
+    $monthlyBalance = CashAdvanceMonthlyBalance::firstOrNew([
+        'year' => $monthDate->year,
+        'month' => $monthDate->month,
+    ]);
+
+    $releasedTotal = (float) $monthlyBalance->released_total;
+    $expenseTotal = (float) $monthlyBalance->expense_total;
+
+    $monthlyBalance->fill([
+        'carryover_balance' => $carryoverBalance,
+        'added_budget' => $addedBudget,
+        'opening_balance' => $openingBalance,
+        'remaining_balance' => round($openingBalance - $releasedTotal - $expenseTotal, 2),
+        'prepared_by' => Auth::id(),
+    ]);
+    $monthlyBalance->save();
+
+    return response()->json([
+        'message' => 'Monthly opening balance saved successfully.',
+        'balance' => [
+            'id' => $monthlyBalance->id,
+            'exists' => true,
+            'year' => (int) $monthlyBalance->year,
+            'month' => (int) $monthlyBalance->month,
+            'month_key' => sprintf('%04d-%02d', $monthlyBalance->year, $monthlyBalance->month),
+            'month_label' => $monthDate->format('F Y'),
+            'carryover_balance' => (float) $monthlyBalance->carryover_balance,
+            'added_budget' => (float) $monthlyBalance->added_budget,
+            'opening_balance' => (float) $monthlyBalance->opening_balance,
+            'released_total' => (float) $monthlyBalance->released_total,
+            'expense_total' => (float) $monthlyBalance->expense_total,
+            'remaining_balance' => (float) $monthlyBalance->remaining_balance,
+            'remarks' => $monthlyBalance->remarks,
+            'prepared_by' => $monthlyBalance->prepared_by,
+            'finalized_at' => optional($monthlyBalance->finalized_at)?->toIso8601String(),
+        ],
+    ]);
+})->middleware('auth')->name('accounting.cash-advance.monthly-balance.store');
 
 Route::get('/accounting/liquidation', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {

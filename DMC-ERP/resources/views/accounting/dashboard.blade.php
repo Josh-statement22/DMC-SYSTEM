@@ -31,7 +31,7 @@
 		<div class="xl:col-span-2 rounded-3xl bg-white p-8 shadow-2xl border border-gray-100">
 			<div class="mb-6">
 				<h3 class="text-2xl font-bold text-gray-800">Send New Cash Advance</h3>
-				<p class="text-gray-500 mt-1">UI preview only. Submission logic will be connected next.</p>
+				<p class="text-gray-500 mt-1">Submission now saves the monthly balance to the database.</p>
 			</div>
 
 			<form id="sendCashAdvanceForm" class="space-y-6">
@@ -230,11 +230,30 @@
 
 @push('scripts')
 <script>
-	const MONTHLY_BUDGET_STORAGE_KEY = 'cashAdvanceMonthlyBudget';
+	@php
+		$initialMonthlyBalance = null;
+		if ($currentMonthlyBalance) {
+			$initialMonthlyBalance = [
+				'id' => $currentMonthlyBalance->id,
+				'year' => (int) $currentMonthlyBalance->year,
+				'month' => (int) $currentMonthlyBalance->month,
+				'month_key' => sprintf('%04d-%02d', $currentMonthlyBalance->year, $currentMonthlyBalance->month),
+				'carryover_balance' => (float) $currentMonthlyBalance->carryover_balance,
+				'added_budget' => (float) $currentMonthlyBalance->added_budget,
+				'opening_balance' => (float) $currentMonthlyBalance->opening_balance,
+				'released_total' => (float) $currentMonthlyBalance->released_total,
+				'expense_total' => (float) $currentMonthlyBalance->expense_total,
+				'remaining_balance' => (float) $currentMonthlyBalance->remaining_balance,
+			];
+		}
+	@endphp
 	const CASH_ADVANCE_INDEX_ROUTE = @json(route('accounting.cash-advance.requests.index'));
 	const CASH_ADVANCE_DECISION_BASE_URL = @json(url('/accounting/cash-advance/requests'));
 	const CASH_ADVANCE_DIRECT_SEND_ROUTE = @json(route('accounting.cash-advance.requests.send'));
+	const CASH_ADVANCE_MONTHLY_BALANCE_ROUTE = @json(route('accounting.cash-advance.monthly-balance.store'));
 	const CASH_ADVANCE_CSRF = @json(csrf_token());
+	const INITIAL_MONTHLY_BALANCE = @json($initialMonthlyBalance);
+	let currentMonthlyBalance = INITIAL_MONTHLY_BALANCE;
 	let cashAdvanceRequestsCache = [];
 	let accountingToastTimeout;
 
@@ -276,19 +295,6 @@
 		return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 	}
 
-	function getMonthlyBudgetStore() {
-		try {
-			const raw = localStorage.getItem(MONTHLY_BUDGET_STORAGE_KEY);
-			return raw ? JSON.parse(raw) : {};
-		} catch (error) {
-			return {};
-		}
-	}
-
-	function saveMonthlyBudgetStore(store) {
-		localStorage.setItem(MONTHLY_BUDGET_STORAGE_KEY, JSON.stringify(store));
-	}
-
 	function getApprovedTotalForMonth(monthKey) {
 		const approvedRequests = cashAdvanceRequestsCache.filter(request => (request.status || '').toLowerCase() === 'approved');
 		return approvedRequests.reduce((sum, request) => {
@@ -304,16 +310,13 @@
 	function getCurrentMonthBudget() {
 		const today = new Date();
 		const currentMonthKey = getMonthKey(today);
-		const store = getMonthlyBudgetStore();
-		const existing = store[currentMonthKey];
-
-		if (existing) {
+		if (currentMonthlyBalance && currentMonthlyBalance.month_key === currentMonthKey) {
 			return {
 				monthKey: currentMonthKey,
 				monthLabel: getMonthLabel(today),
-				carryover: Number(existing.carryover || 0),
-				added: Number(existing.added || 0),
-				opening: Number(existing.opening || 0),
+				carryover: Number(currentMonthlyBalance.carryover_balance || 0),
+				added: Number(currentMonthlyBalance.added_budget || 0),
+				opening: Number(currentMonthlyBalance.opening_balance || 0),
 			};
 		}
 
@@ -635,12 +638,6 @@
 		}
 	});
 
-	window.addEventListener('storage', function(event) {
-		if (event.key === MONTHLY_BUDGET_STORAGE_KEY) {
-			renderBudgetWindowAmounts();
-		}
-	});
-
 	const sendCashAdvanceForm = document.getElementById('sendCashAdvanceForm');
 	if (sendCashAdvanceForm) {
 		sendCashAdvanceForm.addEventListener('submit', async function(event) {
@@ -718,19 +715,31 @@
 			return;
 		}
 
-		const today = new Date();
-		const currentMonthKey = getMonthKey(today);
-		const store = getMonthlyBudgetStore();
-		store[currentMonthKey] = {
-			carryover: carryover,
-			added: added,
-			opening: carryover + added,
-		};
-		saveMonthlyBudgetStore(store);
+		fetch(CASH_ADVANCE_MONTHLY_BALANCE_ROUTE, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Accept': 'application/json',
+				'X-CSRF-TOKEN': CASH_ADVANCE_CSRF,
+				'X-Requested-With': 'XMLHttpRequest'
+			},
+			body: JSON.stringify({
+				carryover_balance: carryover,
+				added_budget: added,
+			})
+		}).then(async response => {
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				throw new Error(payload?.message || 'Failed to save monthly opening balance.');
+			}
 
-		renderBudgetWindowAmounts();
-		closeMonthlyBudgetModal();
-		showAccountingToast('Monthly opening balance updated successfully.', 'success');
+			currentMonthlyBalance = payload?.balance || currentMonthlyBalance;
+			renderBudgetWindowAmounts();
+			closeMonthlyBudgetModal();
+			showAccountingToast(payload?.message || 'Monthly opening balance updated successfully.', 'success');
+		}).catch(() => {
+			showAccountingToast('Failed to save monthly opening balance. Please try again.', 'error');
+		});
 	});
 
 	document.getElementById('monthlyBudgetModal').addEventListener('click', function(event) {
