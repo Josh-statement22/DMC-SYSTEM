@@ -516,11 +516,12 @@
                 <label class="block text-sm font-medium mb-1">
                     Employee ID
                 </label>
-                <input type="text" 
+                <input type="hidden" 
                        name="employee_id" 
-                       value="{{ old('employee_id') }}"
-                       required
-                       class="w-full border rounded-lg px-4 py-2 @error('employee_id') border-red-500 @enderror">
+                       id="employee_id_field">
+                <div class="w-full border rounded-lg px-4 py-2 bg-gray-50 text-gray-700 font-semibold">
+                    <span id="employee_id_display">-</span>
+                </div>
                 @error('employee_id')
                     <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                 @enderror
@@ -531,6 +532,7 @@
                     Name
                 </label>
                 <input type="text" 
+                       id="add_name"
                        name="name" 
                        value="{{ old('name') }}"
                        required
@@ -544,10 +546,13 @@
                 <label class="block text-sm font-medium mb-1">
                     Email (Optional)
                 </label>
-                <input type="email" 
+                <input type="hidden" 
+                       id="add_email"
                        name="email" 
-                       value="{{ old('email') }}"
-                       class="w-full border rounded-lg px-4 py-2 @error('email') border-red-500 @enderror">
+                       value="{{ old('email') }}">
+                <div class="w-full border rounded-lg px-4 py-2 bg-gray-50 text-gray-700 font-semibold">
+                    <span id="add_email_display">-</span>
+                </div>
                 @error('email')
                     <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                 @enderror
@@ -838,14 +843,79 @@
 
     function openModal() {
         const modal = document.getElementById('addUserModal');
+        
+        // Fetch the next employee ID
+        fetch('{{ route("superadmin.next.employee.id") }}')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('employee_id_field').value = data.employee_id;
+                document.getElementById('employee_id_display').textContent = data.employee_id;
+                // try to generate email if name already present
+                try { generateEmail(); } catch (e) { /* ignore */ }
+            })
+            .catch(error => console.error('Error fetching employee ID:', error));
+        
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
+    }
+
+    // Generate email from name initials + employee id
+    function generateEmail() {
+        const nameEl = document.getElementById('add_name');
+        const emailEl = document.getElementById('add_email');
+        const emailDisplayEl = document.getElementById('add_email_display');
+        const empEl = document.getElementById('employee_id_field');
+
+        if (!nameEl || !emailEl || !emailDisplayEl || !empEl) return;
+
+        const name = nameEl.value.trim();
+        const empId = empEl.value.trim();
+
+        if (!name || !empId) {
+            // do not overwrite if user manually provided an email when name is empty
+            if (!name) {
+                emailEl.value = '';
+                emailDisplayEl.textContent = '-';
+            }
+            return;
+        }
+
+        const parts = name.split(/\s+/).filter(Boolean);
+        let initials = '';
+
+        if (parts.length >= 2) {
+            initials = parts[0].charAt(0) + parts[parts.length - 1].charAt(0);
+        } else {
+            const p = parts[0] || '';
+            if (p.length >= 2) initials = p.substring(0,2);
+            else initials = (p.charAt(0) || '') + (p.charAt(0) || '');
+        }
+
+        initials = initials.toUpperCase();
+
+        const generatedEmail = `${initials}${empId}@dmc.com`;
+        emailEl.value = generatedEmail;
+        emailDisplayEl.textContent = generatedEmail;
+    }
+
+    // Attach listener to name input to update email in real time
+    const addNameEl = document.getElementById('add_name');
+    if (addNameEl) {
+        addNameEl.addEventListener('input', generateEmail);
     }
 
     function closeModal() {
         const modal = document.getElementById('addUserModal');
         modal.classList.add('hidden');
         modal.style.display = 'none';
+        // Clear the form fields
+        document.getElementById('employee_id_field').value = '';
+        document.getElementById('employee_id_display').textContent = '-';
+        document.getElementById('add_email').value = '';
+        document.getElementById('add_email_display').textContent = '-';
+        document.querySelector('input[name="name"]').value = '';
+        document.querySelector('input[name="password"]').value = '';
+        document.querySelector('select[name="role_id"]').value = '';
     }
 
     function openEditModal(button) {

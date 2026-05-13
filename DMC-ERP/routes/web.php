@@ -240,6 +240,32 @@ Route::get('/superadmin/dashboard', function (Request $request) {
     ]);
 })->middleware('auth')->name('superadmin.dashboard');
 
+Route::get('/superadmin/users/next-employee-id', function () {
+    $currentYear = date('Y');
+    $lastUser = \App\Models\User::orderByRaw("CAST(employee_id AS UNSIGNED) DESC")->first();
+    
+    if (!$lastUser) {
+        // If no users exist, start with first ID
+        $nextId = $currentYear . '00001';
+    } else {
+        $lastEmployeeId = $lastUser->employee_id;
+        $lastYear = substr($lastEmployeeId, 0, 4);
+        $lastSequence = (int) substr($lastEmployeeId, 4);
+        
+        if ($lastYear == $currentYear) {
+            // Same year, increment the sequence
+            $nextSequence = $lastSequence + 1;
+        } else {
+            // Different year, reset sequence to 1
+            $nextSequence = 1;
+        }
+        
+        $nextId = $currentYear . str_pad($nextSequence, 5, '0', STR_PAD_LEFT);
+    }
+    
+    return response()->json(['employee_id' => $nextId]);
+})->middleware('auth')->name('superadmin.next.employee.id');
+
 Route::post('/superadmin/users/store', function (Request $request) {
     $validated = $request->validate([
         'employee_id' => 'required|unique:users,employee_id',
