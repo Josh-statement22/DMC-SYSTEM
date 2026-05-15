@@ -87,7 +87,7 @@
                 <span class="menu-text">Dashboard</span>
             </a>
 
-            <a href="{{ route('admin.pricelist') }}"
+            <!-- <a href="{{ route('admin.pricelist') }}"
                class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium
                {{ request()->routeIs('admin.pricelist') ? $active : $normal }}">
 
@@ -117,7 +117,7 @@
 
                 <i data-feather="bar-chart-2"></i>
                 <span class="menu-text">Price Analysis</span>
-            </a>
+            </a> -->
 
             <a href="{{ route('admin.liquidation') }}"
                class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium

@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\CashAdvanceMonthlyBalance;
+use App\Models\CashAdvanceRequest;
 
 if (!function_exists('redirect_if_role_not_allowed')) {
     function redirect_if_role_not_allowed(array $allowedRoleIds)
@@ -117,6 +118,8 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 'status' => $row->status,
                 'remarks' => $row->remarks,
                 'document_path' => $row->document_path,
+                'submitted_at' => $row->submitted_at,
+                'approved_at' => $row->approved_at,
                 'record_date' => $recordDate->format('Y-m-d'),
                 'record_timestamp' => $recordDate->toIso8601String(),
                 'period_month_key' => $monthKey,
@@ -334,6 +337,75 @@ Route::get('/admin/dashboard', function () {
     return view('admin.dashboard');
 })->middleware('auth')->name('admin.dashboard');
 
+Route::get('/admin/dashboard/summary', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $viewMode = in_array($request->query('view_mode'), ['week', 'month']) ? $request->query('view_mode') : 'week';
+    $start = $request->query('start_date') ? \Carbon\Carbon::parse($request->query('start_date'))->startOfDay() : \Carbon\Carbon::now()->startOfWeek();
+    $end = $request->query('end_date') ? \Carbon\Carbon::parse($request->query('end_date'))->endOfDay() : \Carbon\Carbon::now()->endOfWeek();
+
+    $baseQuery = CashAdvanceRequest::query()
+        ->whereRaw("DATE(COALESCE(released_at, reviewed_at, request_date)) BETWEEN ? AND ?", [
+            $start->toDateString(),
+            $end->toDateString(),
+        ]);
+
+    $totalRequests = (clone $baseQuery)->count();
+    $approvedCount = (clone $baseQuery)->whereRaw('LOWER(status) = ?', ['approved'])->count();
+    $pendingCount = (clone $baseQuery)->whereRaw('LOWER(status) = ?', ['pending'])->count();
+    $rejectedCount = (clone $baseQuery)->whereRaw('LOWER(status) = ?', ['rejected'])->count();
+    $requestedAmount = (clone $baseQuery)->sum('requested_amount');
+    $approvedAmount = (clone $baseQuery)->whereRaw('LOWER(status) = ?', ['approved'])->sum('approved_amount');
+    $releasedAmount = (clone $baseQuery)->whereNotNull('released_at')->sum('approved_amount');
+
+    $recentRequests = (clone $baseQuery)
+        ->with('requester')
+        ->orderByDesc('submitted_at')
+        ->limit(5)
+        ->get([
+            'id',
+            'requester_id',
+            'requested_amount',
+            'approved_amount',
+            'purpose',
+            'status',
+            'request_date',
+            'date_needed',
+            'reviewed_at',
+            'released_at',
+        ])
+        ->map(function ($request) {
+            return [
+                'id' => $request->id,
+                'requester_name' => $request->requester?->name ?? 'Unknown',
+                'status' => $request->status,
+                'requested_amount' => $request->requested_amount,
+                'approved_amount' => $request->approved_amount,
+                'request_date' => optional($request->request_date)?->toDateString(),
+                'date_needed' => optional($request->date_needed)?->toDateString(),
+                'reviewed_at' => optional($request->reviewed_at)?->toDateTimeString(),
+                'released_at' => optional($request->released_at)?->toDateTimeString(),
+                'purpose' => $request->purpose,
+            ];
+        });
+
+    return response()->json([
+        'view_mode' => $viewMode,
+        'start_date' => $start->toDateString(),
+        'end_date' => $end->toDateString(),
+        'total_requests' => $totalRequests,
+        'approved_count' => $approvedCount,
+        'pending_count' => $pendingCount,
+        'rejected_count' => $rejectedCount,
+        'requested_amount' => $requestedAmount,
+        'approved_amount' => $approvedAmount,
+        'released_amount' => $releasedAmount,
+        'recent_requests' => $recentRequests,
+    ]);
+})->middleware('auth')->name('admin.dashboard.summary');
+
 /*
 |--------------------------------------------------------------------------
 | Accounting Dashboard
@@ -487,6 +559,20 @@ Route::get('/accounting/liquidation', function () {
     return view('accounting.liquidation', compact('liquidationRecords'));
 })->middleware('auth')->name('accounting.liquidation');
 
+Route::get('/accounting/liquidation/submitted', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $liquidations = buildLiquidationTrackingRecords()
+        ->filter(fn ($record) => strtolower((string) ($record['status'] ?? '')) === 'submitted')
+        ->values();
+
+    return response()->json([
+        'liquidations' => $liquidations,
+    ]);
+})->middleware('auth')->name('accounting.liquidation.submitted');
+
 Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
     if ($redirect = redirect_if_role_not_allowed([3])) {
         return $redirect;
@@ -588,6 +674,14 @@ Route::post('/cash-advance/requests', function (Request $request) {
         'updated_at' => now(),
     ]);
 
+    // Get the full request data to broadcast
+    $newRequest = DB::table('cash_advance_requests')
+        ->where('id', $requestId)
+        ->first();
+
+    // Broadcast the event to accounting department
+    \App\Events\CashAdvanceRequestSubmitted::dispatch($newRequest, Auth::id());
+
     return response()->json([
         'message' => 'Cash advance request submitted successfully.',
         'id' => $requestId,
@@ -679,6 +773,19 @@ Route::patch('/accounting/cash-advance/requests/{requestId}/decision', function 
         'created_at' => now(),
         'updated_at' => now(),
     ]);
+
+    // Get the updated request data to broadcast
+    $updatedRequest = DB::table('cash_advance_requests')
+        ->where('id', (int) $requestId)
+        ->first();
+
+    // Broadcast the decision event to the requester
+    \App\Events\CashAdvanceRequestDecisionMade::dispatch(
+        $requestId,
+        $newStatus,
+        $updatedRequest,
+        $actorName
+    );
 
     return response()->json([
         'message' => $newStatus === 'approved'
@@ -1038,8 +1145,9 @@ Route::get('/admin/liquidation', function () {
         ->pluck('particulars_category', 'id');
 
     $liquidationExpenses = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
         ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
-        ->where('liquidation_expenses.liquidation_id', $liquidation->id)
+        ->where('liquidations.user_id', $user->id)
         ->select(
             'liquidation_expenses.id',
             'liquidation_expenses.expense_date',
@@ -1069,7 +1177,8 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
     ]);
 
     $user = Auth::user();
-    $cutoffPeriod = now()->format('F Y');
+    $expenseDate = \Carbon\Carbon::parse($validated['expense_date']);
+    $cutoffPeriod = $expenseDate->format('F Y');
 
     $liquidation = DB::table('liquidations')
         ->where('user_id', $user->id)
@@ -1118,6 +1227,110 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'expense' => $expense,
     ]);
 })->middleware('auth')->name('admin.liquidation.expenses.store');
+
+Route::post('/admin/liquidation/submit', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'month_key' => 'required|date_format:Y-m',
+    ]);
+
+    $user = Auth::user();
+    $month = \Carbon\Carbon::createFromFormat('Y-m', $validated['month_key'])->startOfMonth();
+    $cutoffPeriod = $month->format('F Y');
+
+    $liquidation = DB::table('liquidations')
+        ->where('user_id', $user->id)
+        ->where('cutoff_period', $cutoffPeriod)
+        ->first();
+
+    if (! $liquidation) {
+        return response()->json([
+            'message' => 'No liquidation record found for the selected month.',
+        ], 404);
+    }
+
+    $expenseCount = DB::table('liquidation_expenses')
+        ->where('liquidation_id', $liquidation->id)
+        ->count();
+
+    if ($expenseCount === 0) {
+        return response()->json([
+            'message' => 'Add at least one expense before submitting this liquidation.',
+        ], 422);
+    }
+
+    $releasedAmount = DB::table('cash_advance_requests')
+        ->where('requester_id', $user->id)
+        ->where('status', 'approved')
+        ->whereRaw("DATE_FORMAT(COALESCE(released_at, reviewed_at, request_date), '%Y-%m') = ?", [$validated['month_key']])
+        ->sum(DB::raw('COALESCE(approved_amount, requested_amount, 0)'));
+
+    DB::table('liquidations')
+        ->where('id', $liquidation->id)
+        ->update([
+            'amount' => $releasedAmount,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+            'approved_at' => null,
+            'remarks' => null,
+            'updated_at' => now(),
+        ]);
+
+    return response()->json([
+        'message' => 'Liquidation submitted to accounting for review.',
+        'liquidation_id' => (int) $liquidation->id,
+        'status' => 'submitted',
+    ]);
+})->middleware('auth')->name('admin.liquidation.submit');
+
+Route::patch('/accounting/liquidation/{liquidation}/decision', function (Request $request, $liquidation) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'decision' => 'required|in:approved,rejected',
+        'remarks' => 'nullable|string|max:2000',
+    ]);
+
+    $record = DB::table('liquidations')
+        ->where('id', (int) $liquidation)
+        ->first();
+
+    if (! $record) {
+        return response()->json([
+            'message' => 'Liquidation record not found.',
+        ], 404);
+    }
+
+    if (strtolower((string) $record->status) !== 'submitted') {
+        return response()->json([
+            'message' => 'This liquidation is no longer pending accounting review.',
+        ], 422);
+    }
+
+    DB::table('liquidations')
+        ->where('id', (int) $liquidation)
+        ->update([
+            'status' => $validated['decision'],
+            'remarks' => $validated['remarks'] ?? null,
+            'approved_at' => $validated['decision'] === 'approved' ? now() : null,
+            'updated_at' => now(),
+        ]);
+
+    return response()->json([
+        'message' => $validated['decision'] === 'approved'
+            ? 'Liquidation approved successfully.'
+            : 'Liquidation rejected successfully.',
+        'liquidation_id' => (int) $liquidation,
+        'status' => $validated['decision'],
+        'remarks' => $validated['remarks'] ?? null,
+        'approved_at' => $validated['decision'] === 'approved' ? now()->toDateTimeString() : null,
+    ]);
+})->middleware('auth')->name('accounting.liquidation.decision');
 
 Route::delete('/admin/liquidation/expenses/{expenseId}', function ($expenseId) {
     if ($redirect = redirect_if_role_not_allowed([1, 2])) {

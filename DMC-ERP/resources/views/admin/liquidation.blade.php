@@ -41,11 +41,46 @@
         <div class="absolute -bottom-20 -left-20 w-80 h-80 bg-white opacity-5 rounded-full blur-3xl"></div>
         
         <div class="relative z-10">
-            <!-- Duration Badge -->
-            <div class="inline-flex items-center space-x-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full mb-6">
-                <i data-feather="calendar" class="w-4 h-4"></i>
-                <span id="liquidationPeriodLabel" class="text-sm font-semibold">Current cycle</span>
+            <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="flex flex-wrap items-center gap-3">
+                    <button id="liquidationPrevPeriodBtn" type="button"
+                            class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white transition hover:bg-white/15 hover:scale-105">
+                        <i data-feather="arrow-left" class="w-4 h-4"></i>
+                    </button>
+
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-100">Selected period</p>
+                        <h2 id="liquidationPeriodLabel" class="mt-1 text-2xl font-bold md:text-3xl">Current month</h2>
+                        <p id="liquidationPeriodSubLabel" class="mt-1 text-sm text-blue-100">Month view</p>
+                    </div>
+
+                    <button id="liquidationNextPeriodBtn" type="button"
+                            class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white transition hover:bg-white/15 hover:scale-105">
+                        <i data-feather="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="inline-flex rounded-2xl border border-white/10 bg-white/10 p-1">
+                        <button id="liquidationWeekToggle" type="button" class="rounded-xl px-4 py-2 text-sm font-semibold text-blue-100 transition hover:text-white">Week</button>
+                        <button id="liquidationMonthToggle" type="button" class="rounded-xl px-4 py-2 text-sm font-semibold text-blue-100 transition hover:text-white">Month</button>
+                    </div>
+
+                    <button id="liquidationCurrentWeekBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25">
+                        <i data-feather="calendar" class="w-4 h-4"></i>
+                        Current Week
+                    </button>
+
+                    <button id="liquidationCurrentMonthBtn" type="button"
+                            class="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15">
+                        <i data-feather="grid" class="w-4 h-4"></i>
+                        Current Month
+                    </button>
+                </div>
             </div>
+
+            <div id="liquidationWeekBreakdown" class="mb-6 flex flex-wrap gap-2"></div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <!-- Left Column -->
@@ -113,15 +148,60 @@
     </div>
 
     <div class="rounded-3xl bg-white p-8 shadow-2xl border border-gray-100">
-        <div class="flex items-center justify-between mb-5">
-            <h3 class="text-xl font-bold text-gray-800">My Cash Advance Requests</h3>
-            <span class="text-sm font-semibold text-gray-500">Live status from accounting review</span>
+        <div class="relative mb-5 flex items-center justify-between">
+            <div>
+                <h3 class="text-xl font-bold text-gray-800">My Cash Advance Requests</h3>
+                <span class="text-sm font-semibold text-gray-500">Today's history</span>
+            </div>
+
+            <div class="relative" id="cashAdvanceNotificationWrapper">
+                <button id="cashAdvanceNotificationBtn"
+                        type="button"
+                        class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100"
+                        title="Cash advance notifications">
+                    <i data-feather="inbox" class="w-4 h-4"></i>
+                    <span id="cashAdvanceNotificationLabel">Cash Advance Notifications</span>
+                </button>
+
+                <div id="cashAdvanceNotificationPanel"
+                     class="hidden absolute right-0 top-14 z-40 w-[min(24rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                    <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                        <div>
+                            <p class="text-sm font-bold text-gray-900">Cash Advance Notifications</p>
+                            <p class="text-xs font-medium text-gray-500">All recent request updates</p>
+                        </div>
+                    </div>
+
+                    <div id="cashAdvanceNotifications" class="max-h-96 space-y-3 overflow-y-auto p-4"></div>
+                    <p id="cashAdvanceNotificationsEmpty" class="hidden px-4 py-8 text-center text-sm text-gray-500">
+                        No recent cash advance notifications yet.
+                    </p>
+                </div>
+            </div>
         </div>
 
-        <div id="cashAdvanceNotifications" class="space-y-3 mb-6"></div>
-        <p id="cashAdvanceNotificationsEmpty" class="hidden text-sm text-gray-500 mb-6">
-            No released cash advance notifications yet.
-        </p>
+        <div class="mb-5 flex flex-wrap items-center gap-2">
+            <button type="button"
+                    class="request-status-filter-btn rounded-xl border px-4 py-2 text-sm font-semibold transition"
+                    data-request-status-filter="all">
+                All
+            </button>
+            <button type="button"
+                    class="request-status-filter-btn rounded-xl border px-4 py-2 text-sm font-semibold transition"
+                    data-request-status-filter="approved">
+                Approved
+            </button>
+            <button type="button"
+                    class="request-status-filter-btn rounded-xl border px-4 py-2 text-sm font-semibold transition"
+                    data-request-status-filter="pending">
+                Pending
+            </button>
+            <button type="button"
+                    class="request-status-filter-btn rounded-xl border px-4 py-2 text-sm font-semibold transition"
+                    data-request-status-filter="rejected">
+                Rejected
+            </button>
+        </div>
 
         <div class="overflow-x-auto">
             <table class="w-full">
@@ -141,7 +221,7 @@
         </div>
 
         <p id="employeeRequestsEmpty" class="hidden text-center text-sm text-gray-500 py-8">
-            No cash advance requests yet. Submit your first request to start the process.
+            No cash advance requests submitted today.
         </p>
     </div>
 
@@ -196,14 +276,18 @@
                                 </div>
                             </div>
                         </th>
-                        <th class="text-left py-4 px-4 text-sm font-semibold text-gray-700">Transaction Details</th>
+                        <th class="text-left py-4 px-4 text-sm font-semibold text-gray-700">Particulars</th>
                         <th class="text-right py-4 px-4 text-sm font-semibold text-gray-700">Amount</th>
                         <th class="text-center py-4 px-4 text-sm font-semibold text-gray-700">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="expensesTableBody">
                     @forelse(($liquidationExpenses ?? collect()) as $expense)
-                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition" data-expense-id="{{ $expense->id }}">
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition"
+                        data-expense-id="{{ $expense->id }}"
+                        data-expense-date="{{ \Carbon\Carbon::parse($expense->expense_date)->format('Y-m-d') }}"
+                        data-expense-amount="{{ (float) $expense->amount }}"
+                        data-expense-category="{{ $expense->category_name }}">
                         <td class="py-4 px-4 text-sm text-gray-700">{{ \Carbon\Carbon::parse($expense->expense_date)->format('F j, Y') }}</td>
                         <td class="py-4 px-4 text-sm text-gray-800 font-medium">{{ $expense->category_name }}</td>
                         <td class="py-4 px-4 text-sm text-gray-800 font-medium">
@@ -239,7 +323,9 @@
 
         <!-- Submit Button -->
         <div class="mt-8 flex justify-end">
-            <button class="inline-flex items-center space-x-2 px-8 py-3
+            <button id="submitLiquidationReviewBtn"
+                    type="button"
+                    class="inline-flex items-center space-x-2 px-8 py-3
                            bg-gradient-to-r from-green-600 to-green-700
                            text-white font-semibold rounded-xl
                            hover:shadow-xl hover:scale-[1.02]
@@ -419,7 +505,7 @@
             <!-- Transaction Details Field -->
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Transaction Details <span class="text-red-500">*</span>
+                    Particulars <span class="text-red-500">*</span>
                 </label>
                 <textarea id="expenseDetails"
                           rows="2"
@@ -490,9 +576,26 @@
     feather.replace();
     const CASH_ADVANCE_MY_REQUESTS_ROUTE = @json(route('cash-advance.requests.my'));
     const CASH_ADVANCE_STORE_ROUTE = @json(route('cash-advance.requests.store'));
+    const LIQUIDATION_SUBMIT_ROUTE = @json(route('admin.liquidation.submit'));
     const CASH_ADVANCE_CSRF = @json(csrf_token());
     let myCashAdvanceRequestsCache = [];
     let liquidationToastTimeout;
+    let requestStatusFilter = 'all';
+    let currentViewMode = 'month';
+    let currentPeriodStart = startOfDay(getMonthStart(new Date()));
+    let currentPeriodEnd = endOfDay(getMonthEnd(new Date()));
+    let currentOpeningBalance = 0;
+
+    const periodLabel = document.getElementById('liquidationPeriodLabel');
+    const periodSubLabel = document.getElementById('liquidationPeriodSubLabel');
+    const weekBreakdown = document.getElementById('liquidationWeekBreakdown');
+    const prevPeriodBtn = document.getElementById('liquidationPrevPeriodBtn');
+    const nextPeriodBtn = document.getElementById('liquidationNextPeriodBtn');
+    const currentWeekBtn = document.getElementById('liquidationCurrentWeekBtn');
+    const currentMonthBtn = document.getElementById('liquidationCurrentMonthBtn');
+    const weekToggleBtn = document.getElementById('liquidationWeekToggle');
+    const monthToggleBtn = document.getElementById('liquidationMonthToggle');
+    const submitLiquidationReviewBtn = document.getElementById('submitLiquidationReviewBtn');
 
     async function fetchMyCashAdvanceRequests() {
         const response = await fetch(CASH_ADVANCE_MY_REQUESTS_ROUTE, {
@@ -559,8 +662,255 @@
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
+    function getRequestActivityDate(request) {
+        return request.released_at || request.reviewed_at || request.submitted_at || request.request_date;
+    }
+
+    function isTodayDate(dateValue) {
+        if (!dateValue) return false;
+        return formatDateKey(parseDate(dateValue)) === formatDateKey(new Date());
+    }
+
+    function parseDate(value) {
+        if (!value) {
+            return new Date();
+        }
+
+        if (value instanceof Date) {
+            return new Date(value);
+        }
+
+        const dateString = String(value);
+        const isoDateMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+        if (isoDateMatch) {
+            return new Date(Number(isoDateMatch[1]), Number(isoDateMatch[2]) - 1, Number(isoDateMatch[3]));
+        }
+
+        return new Date(dateString);
+    }
+
+    function startOfDay(date) {
+        const result = new Date(date);
+        result.setHours(0, 0, 0, 0);
+        return result;
+    }
+
+    function endOfDay(date) {
+        const result = new Date(date);
+        result.setHours(23, 59, 59, 999);
+        return result;
+    }
+
+    function addDays(date, days) {
+        const result = new Date(date);
+        result.setDate(result.getDate() + days);
+        return result;
+    }
+
+    function addMonths(date, months) {
+        const result = new Date(date);
+        result.setMonth(result.getMonth() + months);
+        return result;
+    }
+
+    function getMonthStart(date) {
+        return new Date(date.getFullYear(), date.getMonth(), 1);
+    }
+
+    function getMonthEnd(date) {
+        return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    }
+
+    function formatMonthLabel(date) {
+        return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+
+    function formatShortDay(date) {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function formatDateKey(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function formatMonthKey(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`;
+    }
+
+    function formatPeriodLabel(start, end, viewMode) {
+        if (viewMode === 'month') {
+            return formatMonthLabel(start);
+        }
+
+        const yearPart = start.getFullYear() === end.getFullYear() ? `, ${start.getFullYear()}` : '';
+        return `${formatShortDay(start)} - ${formatShortDay(end)}${yearPart}`;
+    }
+
+    function getMonthRanges(date) {
+        const ranges = [];
+        let rangeStart = startOfDay(getMonthStart(date));
+        const monthEnd = endOfDay(getMonthEnd(date));
+
+        while (rangeStart <= monthEnd) {
+            const rangeEnd = endOfDay(new Date(Math.min(addDays(rangeStart, 6).getTime(), monthEnd.getTime())));
+            ranges.push({ start: rangeStart, end: rangeEnd });
+            rangeStart = startOfDay(addDays(rangeEnd, 1));
+        }
+
+        return ranges;
+    }
+
+    function getCurrentWeekRange() {
+        const now = startOfDay(new Date());
+        const mondayOffset = (now.getDay() + 6) % 7;
+        const start = startOfDay(addDays(now, -mondayOffset));
+        return { start, end: endOfDay(addDays(start, 6)) };
+    }
+
+    function isWithinRange(dateValue, start, end) {
+        const target = startOfDay(parseDate(dateValue));
+        return target >= startOfDay(start) && target <= endOfDay(end);
+    }
+
+    function applyRange(start, end, mode) {
+        currentPeriodStart = startOfDay(start);
+        currentPeriodEnd = endOfDay(end);
+        currentViewMode = mode;
+        renderLiquidationDashboard();
+    }
+
+    function setMonthView(date) {
+        applyRange(getMonthStart(date), getMonthEnd(date), 'month');
+    }
+
+    function setWeekView(date = null) {
+        if (!date) {
+            const range = getCurrentWeekRange();
+            applyRange(range.start, range.end, 'week');
+            return;
+        }
+
+        const selected = startOfDay(date);
+        const mondayOffset = (selected.getDay() + 6) % 7;
+        const start = startOfDay(addDays(selected, -mondayOffset));
+        applyRange(start, endOfDay(addDays(start, 6)), 'week');
+    }
+
+    function shiftPeriod(direction) {
+        if (currentViewMode === 'month') {
+            setMonthView(addMonths(currentPeriodStart, direction));
+            return;
+        }
+
+        applyRange(addDays(currentPeriodStart, direction * 7), addDays(currentPeriodEnd, direction * 7), 'week');
+    }
+
+    function getExpenseRows() {
+        return [...document.querySelectorAll('#expensesTableBody tr')]
+            .filter(row => row.id !== 'emptyExpenseRow' && row.id !== 'filteredExpenseEmptyRow');
+    }
+
+    function getSelectedCategories() {
+        return [...document.querySelectorAll('.category-filter-checkbox:checked')]
+            .map(cb => cb.value.toLowerCase());
+    }
+
+    function getExpenseRowDate(row) {
+        if (row.dataset.expenseDate) {
+            return row.dataset.expenseDate;
+        }
+
+        const dateCell = row.querySelectorAll('td')[0];
+        return dateCell ? dateCell.textContent.trim() : null;
+    }
+
+    function getExpenseRowAmount(row) {
+        if (row.dataset.expenseAmount) {
+            return Number(row.dataset.expenseAmount || 0);
+        }
+
+        const amountCell = row.querySelectorAll('td')[3];
+        return Number((amountCell?.textContent || '').replace(/[^0-9.-]+/g, '')) || 0;
+    }
+
+    function getExpenseRowCategory(row) {
+        return (row.dataset.expenseCategory || row.querySelectorAll('td')[1]?.textContent || '').trim().toLowerCase();
+    }
+
+    function isExpenseRowInCurrentPeriod(row) {
+        const expenseDate = getExpenseRowDate(row);
+        return expenseDate ? isWithinRange(expenseDate, currentPeriodStart, currentPeriodEnd) : false;
+    }
+
+    function updatePeriodToggles() {
+        if (weekToggleBtn) {
+            weekToggleBtn.classList.toggle('bg-white', currentViewMode === 'week');
+            weekToggleBtn.classList.toggle('text-slate-900', currentViewMode === 'week');
+            weekToggleBtn.classList.toggle('text-blue-100', currentViewMode !== 'week');
+            weekToggleBtn.classList.toggle('shadow-lg', currentViewMode === 'week');
+        }
+
+        if (monthToggleBtn) {
+            monthToggleBtn.classList.toggle('bg-white', currentViewMode === 'month');
+            monthToggleBtn.classList.toggle('text-slate-900', currentViewMode === 'month');
+            monthToggleBtn.classList.toggle('text-blue-100', currentViewMode !== 'month');
+            monthToggleBtn.classList.toggle('shadow-lg', currentViewMode === 'month');
+        }
+    }
+
+    function updatePeriodLabels() {
+        if (periodLabel) {
+            periodLabel.textContent = formatPeriodLabel(currentPeriodStart, currentPeriodEnd, currentViewMode);
+        }
+
+        if (periodSubLabel) {
+            periodSubLabel.textContent = currentViewMode === 'month' ? 'Month view' : 'Week view';
+        }
+    }
+
+    function renderWeekBreakdown() {
+        if (!weekBreakdown) {
+            return;
+        }
+
+        if (currentViewMode !== 'month') {
+            weekBreakdown.innerHTML = '';
+            return;
+        }
+
+        const rows = getExpenseRows();
+        const ranges = getMonthRanges(currentPeriodStart);
+
+        weekBreakdown.innerHTML = ranges.map(range => {
+            const rangeCount = rows.filter(row => isWithinRange(getExpenseRowDate(row), range.start, range.end)).length;
+            const label = `${formatShortDay(range.start)} - ${formatShortDay(range.end)}`;
+
+            return `
+                <button type="button"
+                        class="liquidation-week-chip inline-flex min-w-[140px] flex-col rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-semibold text-blue-100 transition hover:border-white/20 hover:bg-white/10"
+                        data-range-start="${formatDateKey(range.start)}"
+                        data-range-end="${formatDateKey(range.end)}">
+                    <span>${label}</span>
+                    <span class="text-xs font-medium text-blue-100/80">${rangeCount.toLocaleString('en-US')} expense${rangeCount === 1 ? '' : 's'}</span>
+                </button>
+            `;
+        }).join('');
+
+        document.querySelectorAll('.liquidation-week-chip').forEach(button => {
+            button.addEventListener('click', () => {
+                applyRange(parseDate(button.dataset.rangeStart), parseDate(button.dataset.rangeEnd), 'week');
+            });
+        });
+    }
+
     function getStatusBadge(status) {
-        const normalized = (status || '').toLowerCase();
+        const normalized = normalizeRequestStatus(status);
 
         if (normalized === 'approved') {
             return '<span class="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Approved</span>';
@@ -577,6 +927,29 @@
         return myCashAdvanceRequestsCache;
     }
 
+    function normalizeRequestStatus(status) {
+        return (status || 'pending').toLowerCase();
+    }
+
+    function getRequestStatusLabel(status) {
+        const normalized = normalizeRequestStatus(status);
+        return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    }
+
+    function updateRequestStatusFilterButtons() {
+        document.querySelectorAll('.request-status-filter-btn').forEach(button => {
+            const isActive = button.dataset.requestStatusFilter === requestStatusFilter;
+            button.classList.toggle('border-[#1C446D]', isActive);
+            button.classList.toggle('bg-[#1C446D]', isActive);
+            button.classList.toggle('text-white', isActive);
+            button.classList.toggle('border-gray-200', !isActive);
+            button.classList.toggle('bg-white', !isActive);
+            button.classList.toggle('text-gray-600', !isActive);
+            button.classList.toggle('hover:border-[#1C446D]', !isActive);
+            button.classList.toggle('hover:text-[#1C446D]', !isActive);
+        });
+    }
+
     function escapeHtml(value) {
         return String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -591,29 +964,37 @@
         const empty = document.getElementById('cashAdvanceNotificationsEmpty');
         if (!notifications || !empty) return;
 
-        const releasedRequests = [...myRequests]
-            .filter(request => (request.status || '').toLowerCase() === 'approved')
-            .sort((a, b) => new Date(b.reviewed_at || b.released_at || 0) - new Date(a.reviewed_at || a.released_at || 0));
+        const recentRequests = [...myRequests]
+            .sort((a, b) => parseDate(getRequestActivityDate(b)) - parseDate(getRequestActivityDate(a)));
 
-        if (releasedRequests.length === 0) {
+        if (recentRequests.length === 0) {
             notifications.innerHTML = '';
             empty.classList.remove('hidden');
             return;
         }
 
         empty.classList.add('hidden');
-        notifications.innerHTML = releasedRequests.slice(0, 4).map(request => {
+        notifications.innerHTML = recentRequests.map(request => {
+            const status = normalizeRequestStatus(request.status);
             const actedBy = request.reviewer_name ? escapeHtml(request.reviewer_name) : 'Accounting Staff';
             const purpose = request.purpose ? escapeHtml(request.purpose) : '-';
             const remarks = request.accounting_remarks ? escapeHtml(request.accounting_remarks) : 'No notes provided';
+            const amount = formatCurrency(request.approved_amount || request.requested_amount || 0);
+            const activityDate = formatDate(getRequestActivityDate(request));
+            const statusStyles = status === 'approved'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : status === 'rejected'
+                    ? 'border-red-200 bg-red-50 text-red-900'
+                    : 'border-amber-200 bg-amber-50 text-amber-900';
 
             return `
-                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                    <p class="text-sm font-semibold text-emerald-900">
-                        ${formatCurrency(request.approved_amount || request.requested_amount || 0)} was approved/sent by ${actedBy}
+                <div class="rounded-xl border p-3 ${statusStyles}">
+                    <p class="text-sm font-semibold">
+                        ${amount} request is ${escapeHtml(getRequestStatusLabel(status))} as of ${activityDate}
                     </p>
-                    <p class="text-sm text-emerald-800 mt-1">Purpose: ${purpose}</p>
-                    <p class="text-sm text-emerald-700 mt-1">Notes: ${remarks}</p>
+                    <p class="text-sm mt-1">Purpose: ${purpose}</p>
+                    <p class="text-sm mt-1">Updated by: ${actedBy}</p>
+                    <p class="text-sm mt-1">Notes: ${remarks}</p>
                 </div>
             `;
         }).join('');
@@ -626,17 +1007,27 @@
 
         if (!tbody || !emptyState) return;
 
-        if (myRequests.length === 0) {
+        updateRequestStatusFilterButtons();
+
+        const todaysRequests = myRequests.filter(request => isTodayDate(request.request_date));
+        const filteredRequests = requestStatusFilter === 'all'
+            ? todaysRequests
+            : todaysRequests.filter(request => normalizeRequestStatus(request.status) === requestStatusFilter);
+
+        if (filteredRequests.length === 0) {
             tbody.innerHTML = '';
+            emptyState.textContent = requestStatusFilter === 'all'
+                ? 'No cash advance requests submitted today.'
+                : `No ${requestStatusFilter} cash advance requests submitted today.`;
             emptyState.classList.remove('hidden');
-            renderCashAdvanceNotifications([]);
-            renderApprovedSummary([]);
+            renderCashAdvanceNotifications(myRequests);
+            renderApprovedSummary(myRequests);
             return;
         }
 
         emptyState.classList.add('hidden');
         renderCashAdvanceNotifications(myRequests);
-        tbody.innerHTML = myRequests.map(request => `
+        tbody.innerHTML = filteredRequests.map(request => `
             <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
                 <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.request_date)}</td>
                 <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.reviewed_at)}</td>
@@ -651,62 +1042,49 @@
         renderApprovedSummary(myRequests);
     }
 
+    function getRequestPeriodDate(request) {
+        return request.released_at || request.reviewed_at || request.request_date;
+    }
+
     function renderApprovedSummary(myRequests) {
         const approvedRequests = myRequests
             .filter(request => (request.status || '').toLowerCase() === 'approved')
-            .sort((a, b) => new Date(b.reviewed_at || b.request_date || 0) - new Date(a.reviewed_at || a.request_date || 0));
+            .filter(request => isWithinRange(getRequestPeriodDate(request), currentPeriodStart, currentPeriodEnd))
+            .sort((a, b) => parseDate(getRequestPeriodDate(b)) - parseDate(getRequestPeriodDate(a)));
 
         const openingBalanceAmount = document.getElementById('openingBalanceAmount');
         const openingBalancePurpose = document.getElementById('openingBalancePurpose');
-        const liquidationPeriodLabel = document.getElementById('liquidationPeriodLabel');
-
         if (!openingBalanceAmount || !openingBalancePurpose) return;
 
         if (approvedRequests.length === 0) {
             openingBalanceAmount.textContent = '₱0.00';
             openingBalancePurpose.textContent = 'No approved request yet';
-            if (liquidationPeriodLabel) {
-                liquidationPeriodLabel.textContent = 'Current cycle';
-            }
+            currentOpeningBalance = 0;
             renderExpenseSummary(0);
             return;
         }
 
+        const approvedAmount = approvedRequests.reduce((total, request) => {
+            return total + Number(request.approved_amount || request.requested_amount || 0);
+        }, 0);
         const latestApproved = approvedRequests[0];
-        const approvedAmount = Number(latestApproved.approved_amount || latestApproved.requested_amount || 0);
+        currentOpeningBalance = approvedAmount;
         openingBalanceAmount.textContent = formatCurrency(approvedAmount);
-        openingBalancePurpose.textContent = latestApproved.purpose || 'Approved cash advance';
-
-        if (liquidationPeriodLabel) {
-            const fromDate = formatDate(latestApproved.request_date);
-            const toDate = formatDate(latestApproved.reviewed_at);
-            liquidationPeriodLabel.textContent = `${fromDate} - ${toDate}`;
-        }
+        openingBalancePurpose.textContent = approvedRequests.length === 1
+            ? (latestApproved.purpose || 'Approved cash advance')
+            : `${approvedRequests.length} approved cash advance requests`;
 
         renderExpenseSummary(approvedAmount);
     }
 
     function getCurrentExpenseTotal() {
-        const rows = document.querySelectorAll('#expensesTableBody tr');
-        let total = 0;
-
-        rows.forEach(row => {
-            if (row.id === 'emptyExpenseRow') {
-                return;
+        return getExpenseRows().reduce((total, row) => {
+            if (!isExpenseRowInCurrentPeriod(row)) {
+                return total;
             }
 
-            const amountCell = row.querySelectorAll('td')[3];
-            if (!amountCell) {
-                return;
-            }
-
-            const parsedAmount = Number((amountCell.textContent || '').replace(/[^0-9.-]+/g, ''));
-            if (!Number.isNaN(parsedAmount)) {
-                total += parsedAmount;
-            }
-        });
-
-        return total;
+            return total + getExpenseRowAmount(row);
+        }, 0);
     }
 
     function renderExpenseSummary(openingBalance = null) {
@@ -728,6 +1106,100 @@
         totalExpensesAmount.textContent = formatCurrency(expenseTotal);
         summaryExpendedAmount.textContent = formatCurrency(expenseTotal);
         summaryRemainingAmount.textContent = formatCurrency(remaining);
+    }
+
+    function renderExpensesForCurrentFilters(shouldUpdateSummary = true) {
+        const rows = getExpenseRows();
+        const tbody = document.getElementById('expensesTableBody');
+        const emptyExpenseRow = document.getElementById('emptyExpenseRow');
+        const existingFilteredEmptyRow = document.getElementById('filteredExpenseEmptyRow');
+        const selectedCategories = getSelectedCategories();
+        const categoryFilterBtn = document.getElementById('categoryFilterBtn');
+        let visibleCount = 0;
+
+        if (existingFilteredEmptyRow) {
+            existingFilteredEmptyRow.remove();
+        }
+
+        if (categoryFilterBtn) {
+            categoryFilterBtn.classList.toggle('text-[#1C446D]', selectedCategories.length > 0);
+            categoryFilterBtn.classList.toggle('bg-blue-50', selectedCategories.length > 0);
+            categoryFilterBtn.classList.toggle('text-gray-400', selectedCategories.length === 0);
+        }
+
+        rows.forEach(row => {
+            const matchesPeriod = isExpenseRowInCurrentPeriod(row);
+            const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(getExpenseRowCategory(row));
+            const shouldShow = matchesPeriod && matchesCategory;
+
+            row.classList.toggle('hidden', !shouldShow);
+            if (shouldShow) {
+                visibleCount += 1;
+            }
+        });
+
+        if (emptyExpenseRow) {
+            emptyExpenseRow.classList.toggle('hidden', rows.length > 0);
+        }
+
+        if (tbody && rows.length > 0 && visibleCount === 0) {
+            const emptyRow = document.createElement('tr');
+            emptyRow.id = 'filteredExpenseEmptyRow';
+            emptyRow.className = 'border-b border-gray-100';
+            emptyRow.innerHTML = '<td colspan="5" class="py-8 px-4 text-sm text-center text-gray-500">No expense entries found for the selected filters.</td>';
+            tbody.appendChild(emptyRow);
+        }
+
+        if (shouldUpdateSummary) {
+            renderExpenseSummary(currentOpeningBalance);
+        }
+    }
+
+    function renderLiquidationDashboard() {
+        updatePeriodToggles();
+        updatePeriodLabels();
+        renderWeekBreakdown();
+        renderExpensesForCurrentFilters(false);
+        renderApprovedSummary(getMyRequests());
+    }
+
+    async function submitLiquidationForReview() {
+        if (!submitLiquidationReviewBtn) return;
+
+        const monthKey = formatMonthKey(currentPeriodStart);
+        const originalContent = submitLiquidationReviewBtn.innerHTML;
+        submitLiquidationReviewBtn.disabled = true;
+        submitLiquidationReviewBtn.classList.add('opacity-70', 'cursor-not-allowed');
+        submitLiquidationReviewBtn.innerHTML = '<i data-feather="loader" class="w-5 h-5"></i><span>Submitting...</span>';
+        feather.replace();
+
+        try {
+            const response = await fetch(LIQUIDATION_SUBMIT_ROUTE, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': CASH_ADVANCE_CSRF,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ month_key: monthKey })
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                showLiquidationToast(payload?.message || 'Failed to submit liquidation for review.', 'error');
+                return;
+            }
+
+            showLiquidationToast(payload?.message || 'Liquidation submitted to accounting for review.', 'success');
+        } catch (error) {
+            showLiquidationToast('Failed to submit liquidation for review. Please try again.', 'error');
+        } finally {
+            submitLiquidationReviewBtn.disabled = false;
+            submitLiquidationReviewBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+            submitLiquidationReviewBtn.innerHTML = originalContent;
+            feather.replace();
+        }
     }
 
     // Modal Functions
@@ -846,6 +1318,9 @@
         if (savedExpense?.id) {
             newRow.dataset.expenseId = savedExpense.id;
         }
+        newRow.dataset.expenseDate = savedExpense?.expense_date || date;
+        newRow.dataset.expenseAmount = String(savedExpense?.amount || amount);
+        newRow.dataset.expenseCategory = savedExpense?.category_name || categoryName;
         newRow.innerHTML = `
             <td class="py-4 px-4 text-sm text-gray-700">${formattedDate}</td>
             <td class="py-4 px-4 text-sm text-gray-800 font-medium">${savedExpense?.category_name || categoryName}</td>
@@ -859,7 +1334,7 @@
         `;
         
         tbody.appendChild(newRow);
-        renderExpenseSummary();
+        renderLiquidationDashboard();
         
         // Refresh feather icons
         feather.replace();
@@ -963,7 +1438,7 @@
             row.remove();
 
             const tbody = document.getElementById('expensesTableBody');
-            const hasExpenseRows = [...tbody.querySelectorAll('tr')].some(row => row.id !== 'emptyExpenseRow');
+            const hasExpenseRows = getExpenseRows().length > 0;
             if (!hasExpenseRows) {
                 const emptyRow = document.createElement('tr');
                 emptyRow.id = 'emptyExpenseRow';
@@ -972,7 +1447,7 @@
                 tbody.appendChild(emptyRow);
             }
 
-            renderExpenseSummary();
+            renderLiquidationDashboard();
             showLiquidationToast('Expense deleted successfully.', 'success');
         }
     }
@@ -1000,28 +1475,7 @@
     }
 
     function applyCategoryFilter() {
-        const checked = [...document.querySelectorAll('.category-filter-checkbox:checked')]
-            .map(cb => cb.value.toLowerCase());
-
-        const btn = document.getElementById('categoryFilterBtn');
-        const rows = document.querySelectorAll('#expensesTableBody tr');
-
-        // Highlight filter button when active
-        btn.classList.toggle('text-[#1C446D]', checked.length > 0);
-        btn.classList.toggle('bg-blue-50', checked.length > 0);
-        btn.classList.toggle('text-gray-400', checked.length === 0);
-
-        rows.forEach(row => {
-            if (checked.length === 0) {
-                row.style.display = '';
-                return;
-            }
-
-            // Category is in the 2nd <td> (index 1)
-            const categoryCell = row.querySelectorAll('td')[1];
-            const rowCategory = categoryCell ? categoryCell.textContent.trim().toLowerCase() : '';
-            row.style.display = checked.includes(rowCategory) ? '' : 'none';
-        });
+        renderExpensesForCurrentFilters();
     }
 
     function clearCategoryFilter() {
@@ -1040,17 +1494,202 @@
         }
     });
 
+    document.querySelectorAll('.request-status-filter-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            requestStatusFilter = button.dataset.requestStatusFilter || 'all';
+            renderEmployeeRequests();
+        });
+    });
+
+    const cashAdvanceNotificationWrapper = document.getElementById('cashAdvanceNotificationWrapper');
+    const cashAdvanceNotificationBtn = document.getElementById('cashAdvanceNotificationBtn');
+    const cashAdvanceNotificationPanel = document.getElementById('cashAdvanceNotificationPanel');
+
+    if (cashAdvanceNotificationBtn && cashAdvanceNotificationPanel) {
+        cashAdvanceNotificationBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            cashAdvanceNotificationPanel.classList.toggle('hidden');
+        });
+    }
+
+    document.addEventListener('click', function(event) {
+        if (
+            cashAdvanceNotificationWrapper &&
+            cashAdvanceNotificationPanel &&
+            !cashAdvanceNotificationWrapper.contains(event.target)
+        ) {
+            cashAdvanceNotificationPanel.classList.add('hidden');
+        }
+    });
+
+    if (prevPeriodBtn) {
+        prevPeriodBtn.addEventListener('click', () => shiftPeriod(-1));
+    }
+
+    if (nextPeriodBtn) {
+        nextPeriodBtn.addEventListener('click', () => shiftPeriod(1));
+    }
+
+    if (currentWeekBtn) {
+        currentWeekBtn.addEventListener('click', () => setWeekView());
+    }
+
+    if (currentMonthBtn) {
+        currentMonthBtn.addEventListener('click', () => setMonthView(new Date()));
+    }
+
+    if (weekToggleBtn) {
+        weekToggleBtn.addEventListener('click', () => setWeekView(currentPeriodStart));
+    }
+
+    if (monthToggleBtn) {
+        monthToggleBtn.addEventListener('click', () => setMonthView(currentPeriodStart));
+    }
+
+    if (submitLiquidationReviewBtn) {
+        submitLiquidationReviewBtn.addEventListener('click', submitLiquidationForReview);
+    }
+
+    // ===============================================
+    // REAL-TIME UPDATES (Polling)
+    // ===============================================
+    let pollingInterval = null;
+    let isPolling = false;
+    let pollCheckInProgress = false;
+
+    function createRequestMap(requests) {
+        const map = {};
+        requests.forEach(req => {
+            map[req.id] = req;
+        });
+        return map;
+    }
+
+    async function checkForCashAdvanceUpdates() {
+        if (pollCheckInProgress) return;
+        pollCheckInProgress = true;
+
+        try {
+            const response = await fetch(CASH_ADVANCE_MY_REQUESTS_ROUTE, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                pollCheckInProgress = false;
+                return;
+            }
+
+            const payload = await response.json();
+            const newRequests = Array.isArray(payload?.requests) ? payload.requests : [];
+            const oldRequests = myCashAdvanceRequestsCache;
+
+            if (newRequests.length === oldRequests.length && newRequests.length === 0) {
+                pollCheckInProgress = false;
+                return;
+            }
+
+            const newMap = createRequestMap(newRequests);
+            const oldMap = createRequestMap(oldRequests);
+            let hasChanges = false;
+            let changeMessage = '';
+
+            if (newRequests.length > oldRequests.length) {
+                changeMessage = '📬 New cash advance request received!';
+                hasChanges = true;
+            } else if (newRequests.length < oldRequests.length) {
+                changeMessage = '🗑️ A request was removed';
+                hasChanges = true;
+            } else {
+                for (const id in newMap) {
+                    const newReq = newMap[id];
+                    const oldReq = oldMap[id];
+
+                    if (oldReq) {
+                        if (newReq.status !== oldReq.status) {
+                            changeMessage = `💬 Request status updated to: ${newReq.status}`;
+                            hasChanges = true;
+                            break;
+                        }
+
+                        if (newReq.approved_amount !== oldReq.approved_amount) {
+                            changeMessage = '✅ Request amount was updated!';
+                            hasChanges = true;
+                            break;
+                        }
+
+                        if (newReq.accounting_remarks !== oldReq.accounting_remarks) {
+                            changeMessage = '📝 Accounting added new remarks!';
+                            hasChanges = true;
+                            break;
+                        }
+
+                        if (newReq.reviewed_at !== oldReq.reviewed_at) {
+                            changeMessage = '⏰ Request review date updated!';
+                            hasChanges = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (hasChanges) {
+                showLiquidationToast(changeMessage, 'success');
+                myCashAdvanceRequestsCache = newRequests;
+                renderEmployeeRequests();
+            }
+
+        } catch (error) {
+            console.error('Polling error:', error);
+        } finally {
+            pollCheckInProgress = false;
+        }
+    }
+
+    function startPolling() {
+        if (isPolling) return;
+        isPolling = true;
+        pollingInterval = setInterval(checkForCashAdvanceUpdates, 5000);
+    }
+
+    function stopPolling() {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            isPolling = false;
+        }
+    }
+
+    // Initialize and start polling
     async function initializeMyCashAdvanceRequests() {
         try {
             await fetchMyCashAdvanceRequests();
+            renderEmployeeRequests();
+            renderLiquidationDashboard();
+            startPolling();
         } catch (error) {
             showLiquidationToast('Unable to load cash advance requests.', 'error');
         }
-
-        renderEmployeeRequests();
     }
 
-    initializeMyCashAdvanceRequests();
-    renderExpenseSummary();
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeMyCashAdvanceRequests);
+    } else {
+        initializeMyCashAdvanceRequests();
+    }
+
+    // Stop polling on page unload
+    window.addEventListener('beforeunload', stopPolling);
+
+    // Pause polling when tab is hidden, resume when visible
+    window.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopPolling();
+        } else {
+            startPolling();
+        }
+    });
 </script>
 @endpush
