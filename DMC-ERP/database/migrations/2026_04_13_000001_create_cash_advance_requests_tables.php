@@ -62,8 +62,8 @@ return new class extends Migration
                 $table->timestamp('acted_at')->nullable();
                 $table->timestamps();
 
-                $table->index(['cash_advance_request_id', 'acted_at']);
-                $table->index(['action', 'acted_at']);
+                $table->index(['cash_advance_request_id', 'acted_at'], 'idx_cash_adv_req_acted_at');
+                $table->index(['action', 'acted_at'], 'idx_action_acted_at');
             });
         }
     }

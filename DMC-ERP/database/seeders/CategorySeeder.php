@@ -20,6 +20,6 @@ class CategorySeeder extends Seeder
             ['category_name' => 'Shelving', 'description' => 'Storage shelving units', 'created_at' => now(), 'updated_at' => now()],
         ];
 
-        DB::table('categories')->insert($categories);
+        DB::table('item_categories')->insert($categories);
     }
 }

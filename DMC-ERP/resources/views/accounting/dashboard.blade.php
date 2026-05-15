@@ -90,10 +90,6 @@
 					<p id="todayBudgetDate" class="text-xs text-emerald-100 mt-1">Today: --</p>
 					<p id="budgetMonthLabel" class="text-xs text-emerald-100 mt-1">Opening Balance for Current Month</p>
 					<p id="budgetWindowLimit" class="text-4xl font-extrabold mt-1">PHP 0.00</p>
-					<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-emerald-100">
-						<span id="budgetCarryoverText">Carryover: PHP 0.00</span>
-						<span id="budgetAddedText">Added This Month: PHP 0.00</span>
-					</div>
 					<button id="openMonthlyBudgetBtn" type="button" class="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-emerald-50 text-xs font-semibold border border-white/20 transition-all duration-200">
 						<i data-feather="edit-3" class="w-3.5 h-3.5"></i>
 						<span>Set Monthly Balance</span>
@@ -198,25 +194,14 @@
 
 		<form id="monthlyBudgetForm" class="p-6 space-y-4">
 			<div>
-				<label class="block text-sm font-semibold text-gray-700 mb-2">Carryover Remaining (Previous Month)</label>
+				<label class="block text-sm font-semibold text-gray-700 mb-2">Opening Balance</label>
 				<div class="relative">
 					<span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">PHP</span>
-					<input id="monthlyCarryoverInput" type="number" min="0" step="0.01" class="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required>
+					<input id="monthlyOpeningInput" type="number" min="0" step="0.01" class="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required>
 				</div>
 			</div>
 
-			<div>
-				<label class="block text-sm font-semibold text-gray-700 mb-2">Added Budget for This Month</label>
-				<div class="relative">
-					<span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">PHP</span>
-					<input id="monthlyAddedInput" type="number" min="0" step="0.01" class="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required>
-				</div>
-			</div>
 
-			<div class="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-				<p class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Opening Balance Preview</p>
-				<p id="monthlyOpeningPreview" class="text-xl font-bold text-emerald-800 mt-1">PHP 0.00</p>
-			</div>
 
 			<div class="pt-2 flex items-center gap-3">
 				<button type="button" id="cancelMonthlyBudgetBtn" class="flex-1 px-4 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-all duration-200">Cancel</button>
@@ -238,8 +223,6 @@
 				'year' => (int) $currentMonthlyBalance->year,
 				'month' => (int) $currentMonthlyBalance->month,
 				'month_key' => sprintf('%04d-%02d', $currentMonthlyBalance->year, $currentMonthlyBalance->month),
-				'carryover_balance' => (float) $currentMonthlyBalance->carryover_balance,
-				'added_budget' => (float) $currentMonthlyBalance->added_budget,
 				'opening_balance' => (float) $currentMonthlyBalance->opening_balance,
 				'released_total' => (float) $currentMonthlyBalance->released_total,
 				'expense_total' => (float) $currentMonthlyBalance->expense_total,
@@ -314,8 +297,6 @@
 			return {
 				monthKey: currentMonthKey,
 				monthLabel: getMonthLabel(today),
-				carryover: Number(currentMonthlyBalance.carryover_balance || 0),
-				added: Number(currentMonthlyBalance.added_budget || 0),
 				opening: Number(currentMonthlyBalance.opening_balance || 0),
 			};
 		}
@@ -323,8 +304,6 @@
 		return {
 			monthKey: currentMonthKey,
 			monthLabel: getMonthLabel(today),
-			carryover: 0,
-			added: 0,
 			opening: 0,
 		};
 	}
@@ -334,9 +313,7 @@
 		const budgetSentToday = document.getElementById('budgetSentToday');
 		const budgetRemainingToday = document.getElementById('budgetRemainingToday');
 		const budgetMonthLabel = document.getElementById('budgetMonthLabel');
-		const budgetCarryoverText = document.getElementById('budgetCarryoverText');
-		const budgetAddedText = document.getElementById('budgetAddedText');
-		if (!budgetWindowLimit || !budgetSentToday || !budgetRemainingToday || !budgetMonthLabel || !budgetCarryoverText || !budgetAddedText) return;
+		if (!budgetWindowLimit || !budgetSentToday || !budgetRemainingToday || !budgetMonthLabel) return;
 
 		const currentMonthBudget = getCurrentMonthBudget();
 		const spentThisMonth = getApprovedTotalForMonth(currentMonthBudget.monthKey);
@@ -346,21 +323,16 @@
 		budgetWindowLimit.textContent = formatCurrency(currentMonthBudget.opening);
 		budgetSentToday.textContent = formatCurrency(spentThisMonth);
 		budgetRemainingToday.textContent = formatCurrency(remainingThisMonth);
-		budgetCarryoverText.textContent = `Carryover: ${formatCurrency(currentMonthBudget.carryover)}`;
-		budgetAddedText.textContent = `Added This Month: ${formatCurrency(currentMonthBudget.added)}`;
 	}
 
 	function openMonthlyBudgetModal() {
 		const modal = document.getElementById('monthlyBudgetModal');
 		const monthLabel = document.getElementById('monthlyBudgetModalMonth');
-		const carryoverInput = document.getElementById('monthlyCarryoverInput');
-		const addedInput = document.getElementById('monthlyAddedInput');
+		const openingInput = document.getElementById('monthlyOpeningInput');
 
 		const currentMonthBudget = getCurrentMonthBudget();
 		monthLabel.textContent = currentMonthBudget.monthLabel;
-		carryoverInput.value = currentMonthBudget.carryover;
-		addedInput.value = currentMonthBudget.added;
-		updateMonthlyOpeningPreview();
+		openingInput.value = currentMonthBudget.opening;
 
 		modal.classList.remove('hidden');
 		modal.classList.add('flex');
@@ -373,14 +345,7 @@
 		modal.classList.remove('flex');
 	}
 
-	function updateMonthlyOpeningPreview() {
-		const carryoverValue = Number(document.getElementById('monthlyCarryoverInput').value || 0);
-		const addedValue = Number(document.getElementById('monthlyAddedInput').value || 0);
-		const preview = document.getElementById('monthlyOpeningPreview');
-		if (!preview) return;
 
-		preview.textContent = formatCurrency(carryoverValue + addedValue);
-	}
 
 	function showAccountingToast(message, type = 'success') {
 		const toast = document.getElementById('accountingToast');
@@ -702,16 +667,12 @@
 	document.getElementById('closeMonthlyBudgetBtn').addEventListener('click', closeMonthlyBudgetModal);
 	document.getElementById('cancelMonthlyBudgetBtn').addEventListener('click', closeMonthlyBudgetModal);
 
-	document.getElementById('monthlyCarryoverInput').addEventListener('input', updateMonthlyOpeningPreview);
-	document.getElementById('monthlyAddedInput').addEventListener('input', updateMonthlyOpeningPreview);
-
 	document.getElementById('monthlyBudgetForm').addEventListener('submit', function(event) {
 		event.preventDefault();
 
-		const carryover = Number(document.getElementById('monthlyCarryoverInput').value || 0);
-		const added = Number(document.getElementById('monthlyAddedInput').value || 0);
-		if (carryover < 0 || added < 0) {
-			showAccountingToast('Values must be zero or greater.', 'error');
+		const opening = Number(document.getElementById('monthlyOpeningInput').value || 0);
+		if (opening < 0) {
+			showAccountingToast('Opening balance must be zero or greater.', 'error');
 			return;
 		}
 
@@ -724,8 +685,7 @@
 				'X-Requested-With': 'XMLHttpRequest'
 			},
 			body: JSON.stringify({
-				carryover_balance: carryover,
-				added_budget: added,
+				opening_balance: opening,
 			})
 		}).then(async response => {
 			const payload = await response.json().catch(() => ({}));

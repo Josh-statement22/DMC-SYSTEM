@@ -43,6 +43,6 @@ class ParticularsSeeder extends Seeder
             'updated_at'           => now(),
         ], $particulars);
 
-        DB::table('particulars')->insert($rows);
+        DB::table('categories')->insert($rows);
     }
 }
