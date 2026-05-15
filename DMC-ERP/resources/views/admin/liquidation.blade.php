@@ -268,6 +268,7 @@
 
         <!-- Modal Body -->
         <form id="requestAdvanceForm" class="p-6 space-y-6">
+            @csrf
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">
@@ -872,17 +873,25 @@
     document.getElementById('requestAdvanceForm').addEventListener('submit', async function(e) {
         e.preventDefault();
 
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+
         const purpose = document.getElementById('requestPurpose').value.trim();
         const amount = parseFloat(document.getElementById('requestAmount').value);
         const dateNeeded = document.getElementById('requestDate').value;
 
         if (!purpose) {
             showLiquidationToast('Please enter a purpose for your request.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Request';
             return;
         }
 
         if (!amount || amount <= 0) {
             showLiquidationToast('Please enter a valid requested amount.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Request';
             return;
         }
 
@@ -905,6 +914,8 @@
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
                 showLiquidationToast(payload?.message || 'Failed to submit request.', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Request';
                 return;
             }
 
@@ -913,7 +924,10 @@
             closeRequestAdvanceModal();
             showLiquidationToast(payload?.message || 'Cash advance request submitted successfully!', 'success');
         } catch (error) {
+            console.error('Request error:', error);
             showLiquidationToast('Failed to submit request. Please try again.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Request';
         }
     });
 
