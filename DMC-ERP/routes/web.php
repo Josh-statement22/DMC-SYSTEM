@@ -699,8 +699,13 @@ Route::post('/cash-advance/requests', function (Request $request) {
         ->where('id', $requestId)
         ->first();
 
-    // Broadcast the event to accounting department
-    \App\Events\CashAdvanceRequestSubmitted::dispatch($newRequest, Auth::id());
+    // Broadcast the event to accounting department (non-blocking)
+    try {
+        \App\Events\CashAdvanceRequestSubmitted::dispatch($newRequest, Auth::id());
+    } catch (\Exception $e) {
+        // Log the error but don't fail the request - data was already saved
+        \Log::error('Failed to broadcast cash advance request: ' . $e->getMessage());
+    }
 
     return response()->json([
         'message' => 'Cash advance request submitted successfully.',
@@ -812,13 +817,18 @@ Route::patch('/accounting/cash-advance/requests/{requestId}/decision', function 
         ->where('id', (int) $requestId)
         ->first();
 
-    // Broadcast the decision event to the requester
-    \App\Events\CashAdvanceRequestDecisionMade::dispatch(
-        $requestId,
-        $newStatus,
-        $updatedRequest,
-        $actorName
-    );
+    // Broadcast the decision event to the requester (non-blocking)
+    try {
+        \App\Events\CashAdvanceRequestDecisionMade::dispatch(
+            $requestId,
+            $newStatus,
+            $updatedRequest,
+            $actorName
+        );
+    } catch (\Exception $e) {
+        // Log the error but don't fail the request - data was already updated
+        \Log::error('Failed to broadcast cash advance decision: ' . $e->getMessage());
+    }
 
     return response()->json([
         'message' => $newStatus === 'approved'
@@ -1177,6 +1187,10 @@ Route::get('/admin/liquidation', function () {
         ->orderBy('particular_name')
         ->pluck('particular_name', 'id');
 
+    $categories = \Illuminate\Support\Facades\DB::table('categories')
+        ->orderBy('particulars_category')
+        ->pluck('particulars_category', 'id');
+
     $liquidationExpenses = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
         ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
@@ -1195,7 +1209,7 @@ Route::get('/admin/liquidation', function () {
         ->orderBy('liquidation_expenses.expense_date')
         ->get();
 
-    return view('admin.liquidation', compact('particulars', 'liquidationExpenses'));
+    return view('admin.liquidation', compact('particulars', 'liquidationExpenses', 'categories'));
 })->middleware('auth')->name('admin.liquidation');
 
 Route::post('/admin/liquidation/expenses', function (Request $request) {
@@ -1205,7 +1219,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
 
     $validated = $request->validate([
         'expense_date' => 'required|date',
-        'particular_id' => 'required|exists:particulars,id',
+        'category_id' => 'required|exists:categories,id',
         'transaction_details' => 'required|string|max:255',
         'description' => 'nullable|string|max:1000',
         'amount' => 'required|numeric|min:0.01',
@@ -1233,10 +1247,31 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
     }
 
+    // Get the category name
+    $category = DB::table('categories')->where('id', $validated['category_id'])->first();
+    $categoryName = $category->particulars_category ?? 'General';
+
+    // Find or create a particular for this category
+    $particular = DB::table('particulars')
+        ->where('category_id', $validated['category_id'])
+        ->first();
+
+    if (!$particular) {
+        // If no particular exists for this category, create a default one
+        $particularId = DB::table('particulars')->insertGetId([
+            'particular_name' => $categoryName,
+            'category_id' => $validated['category_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    } else {
+        $particularId = $particular->id;
+    }
+
     $expenseId = DB::table('liquidation_expenses')->insertGetId([
         'liquidation_id' => $liquidation->id,
         'expense_date' => $validated['expense_date'],
-        'particular_id' => $validated['particular_id'],
+        'particular_id' => $particularId,
         'transaction_details' => $validated['transaction_details'],
         'description' => $validated['description'] ?? null,
         'amount' => $validated['amount'],

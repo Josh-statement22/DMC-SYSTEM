@@ -35,70 +35,108 @@
     </div>
 
     <!-- CASH ADVANCE SUMMARY CARD -->
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <!-- Left Column - Current Balance -->
-        <div class="xl:col-span-2 rounded-3xl bg-white p-8 shadow-2xl border border-gray-100">
-            <div class="mb-6">
-                <h3 class="text-2xl font-bold text-gray-800">Cash Advance Balance</h3>
-                <p class="text-gray-500 mt-1">View and manage your current cash advance status</p>
-            </div>
-
-            <div class="space-y-6">
-                <!-- Period Selection -->
-                <div class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-xl border border-gray-200">
-                    <button id="prevPeriodBtn" onclick="prevPeriod()" class="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 hover:bg-gray-200 transition">
-                        <i data-feather="chevron-left" class="w-4 h-4"></i>
+    <div>
+        <!-- Current Balance -->
+        <div class="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-5 text-white shadow-2xl md:p-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="flex flex-wrap items-center gap-3">
+                    <button id="prevPeriodBtn" type="button" onclick="prevPeriod()" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
+                        <i data-feather="arrow-left" class="w-4 h-4"></i>
                     </button>
 
-                    <select id="liquidationFilter" onchange="applyLiquidationFilter()" class="bg-transparent text-gray-800 text-sm font-semibold border-none outline-none cursor-pointer">
-                        <option value="week">This Week</option>
-                        <option value="month">This Month</option>
-                    </select>
-
-                    <button id="nextPeriodBtn" onclick="nextPeriod()" class="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 hover:bg-gray-200 transition">
-                        <i data-feather="chevron-right" class="w-4 h-4"></i>
-                    </button>
-
-                    <div class="flex-1 flex items-center gap-2 text-gray-600 justify-end">
-                        <i data-feather="calendar" class="w-4 h-4"></i>
-                        <span id="liquidationPeriodLabel" class="text-sm font-semibold">Loading...</span>
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-200">Selected period</p>
+                        <h2 id="liquidationPeriodLabel" class="mt-1 text-2xl font-bold md:text-3xl">Loading...</h2>
+                        <p id="liquidationPeriodSubLabel" class="mt-1 text-sm text-blue-100">Month view</p>
                     </div>
+
+                    <button id="nextPeriodBtn" type="button" onclick="nextPeriod()" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
+                        <i data-feather="arrow-right" class="w-4 h-4"></i>
+                    </button>
                 </div>
 
-                <!-- Balance Information -->
-                <div class="grid grid-cols-2 gap-6">
-                    <div>
-                        <p class="text-sm font-semibold text-gray-600 mb-1">Current Balance</p>
-                        <p id="currentBalanceAmount" class="text-4xl font-bold text-gray-900">₱0.00</p>
+                <div class="flex flex-col items-start gap-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="inline-flex rounded-2xl border border-white/20 bg-white/10 p-1">
+                            <button id="liquidationWeekToggle" type="button" data-view-toggle="week" onclick="setWeekView()" class="rounded-xl px-4 py-2 text-sm font-semibold text-blue-100 transition hover:text-white">Week</button>
+                            <button id="liquidationMonthToggle" type="button" data-view-toggle="month" onclick="setMonthView(new Date())" class="rounded-xl px-4 py-2 text-sm font-semibold transition hover:text-white bg-white text-blue-900 shadow-lg">Month</button>
+                        </div>
+
+                        <button id="liquidationCurrentWeekBtn" type="button" onclick="setWeekView()" class="inline-flex items-center gap-2 rounded-xl border border-green-300/40 bg-green-500/20 px-4 py-2.5 text-sm font-semibold text-green-100 transition hover:bg-green-500/30">
+                            <i data-feather="calendar" class="w-4 h-4"></i>
+                            Current Week
+                        </button>
+
+                        <button id="liquidationCurrentMonthBtn" type="button" onclick="setMonthView(new Date())" class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20">
+                            <i data-feather="grid" class="w-4 h-4"></i>
+                            Current Month
+                        </button>
+
+                        <button id="openPrevBalanceBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">
+                            <i data-feather="dollar-sign" class="w-4 h-4"></i>
+                            Set Previous Balance
+                        </button>
                     </div>
-                    <div>
-                        <p class="text-sm font-semibold text-gray-600 mb-1">Purpose</p>
-                        <p id="currentBalancePurpose" class="text-lg font-semibold text-gray-800">No approved request yet</p>
+                </div>
+            </div>
+
+            <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div id="liquidationWeekBreakdown" class="flex flex-wrap gap-2">
+                    <!-- Week chips will be rendered here -->
+                </div>
+
+                <div class="w-full rounded-2xl border border-green-300/40 bg-green-500/15 p-6 md:max-w-xl lg:w-[34rem] lg:max-w-none lg:flex-shrink-0">
+                    <div class="flex flex-col items-start gap-3 text-lg font-semibold md:text-xl">
+                        <span id="currentBalanceAmount" class="text-green-100">Current Balance: <span id="balanceAmountDisplay">₱0.00</span></span>
+                        <span id="currentBalancePurpose" class="text-green-50">Total Balance: ₱0.00 • No approved requests yet</span>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Right Column - Summary Cards -->
-        <div class="rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white p-7 shadow-2xl relative overflow-hidden">
-            <div class="absolute -top-12 -right-12 w-40 h-40 bg-blue-300/20 rounded-full blur-3xl"></div>
-            <div class="relative z-10 space-y-6">
-                <div>
-                    <p class="text-sm uppercase tracking-wide text-blue-200">Liquidation Status</p>
-                    <p id="budgetMonthLabel" class="text-xs text-blue-100 mt-2">Expense Summary</p>
-                    <p id="summaryExpendedAmount" class="text-4xl font-extrabold mt-2">₱0.00</p>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="rounded-2xl bg-white/10 backdrop-blur-sm p-4">
-                        <p class="text-xs text-gray-200">Total Expended</p>
-                        <p id="totalExpensesDisplay" class="text-xl font-bold mt-1 text-red-300">₱0.00</p>
+    <!-- Previous Balance Modal -->
+    <div id="previousBalanceModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Set Previous Month Balance</h3>
+                        <p id="previousBalanceModalMonth" class="text-emerald-100 text-sm mt-1"></p>
                     </div>
-                    <div class="rounded-2xl bg-white/10 backdrop-blur-sm p-4">
-                        <p class="text-xs text-gray-200">Remaining</p>
-                        <p id="summaryRemainingAmount" class="text-xl font-bold mt-1 text-green-300">₱0.00</p>
-                    </div>
+                    <button id="closePreviousBalanceBtn" type="button" class="text-white hover:text-emerald-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
                 </div>
             </div>
+
+            <form id="previousBalanceForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
+                    <input id="previousBalanceMonthInput" type="month" class="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl text-emerald-700 font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required="">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Opening Balance</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">PHP</span>
+                        <input id="previousOpeningInput" type="number" min="0" step="0.01" class="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required="">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Previous Balance</label>
+                    <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                        <p id="previousEndingBalanceDisplay" class="text-lg font-bold text-emerald-900">PHP 0.00</p>
+                        <p class="mt-1 text-xs text-emerald-700">Ending balance from the previous month</p>
+                    </div>
+                </div>
+
+                <div class="pt-2 flex items-center gap-3">
+                    <button type="button" id="cancelPreviousBalanceBtn" class="flex-1 px-4 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-all duration-200">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-200">Save Balance</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -207,7 +245,7 @@
     </div>
 
     <!-- EXPENSES TABLE -->
-    <div class="relative overflow-hidden rounded-3xl bg-white p-8 shadow-2xl">
+    <div id="expensesTableContainer" class="relative overflow-hidden rounded-3xl bg-white p-8 shadow-2xl">
         
         <div class="overflow-x-auto">
             <table class="w-full">
@@ -450,7 +488,7 @@
                                    transition-all duration-200 appearance-none bg-white"
                             required>
                         <option value="" disabled selected>Select a category</option>
-                        @foreach($particulars as $id => $name)
+                        @foreach($categories as $id => $name)
                         <option value="{{ $id }}">{{ $name }}</option>
                         @endforeach
                     </select>
@@ -536,19 +574,23 @@
     const CASH_ADVANCE_STORE_ROUTE = @json(route('cash-advance.requests.store'));
     const LIQUIDATION_SUBMIT_ROUTE = @json(route('admin.liquidation.submit'));
     const CASH_ADVANCE_CSRF = @json(csrf_token());
+    
+    // Store total approved amount to calculate current balance
+    let totalApprovedBalance = 0;
+    
     let myCashAdvanceRequestsCache = [];
     let liquidationToastTimeout;
     let requestStatusFilter = 'all';
     let currentViewMode = 'month';
-    let currentPeriodStart = startOfDay(getMonthStart(new Date()));
-    let currentPeriodEnd = endOfDay(getMonthEnd(new Date()));
+    let currentPeriodStart = null;
+    let currentPeriodEnd = null;
     let currentOpeningBalance = 0;
 
     const periodLabel = document.getElementById('liquidationPeriodLabel');
     const periodSubLabel = document.getElementById('liquidationPeriodSubLabel');
     const weekBreakdown = document.getElementById('liquidationWeekBreakdown');
-    const prevPeriodBtn = document.getElementById('liquidationPrevPeriodBtn');
-    const nextPeriodBtn = document.getElementById('liquidationNextPeriodBtn');
+    const prevPeriodBtn = document.getElementById('prevPeriodBtn');
+    const nextPeriodBtn = document.getElementById('nextPeriodBtn');
     const currentWeekBtn = document.getElementById('liquidationCurrentWeekBtn');
     const currentMonthBtn = document.getElementById('liquidationCurrentMonthBtn');
     const weekToggleBtn = document.getElementById('liquidationWeekToggle');
@@ -562,20 +604,42 @@
         if (endDate) params.push('end_date=' + encodeURIComponent(endDate));
         if (params.length) url += '?' + params.join('&');
 
-        const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
+        console.log('[LIQUIDATION] Fetching from:', url);
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            console.log('[LIQUIDATION] Response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[LIQUIDATION] API Error:', response.status, errorText);
+                // Set empty array instead of throwing to prevent initialization from failing
+                myCashAdvanceRequestsCache = [];
+                return myCashAdvanceRequestsCache;
             }
-        });
 
-        if (!response.ok) {
-            throw new Error('Failed to load cash advance requests.');
+            const payload = await response.json();
+            console.log('[LIQUIDATION] API Payload:', payload);
+            
+            myCashAdvanceRequestsCache = Array.isArray(payload?.requests) ? payload.requests : [];
+            console.log('[LIQUIDATION] Cache has', myCashAdvanceRequestsCache.length, 'requests');
+            
+            if (myCashAdvanceRequestsCache.length > 0) {
+                console.log('[LIQUIDATION] First request:', myCashAdvanceRequestsCache[0]);
+            }
+            
+            return myCashAdvanceRequestsCache;
+        } catch (error) {
+            console.error('[LIQUIDATION] Fetch error:', error);
+            myCashAdvanceRequestsCache = [];
+            return myCashAdvanceRequestsCache;
         }
-
-        const payload = await response.json();
-        myCashAdvanceRequestsCache = Array.isArray(payload?.requests) ? payload.requests : [];
-        return myCashAdvanceRequestsCache;
     }
 
     function showLiquidationToast(message, type = 'success') {
@@ -815,14 +879,14 @@
     function updatePeriodToggles() {
         if (weekToggleBtn) {
             weekToggleBtn.classList.toggle('bg-white', currentViewMode === 'week');
-            weekToggleBtn.classList.toggle('text-slate-900', currentViewMode === 'week');
+            weekToggleBtn.classList.toggle('text-blue-900', currentViewMode === 'week');
             weekToggleBtn.classList.toggle('text-blue-100', currentViewMode !== 'week');
             weekToggleBtn.classList.toggle('shadow-lg', currentViewMode === 'week');
         }
 
         if (monthToggleBtn) {
             monthToggleBtn.classList.toggle('bg-white', currentViewMode === 'month');
-            monthToggleBtn.classList.toggle('text-slate-900', currentViewMode === 'month');
+            monthToggleBtn.classList.toggle('text-blue-900', currentViewMode === 'month');
             monthToggleBtn.classList.toggle('text-blue-100', currentViewMode !== 'month');
             monthToggleBtn.classList.toggle('shadow-lg', currentViewMode === 'month');
         }
@@ -857,11 +921,11 @@
 
             return `
                 <button type="button"
-                        class="liquidation-week-chip inline-flex min-w-[140px] flex-col rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-semibold text-blue-100 transition hover:border-white/20 hover:bg-white/10"
+                        class="liquidation-week-chip inline-flex min-w-[140px] flex-col rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition border-white/20 bg-white/10 text-blue-100 hover:border-white/30 hover:bg-white/15"
                         data-range-start="${formatDateKey(range.start)}"
                         data-range-end="${formatDateKey(range.end)}">
                     <span>${label}</span>
-                    <span class="text-xs font-medium text-blue-100/80">${rangeCount.toLocaleString('en-US')} expense${rangeCount === 1 ? '' : 's'}</span>
+                    <span class="text-xs font-medium text-blue-200">${rangeCount.toLocaleString('en-US')} expense${rangeCount === 1 ? '' : 's'}</span>
                 </button>
             `;
         }).join('');
@@ -965,45 +1029,65 @@
     }
 
     function renderEmployeeRequests() {
-        const myRequests = getMyRequests();
-        const tbody = document.getElementById('employeeRequestsTableBody');
-        const emptyState = document.getElementById('employeeRequestsEmpty');
+        try {
+            const myRequests = getMyRequests();
+            console.log('[RENDER] renderEmployeeRequests called with', myRequests.length, 'total requests');
+            
+            const tbody = document.getElementById('employeeRequestsTableBody');
+            const emptyState = document.getElementById('employeeRequestsEmpty');
 
-        if (!tbody || !emptyState) return;
+            if (!tbody) {
+                console.error('[RENDER] tbody element not found!');
+                return;
+            }
+            if (!emptyState) {
+                console.error('[RENDER] emptyState element not found!');
+                return;
+            }
 
-        updateRequestStatusFilterButtons();
+            updateRequestStatusFilterButtons();
 
-        const todaysRequests = myRequests.filter(request => isTodayDate(request.request_date));
-        const filteredRequests = requestStatusFilter === 'all'
-            ? todaysRequests
-            : todaysRequests.filter(request => normalizeRequestStatus(request.status) === requestStatusFilter);
+            // Show all requests (bypass period filtering for now)
+            console.log('[RENDER] Showing ALL requests without period filter');
+            
+            let filteredRequests = myRequests;
+            if (requestStatusFilter !== 'all') {
+                filteredRequests = filteredRequests.filter(request => normalizeRequestStatus(request.status) === requestStatusFilter);
+            }
 
-        if (filteredRequests.length === 0) {
-            tbody.innerHTML = '';
-            emptyState.textContent = requestStatusFilter === 'all'
-                ? 'No cash advance requests submitted today.'
-                : `No ${requestStatusFilter} cash advance requests submitted today.`;
-            emptyState.classList.remove('hidden');
+            console.log('[RENDER] filteredRequests.length =', filteredRequests.length, 'for filter:', requestStatusFilter);
+
+            if (filteredRequests.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.textContent = myRequests.length === 0
+                    ? 'No cash advance requests found.'
+                    : requestStatusFilter === 'all'
+                    ? 'No cash advance requests submitted in this period.'
+                    : `No ${requestStatusFilter} cash advance requests submitted in this period.`;
+                emptyState.classList.remove('hidden');
+                renderCashAdvanceNotifications(myRequests);
+                renderApprovedSummary(myRequests);
+                return;
+            }
+
+            emptyState.classList.add('hidden');
             renderCashAdvanceNotifications(myRequests);
+            tbody.innerHTML = filteredRequests.map(request => `
+                <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                    <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.request_date)}</td>
+                    <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.reviewed_at)}</td>
+                    <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.purpose || '-')}</td>
+                    <td class="py-3 px-3 text-sm text-right font-semibold text-gray-900">${formatCurrency(request.approved_amount || request.requested_amount || 0)}</td>
+                    <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.reviewer_name || '-')}</td>
+                    <td class="py-3 px-3 text-sm text-center">${getStatusBadge(request.status)}</td>
+                    <td class="py-3 px-3 text-sm text-gray-600">${escapeHtml(request.accounting_remarks || '-')}</td>
+                </tr>
+            `).join('');
+
             renderApprovedSummary(myRequests);
-            return;
+        } catch (error) {
+            console.error('[RENDER] Error in renderEmployeeRequests:', error);
         }
-
-        emptyState.classList.add('hidden');
-        renderCashAdvanceNotifications(myRequests);
-        tbody.innerHTML = filteredRequests.map(request => `
-            <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
-                <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.request_date)}</td>
-                <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.reviewed_at)}</td>
-                <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.purpose || '-')}</td>
-                <td class="py-3 px-3 text-sm text-right font-semibold text-gray-900">${formatCurrency(request.approved_amount || request.requested_amount || 0)}</td>
-                <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.reviewer_name || '-')}</td>
-                <td class="py-3 px-3 text-sm text-center">${getStatusBadge(request.status)}</td>
-                <td class="py-3 px-3 text-sm text-gray-600">${escapeHtml(request.accounting_remarks || '-')}</td>
-            </tr>
-        `).join('');
-
-        renderApprovedSummary(myRequests);
     }
 
     function getRequestPeriodDate(request) {
@@ -1011,42 +1095,49 @@
     }
 
     function renderApprovedSummary(myRequests) {
-        const approvedRequests = myRequests
-            .filter(request => (request.status || '').toLowerCase() === 'approved')
-            .filter(request => isWithinRange(getRequestPeriodDate(request), currentPeriodStart, currentPeriodEnd))
-            .sort((a, b) => parseDate(getRequestPeriodDate(b)) - parseDate(getRequestPeriodDate(a)));
+        try {
+            // Show ALL approved requests (bypass period filtering)
+            const approvedRequests = myRequests
+                .filter(request => (request.status || '').toLowerCase() === 'approved')
+                .sort((a, b) => parseDate(getRequestPeriodDate(b)) - parseDate(getRequestPeriodDate(a)));
 
-        const currentBalanceAmount = document.getElementById('currentBalanceAmount');
-        const currentBalancePurpose = document.getElementById('currentBalancePurpose');
-        const liquidationPeriodLabel = document.getElementById('liquidationPeriodLabel');
+            const currentBalanceAmount = document.getElementById('currentBalanceAmount');
+            const balanceAmountDisplay = document.getElementById('balanceAmountDisplay');
+            const currentBalancePurpose = document.getElementById('currentBalancePurpose');
 
-        if (!currentBalanceAmount || !currentBalancePurpose) return;
+            console.log('[BALANCE] approvedRequests.length =', approvedRequests.length, '(showing ALL, no period filter)');
 
-        if (approvedRequests.length === 0) {
-            currentBalanceAmount.textContent = '₱0.00';
-            currentBalancePurpose.textContent = 'No approved request yet';
-            if (liquidationPeriodLabel) {
-                liquidationPeriodLabel.textContent = 'Current cycle';
+            if (!currentBalanceAmount || !currentBalancePurpose) {
+                console.error('[BALANCE] Missing balance elements');
+                return;
             }
-            renderExpenseSummary(0);
-            return;
+
+            if (approvedRequests.length === 0) {
+                totalApprovedBalance = 0;
+                if (balanceAmountDisplay) balanceAmountDisplay.textContent = '₱0.00';
+                currentBalancePurpose.textContent = 'Total Balance: ₱0.00 • No approved requests';
+                console.log('[BALANCE] No approved requests found');
+                renderExpenseSummary();
+                return;
+            }
+
+            // Sum all approved amounts
+            const totalApprovedAmount = approvedRequests.reduce((sum, request) => {
+                const amount = Number(request.approved_amount || request.requested_amount || 0);
+                return sum + amount;
+            }, 0);
+            
+            // Store total approved amount for later use
+            totalApprovedBalance = totalApprovedAmount;
+            
+            console.log('[BALANCE] totalApprovedAmount =', totalApprovedAmount);
+            
+            currentBalancePurpose.textContent = 'Total Balance: ' + formatCurrency(totalApprovedAmount) + ' • ' + approvedRequests.length + ' request' + (approvedRequests.length > 1 ? 's' : '');
+
+            renderExpenseSummary();
+        } catch (error) {
+            console.error('[BALANCE] Error in renderApprovedSummary:', error);
         }
-
-        const approvedAmount = approvedRequests.reduce((total, request) => {
-            return total + Number(request.approved_amount || request.requested_amount || 0);
-        }, 0);
-        const latestApproved = approvedRequests[0];
-        const approvedAmount = Number(latestApproved.approved_amount || latestApproved.requested_amount || 0);
-        currentBalanceAmount.textContent = formatCurrency(approvedAmount);
-        currentBalancePurpose.textContent = latestApproved.purpose || 'Approved cash advance';
-
-        if (liquidationPeriodLabel) {
-            const fromDate = formatDate(latestApproved.request_date);
-            const toDate = formatDate(latestApproved.sent_date || latestApproved.reviewed_at);
-            liquidationPeriodLabel.textContent = `${fromDate} - ${toDate}`;
-        }
-
-        renderExpenseSummary(approvedAmount);
     }
 
     function getCurrentExpenseTotal() {
@@ -1079,16 +1170,17 @@
         const summaryExpendedAmount = document.getElementById('summaryExpendedAmount');
         const totalExpensesDisplay = document.getElementById('totalExpensesDisplay');
         const summaryRemainingAmount = document.getElementById('summaryRemainingAmount');
-        const currentBalanceAmount = document.getElementById('currentBalanceAmount');
+        const balanceAmountDisplay = document.getElementById('balanceAmountDisplay');
 
-        if (!summaryExpendedAmount || !summaryRemainingAmount || !currentBalanceAmount) {
+        if (!summaryExpendedAmount || !summaryRemainingAmount) {
             return;
         }
 
         const expenseTotal = getCurrentExpenseTotal();
-        const resolvedOpeningBalance = openingBalance === null
-            ? Number((currentBalanceAmount.textContent || '').replace(/[^0-9.-]+/g, '')) || 0
-            : Number(openingBalance);
+        // Use the stored total approved balance if no opening balance is provided
+        const resolvedOpeningBalance = openingBalance !== null 
+            ? Number(openingBalance)
+            : totalApprovedBalance || 0;
         const remaining = resolvedOpeningBalance - expenseTotal;
 
         if (totalExpensesAmount) {
@@ -1099,6 +1191,11 @@
             totalExpensesDisplay.textContent = formatCurrency(expenseTotal);
         }
         summaryRemainingAmount.textContent = formatCurrency(remaining);
+        
+        // Update the current balance display to show remaining amount
+        if (balanceAmountDisplay) {
+            balanceAmountDisplay.textContent = formatCurrency(remaining);
+        }
     }
 
     // Week and Month navigation helpers
@@ -1309,12 +1406,113 @@
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('expenseDate').value = today;
         
+        // Reset category dropdown
+        document.getElementById('expenseCategory').value = '';
+        
         // Refresh feather icons
         setTimeout(() => feather.replace(), 10);
     }
 
     function printLiquidationSummary() {
-        window.print();
+        // Get the table body rows
+        const tableBody = document.getElementById('expensesTableBody');
+        const rows = tableBody.querySelectorAll('tr:not(#emptyExpenseRow)');
+        
+        // Build table HTML with only needed columns
+        let tableRowsHTML = '';
+        let totalAmount = 0;
+        
+        rows.forEach(row => {
+            const date = row.dataset.expenseDate || row.cells[0]?.textContent || '';
+            const category = row.dataset.expenseCategory || row.cells[1]?.textContent || '';
+            const particulars = row.cells[2]?.textContent || '';
+            const amount = parseFloat(row.dataset.expenseAmount) || 0;
+            
+            totalAmount += amount;
+            
+            const formattedAmount = amount.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            const formattedDate = new Date(date).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            tableRowsHTML += `
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 12px;">${formattedDate}</td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">${category}</td>
+                    <td style="border: 1px solid #ddd; padding: 12px;">${particulars}</td>
+                    <td style="border: 1px solid #ddd; padding: 12px; text-align: right;">₱${formattedAmount}</td>
+                </tr>
+            `;
+        });
+        
+        const totalFormatted = totalAmount.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+        
+        // Get the table HTML with header info
+        const tableHTML = `
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Liquidation Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+                        th { background-color: #f5f5f5; font-weight: bold; }
+                        tfoot tr { background-color: #f9f9f9; }
+                        .print-header { margin-bottom: 30px; }
+                        .print-header h1 { margin: 0 0 10px 0; color: #333; }
+                        .print-header p { margin: 5px 0; color: #666; font-size: 14px; }
+                        .amount-right { text-align: right; }
+                        @media print {
+                            body { margin: 0; }
+                            .no-print { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="print-header">
+                        <h1>Liquidation Report</h1>
+                        <p><strong>Date Printed:</strong> ${new Date().toLocaleDateString()}</p>
+                        <p><strong>Employee:</strong> ${document.querySelector('h2')?.textContent || 'N/A'}</p>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Particulars</th>
+                                <th class="amount-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRowsHTML}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="2" style="border: 1px solid #ddd; padding: 12px; font-weight: bold; text-align: right;">Total Expenses:</td>
+                                <td style="border: 1px solid #ddd; padding: 12px; font-weight: bold;">₱${totalFormatted}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </body>
+            </html>
+        `;
+        
+        // Create a new window for printing
+        const printWindow = window.open('', '', 'height=600,width=800');
+        printWindow.document.write(tableHTML);
+        printWindow.document.close();
+        printWindow.print();
     }
 
     function closeAddExpenseModal() {
@@ -1326,14 +1524,69 @@
         document.getElementById('addExpenseForm').reset();
     }
 
+    async function submitLiquidationForReview() {
+        try {
+            // Get the current month and year
+            const today = new Date();
+            const monthKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+
+            // Check if there are expenses
+            const expenseRows = document.querySelectorAll('#expensesTableBody tr:not(#emptyExpenseRow)');
+            if (expenseRows.length === 0) {
+                showLiquidationToast('Please add at least one expense before submitting.', 'error');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitLiquidationReviewBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+            }
+
+            const response = await fetch('{{ route('admin.liquidation.submit') }}', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': CASH_ADVANCE_CSRF,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    month_key: monthKey
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result?.message || 'Failed to submit liquidation for review.');
+            }
+
+            showLiquidationToast('Liquidation submitted for accounting review!', 'success');
+            
+            // Refresh the dashboard after submission
+            setTimeout(() => {
+                renderLiquidationDashboard();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error submitting liquidation:', error);
+            showLiquidationToast(error.message || 'Failed to submit liquidation. Please try again.', 'error');
+        } finally {
+            const submitBtn = document.getElementById('submitLiquidationReviewBtn');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit for Review';
+            }
+        }
+    }
+
     // Handle form submission
     document.getElementById('addExpenseForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const date        = document.getElementById('expenseDate').value;
-        const particularSelect = document.getElementById('expenseCategory');
-        const particularId = particularSelect.value;
-        const particularName = particularSelect.options[particularSelect.selectedIndex]?.text || '';
+        const categoryId  = document.getElementById('expenseCategory').value;
         const details     = document.getElementById('expenseDetails').value;
         const description = document.getElementById('expenseDescription').value;
         const amount      = parseFloat(document.getElementById('expenseAmount').value);
@@ -1341,7 +1594,7 @@
         const formData = new FormData();
         formData.append('_token', document.querySelector('#addExpenseForm input[name="_token"]').value);
         formData.append('expense_date', date);
-        formData.append('particular_id', particularId);
+        formData.append('category_id', categoryId);
         formData.append('transaction_details', details);
         formData.append('description', description);
         formData.append('amount', amount);
@@ -1624,8 +1877,79 @@
         monthToggleBtn.addEventListener('click', () => setMonthView(currentPeriodStart));
     }
 
+    // Previous Balance Modal Event Listeners
+    const openPrevBalanceBtn = document.getElementById('openPrevBalanceBtn');
+    const closePreviousBalanceBtn = document.getElementById('closePreviousBalanceBtn');
+    const cancelPreviousBalanceBtn = document.getElementById('cancelPreviousBalanceBtn');
+    const previousBalanceModal = document.getElementById('previousBalanceModal');
+
+    if (openPrevBalanceBtn) {
+        openPrevBalanceBtn.addEventListener('click', function() {
+            if (previousBalanceModal) previousBalanceModal.classList.remove('hidden');
+        });
+    }
+
+    if (closePreviousBalanceBtn) {
+        closePreviousBalanceBtn.addEventListener('click', function() {
+            if (previousBalanceModal) previousBalanceModal.classList.add('hidden');
+        });
+    }
+
+    if (cancelPreviousBalanceBtn) {
+        cancelPreviousBalanceBtn.addEventListener('click', function() {
+            if (previousBalanceModal) previousBalanceModal.classList.add('hidden');
+        });
+    }
+
+    if (previousBalanceModal) {
+        previousBalanceModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.classList.add('hidden');
+            }
+        });
+    }
+
     if (submitLiquidationReviewBtn) {
         submitLiquidationReviewBtn.addEventListener('click', submitLiquidationForReview);
+    }
+
+    // ===============================================
+    // DASHBOARD INITIALIZATION
+    // ===============================================
+    function renderLiquidationDashboard() {
+        updatePeriodLabels();
+        updatePeriodToggles();
+        renderWeekBreakdown();
+        renderEmployeeRequests();
+        renderExpenseSummary();
+    }
+
+    async function initializeLiquidationDashboard() {
+        try {
+            console.log('Starting dashboard initialization...');
+            const requests = await fetchMyCashAdvanceRequests();
+            console.log('Fetched requests:', requests);
+            
+            const monthStart = getMonthStart(new Date());
+            console.log('Setting month view for:', monthStart);
+            setMonthView(monthStart);
+            
+            console.log('Rendering dashboard...');
+            renderLiquidationDashboard();
+            
+            feather.replace();
+            console.log('Dashboard initialization complete');
+        } catch (error) {
+            console.error('Error initializing dashboard:', error);
+            showLiquidationToast('Failed to load cash advance data.', 'error');
+        }
+    }
+
+    // Initialize on page load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeLiquidationDashboard);
+    } else {
+        initializeLiquidationDashboard();
     }
 
     // ===============================================
