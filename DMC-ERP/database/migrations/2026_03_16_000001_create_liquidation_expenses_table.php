@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('liquidation_id')->constrained()->cascadeOnDelete();
             $table->date('expense_date');
-            $table->foreignId('particular_id')->constrained();
+            $table->foreignId('category_id')->constrained('categories')->onDelete('cascade');
             $table->string('transaction_details')->nullable();
             $table->text('description')->nullable();
             $table->decimal('amount', 12, 2);

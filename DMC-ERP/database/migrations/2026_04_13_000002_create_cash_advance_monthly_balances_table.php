@@ -15,8 +15,6 @@ return new class extends Migration
             $table->id();
             $table->unsignedSmallInteger('year');
             $table->unsignedTinyInteger('month');
-            $table->decimal('carryover_balance', 12, 2)->default(0);
-            $table->decimal('added_budget', 12, 2)->default(0);
             $table->decimal('opening_balance', 12, 2)->default(0);
             $table->decimal('released_total', 12, 2)->default(0);
             $table->decimal('expense_total', 12, 2)->default(0);

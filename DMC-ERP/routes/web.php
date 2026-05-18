@@ -63,13 +63,15 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
 
         $expenseRowsByLiquidation = DB::table('liquidation_expenses')
             ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+            ->join('categories', 'particulars.category_id', '=', 'categories.id')
             ->select(
                 'liquidation_expenses.liquidation_id',
                 'liquidation_expenses.expense_date',
                 'liquidation_expenses.transaction_details',
                 'liquidation_expenses.description',
                 'liquidation_expenses.amount',
-                'particulars.particulars_category as category_name'
+                'particulars.particular_name',
+                'categories.particulars_category as category_name'
             )
             ->orderByDesc('liquidation_expenses.expense_date')
             ->get()
@@ -597,6 +599,24 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
     return view('accounting.liquidation', compact('liquidationRecords', 'selectedEmployee'));
 })->middleware('auth')->name('accounting.liquidation.employee');
 
+Route::get('/accounting/liquidate-expenses', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $employees = DB::table('users')
+        ->where('role_id', 2)
+        ->select('id', 'name', 'employee_id')
+        ->orderBy('name')
+        ->get();
+
+    $categories = DB::table('categories')
+        ->orderBy('particulars_category')
+        ->get();
+
+    return view('accounting.liquidate-expenses', compact('employees', 'categories'));
+})->middleware('auth')->name('accounting.liquidate-expenses');
+
 Route::get('/accounting/cash-advance/requests', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {
         return $redirect;
@@ -692,6 +712,8 @@ Route::get('/cash-advance/requests/my', function () {
     if ($redirect = redirect_if_role_not_allowed([2])) {
         return $redirect;
     }
+    $start = request()->query('start_date');
+    $end = request()->query('end_date');
 
     $requests = DB::table('cash_advance_requests')
         ->leftJoin('users as reviewers', 'cash_advance_requests.reviewed_by', '=', 'reviewers.id')
@@ -708,11 +730,22 @@ Route::get('/cash-advance/requests/my', function () {
             'cash_advance_requests.submitted_at',
             'cash_advance_requests.reviewed_at',
             'cash_advance_requests.released_at',
+            DB::raw('COALESCE(cash_advance_requests.released_at, cash_advance_requests.reviewed_at, cash_advance_requests.submitted_at, cash_advance_requests.request_date) as sent_date'),
             DB::raw('COALESCE(cash_advance_requests.sent_by_name, cash_advance_requests.approved_by_name, reviewers.name) as reviewer_name'),
             DB::raw('COALESCE(cash_advance_requests.approved_by_name, reviewers.name) as approved_by_name'),
             DB::raw('COALESCE(cash_advance_requests.sent_by_name, reviewers.name) as sent_by_name')
         )
         ->where('cash_advance_requests.requester_id', Auth::id())
+        ->when($start || $end, function ($query) use ($start, $end) {
+            $col = DB::raw('COALESCE(cash_advance_requests.released_at, cash_advance_requests.reviewed_at, cash_advance_requests.submitted_at, cash_advance_requests.request_date)');
+            if ($start && $end) {
+                $query->whereBetween($col, [$start, $end]);
+            } elseif ($start) {
+                $query->where($col, '>=', $start);
+            } elseif ($end) {
+                $query->where($col, '<=', $end);
+            }
+        })
         ->orderByDesc(DB::raw('COALESCE(cash_advance_requests.submitted_at, cash_advance_requests.created_at)'))
         ->get();
 
@@ -983,7 +1016,7 @@ Route::get('/admin/additem', function () {
     }
 
     $projects = DB::table('projects')->orderBy('project_name')->get();
-    $categories = DB::table('categories')->orderBy('category_name')->get();
+    $categories = DB::table('item_categories')->orderBy('category_name')->get();
     return view('admin.additem', compact('projects', 'categories'));
 })->middleware('auth')->name('admin.additem');
 
@@ -1012,7 +1045,7 @@ Route::post('/admin/additem', function () {
             'item_number' => 'required|string|max:255',
             'item_name' => 'required|string|max:255',
             'item_description' => 'required|string',
-            'category_id' => 'required|integer|exists:categories,id',
+            'category_id' => 'required|integer|exists:item_categories,id',
             'supplier_name' => 'required|string|max:255',
             'supplier_phone' => 'required|string|max:255',
             'supplier_address' => 'required|string',
@@ -1059,7 +1092,7 @@ Route::post('/admin/additem', function () {
 
     // Handle category: create new if add_new is selected
     if (request('category_id') === 'add_new') {
-        $categoryId = DB::table('categories')->insertGetId([
+        $categoryId = DB::table('item_categories')->insertGetId([
             'category_name' => request('new_category'),
             'created_at' => now(),
             'updated_at' => now(),
@@ -1141,18 +1174,20 @@ Route::get('/admin/liquidation', function () {
     }
 
     $particulars = \Illuminate\Support\Facades\DB::table('particulars')
-        ->orderBy('particulars_category')
-        ->pluck('particulars_category', 'id');
+        ->orderBy('particular_name')
+        ->pluck('particular_name', 'id');
 
     $liquidationExpenses = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
         ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
-        ->where('liquidations.user_id', $user->id)
+        ->join('categories', 'particulars.category_id', '=', 'categories.id')
+        ->where('liquidation_expenses.liquidation_id', $liquidation->id)
         ->select(
             'liquidation_expenses.id',
             'liquidation_expenses.expense_date',
             'liquidation_expenses.particular_id',
-            'particulars.particulars_category as category_name',
+            'particulars.particular_name',
+            'categories.particulars_category as category_name',
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
             'liquidation_expenses.amount'
@@ -1211,6 +1246,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
 
     $expense = DB::table('liquidation_expenses')
         ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->join('categories', 'particulars.category_id', '=', 'categories.id')
         ->where('liquidation_expenses.id', $expenseId)
         ->select(
             'liquidation_expenses.id',
@@ -1218,7 +1254,8 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
             'liquidation_expenses.amount',
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
-            'particulars.particulars_category as category_name'
+            'particulars.particular_name',
+            'categories.particulars_category as category_name'
         )
         ->first();
 
@@ -1636,7 +1673,7 @@ Route::get('/test-items', function () {
 
 // Get all categories
 Route::get('/api/categories', function () {
-    $categories = DB::table('categories')
+    $categories = DB::table('item_categories')
         ->select('id', 'category_name')
         ->orderBy('category_name', 'asc')
         ->get();
@@ -1649,7 +1686,7 @@ Route::get('/api/categories', function () {
 
 // Get items by category
 Route::get('/api/categories/{categoryId}/items', function ($categoryId) {
-    $category = DB::table('categories')
+    $category = DB::table('item_categories')
         ->where('id', $categoryId)
         ->select('id', 'category_name')
         ->first();
@@ -1728,10 +1765,10 @@ Route::get('/api/categories/items/{itemId}/details', function ($itemId) {
 // Create new category
 Route::post('/api/categories', function (Request $request) {
     $validated = $request->validate([
-        'category_name' => 'required|string|max:255|unique:categories,category_name'
+        'category_name' => 'required|string|max:255|unique:item_categories,category_name'
     ]);
     
-    $category = DB::table('categories')->insertGetId([
+    $category = DB::table('item_categories')->insertGetId([
         'category_name' => $validated['category_name'],
         'created_at' => now(),
         'updated_at' => now()

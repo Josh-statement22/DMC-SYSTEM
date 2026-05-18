@@ -77,11 +77,17 @@
                 <span class="menu-text">Dashboard</span>
             </a>
 
-                    <a id="accountingLiquidationNav" href="{{ route('accounting.liquidation') }}"
-                       class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.liquidation*') ? $active : $normal }}">
+            <a id="accountingLiquidateExpensesNav" href="{{ route('accounting.liquidate-expenses') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.liquidate-expenses') ? $active : $normal }}">
+                <i data-feather="receipt"></i>
+                <span class="menu-text">Liquidate Expenses</span>
+            </a>
+
+            <a id="accountingLiquidationNav" href="{{ route('accounting.liquidation') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.liquidation*') ? $active : $normal }}">
                 <i data-feather="clipboard"></i>
                 <span class="menu-text">Liquidation Tracking</span>
-                    </a>
+            </a>
         </nav>
 
         <div class="p-4 border-t text-xs text-gray-400 text-center">

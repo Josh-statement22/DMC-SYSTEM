@@ -13,8 +13,6 @@ class CashAdvanceMonthlyBalance extends Model
     protected $fillable = [
         'year',
         'month',
-        'carryover_balance',
-        'added_budget',
         'opening_balance',
         'released_total',
         'expense_total',
@@ -25,8 +23,6 @@ class CashAdvanceMonthlyBalance extends Model
     ];
 
     protected $casts = [
-        'carryover_balance' => 'decimal:2',
-        'added_budget' => 'decimal:2',
         'opening_balance' => 'decimal:2',
         'released_total' => 'decimal:2',
         'expense_total' => 'decimal:2',
