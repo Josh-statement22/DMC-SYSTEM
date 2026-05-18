@@ -26,12 +26,30 @@
             @endif
         </div>
 
-        @if($selectedEmployeeData)
-            <a href="{{ route('accounting.liquidation') }}" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-teal-200 hover:text-teal-700 hover:shadow-md">
-                <i data-feather="arrow-left" class="w-4 h-4"></i>
-                Back to employee list
-            </a>
-        @endif
+        <div class="flex flex-wrap items-center gap-3">
+            <div class="relative" id="liquidationQueueWrapper">
+                <button id="liquidationQueueBtn" type="button" class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100">
+                    <i data-feather="inbox" class="w-4 h-4"></i>
+                    <span id="liquidationQueueLabel">Liquidation Queue</span>
+                </button>
+
+                <div id="liquidationQueuePanel" class="hidden absolute right-0 top-14 z-40 w-[min(28rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                    <div class="border-b border-gray-100 px-4 py-3">
+                        <p class="text-sm font-bold text-gray-900">Liquidation Review Queue</p>
+                        <p class="text-xs font-medium text-gray-500">Submitted liquidations waiting for accounting decision</p>
+                    </div>
+                    <div id="liquidationQueueList" class="max-h-96 space-y-3 overflow-y-auto p-4"></div>
+                    <p id="liquidationQueueEmpty" class="hidden px-4 py-8 text-center text-sm text-gray-500">No submitted liquidations for review.</p>
+                </div>
+            </div>
+
+            @if($selectedEmployeeData)
+                <a href="{{ route('accounting.liquidation') }}" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-teal-200 hover:text-teal-700 hover:shadow-md">
+                    <i data-feather="arrow-left" class="w-4 h-4"></i>
+                    Back to employee list
+                </a>
+            @endif
+        </div>
     </div>
 
     <div class="rounded-3xl border border-slate-800 bg-slate-950 p-5 text-white shadow-2xl md:p-6">
@@ -274,6 +292,8 @@
     const selectedEmployee = @json($selectedEmployeeData);
     const isDetailView = Boolean(selectedEmployee);
     const employeeRouteTemplate = @json(route('accounting.liquidation.employee', ['employee' => '__EMPLOYEE__']));
+    const liquidationSubmittedRoute = @json(route('accounting.liquidation.submitted'));
+    const liquidationDecisionRouteTemplate = @json(route('accounting.liquidation.decision', ['liquidation' => '__LIQUIDATION__']));
     const monthlyBalanceShowRoute = @json(route('accounting.cash-advance.monthly-balance.show'));
     const monthlyBalanceStoreRoute = @json(route('accounting.cash-advance.monthly-balance.store'));
 
@@ -281,6 +301,9 @@
     let currentPeriodStart = startOfDay(getMonthStart(new Date()));
     let currentPeriodEnd = endOfDay(getMonthEnd(new Date()));
     let sortState = { field: 'total_amount', direction: 'desc' };
+    let liquidationQueueRecords = liquidationRecords.filter((record) => String(record.status || '').toLowerCase() === 'submitted');
+    let liquidationQueuePollingInterval = null;
+    let liquidationQueueFetchInProgress = false;
 
     const periodLabel = document.getElementById('liquidationPeriodLabel');
     const periodSubLabel = document.getElementById('liquidationPeriodSubLabel');
@@ -302,6 +325,12 @@
     const summaryAmountSent = document.getElementById('summaryAmountSent');
     const summaryTotalExpenses = document.getElementById('summaryTotalExpenses');
     const summaryRemainingBalance = document.getElementById('summaryRemainingBalance');
+    const liquidationQueueWrapper = document.getElementById('liquidationQueueWrapper');
+    const liquidationQueueBtn = document.getElementById('liquidationQueueBtn');
+    const liquidationQueuePanel = document.getElementById('liquidationQueuePanel');
+    const liquidationQueueLabel = document.getElementById('liquidationQueueLabel');
+    const liquidationQueueList = document.getElementById('liquidationQueueList');
+    const liquidationQueueEmpty = document.getElementById('liquidationQueueEmpty');
 
     // Previous balances UI elements
     const openPrevBalanceBtn = document.getElementById('openPrevBalanceBtn');
@@ -452,7 +481,13 @@
             return new Date();
         }
 
-        const [year, month, day] = String(value).split('-').map(Number);
+        const dateString = String(value);
+        const isoDateMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (isoDateMatch) {
+            return new Date(Number(isoDateMatch[1]), Number(isoDateMatch[2]) - 1, Number(isoDateMatch[3]));
+        }
+
+        const [year, month, day] = dateString.split('-').map(Number);
         return new Date(year, month - 1, day);
     }
 
@@ -606,6 +641,145 @@
         summaryAmountSent.textContent = formatCurrency(totals.sent);
         summaryTotalExpenses.textContent = formatCurrency(totals.expenses);
         summaryRemainingBalance.textContent = formatCurrency(totals.remaining);
+    }
+
+    function normalizeLiquidationStatus(status) {
+        return String(status || 'pending').toLowerCase();
+    }
+
+    function getSubmittedLiquidations() {
+        return liquidationQueueRecords
+            .filter((record) => normalizeLiquidationStatus(record.status) === 'submitted')
+            .sort((left, right) => new Date(right.submitted_at || right.record_timestamp || 0) - new Date(left.submitted_at || left.record_timestamp || 0));
+    }
+
+    function syncLiquidationQueueRecords(records) {
+        liquidationQueueRecords = Array.isArray(records) ? records : [];
+
+        liquidationQueueRecords.forEach((incomingRecord) => {
+            const existingIndex = liquidationRecords.findIndex((record) => Number(record.id) === Number(incomingRecord.id));
+
+            if (existingIndex === -1) {
+                liquidationRecords.push(incomingRecord);
+                return;
+            }
+
+            liquidationRecords[existingIndex] = {
+                ...liquidationRecords[existingIndex],
+                ...incomingRecord,
+            };
+        });
+    }
+
+    async function fetchSubmittedLiquidationQueue() {
+        if (liquidationQueueFetchInProgress) {
+            return;
+        }
+
+        liquidationQueueFetchInProgress = true;
+
+        try {
+            const response = await fetch(liquidationSubmittedRoute, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const payload = await response.json().catch(() => ({}));
+            syncLiquidationQueueRecords(payload?.liquidations || []);
+            renderLiquidationQueue();
+        } catch (error) {
+            // Keep the existing queue visible if polling fails.
+        } finally {
+            liquidationQueueFetchInProgress = false;
+        }
+    }
+
+    function renderLiquidationQueue() {
+        if (!liquidationQueueLabel || !liquidationQueueList || !liquidationQueueEmpty) {
+            return;
+        }
+
+        const submittedRecords = getSubmittedLiquidations();
+        liquidationQueueLabel.textContent = `Liquidation Queue${submittedRecords.length ? ': ' + submittedRecords.length : ''}`;
+
+        if (submittedRecords.length === 0) {
+            liquidationQueueList.innerHTML = '';
+            liquidationQueueEmpty.classList.remove('hidden');
+            return;
+        }
+
+        liquidationQueueEmpty.classList.add('hidden');
+        liquidationQueueList.innerHTML = submittedRecords.map((record) => `
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-bold">${record.name || 'Employee'} submitted ${record.period_month_label || record.cutoff_period || 'liquidation'}</p>
+                        <p class="mt-1 text-xs font-medium">Submitted: ${formatDate(record.submitted_at || record.record_date)}</p>
+                        <p class="mt-1 text-xs font-medium">Amount: ${formatCurrency(record.balance_sent || 0)} | Expenses: ${formatCurrency(record.total_expenses || 0)}</p>
+                    </div>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <button type="button" class="liquidation-decision-btn rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700" data-liquidation-id="${record.id}" data-decision="approved">Approve</button>
+                    <button type="button" class="liquidation-decision-btn rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-700" data-liquidation-id="${record.id}" data-decision="rejected">Reject</button>
+                </div>
+            </div>
+        `).join('');
+
+        document.querySelectorAll('.liquidation-decision-btn').forEach((button) => {
+            button.addEventListener('click', () => submitLiquidationDecision(button.dataset.liquidationId, button.dataset.decision));
+        });
+    }
+
+    async function submitLiquidationDecision(liquidationId, decision) {
+        if (!liquidationId || !decision) {
+            return;
+        }
+
+        const promptedRemarks = decision === 'rejected' ? window.prompt('Reason for rejection?', '') : '';
+        if (decision === 'rejected' && promptedRemarks === null) {
+            return;
+        }
+
+        const remarks = promptedRemarks || '';
+        const decisionUrl = liquidationDecisionRouteTemplate.replace('__LIQUIDATION__', liquidationId);
+
+        try {
+            const response = await fetch(decisionUrl, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': @json(csrf_token()),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ decision, remarks }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || 'Failed to update liquidation decision.');
+            }
+
+            const record = liquidationRecords.find((item) => Number(item.id) === Number(liquidationId));
+            if (record) {
+                record.status = payload.status || decision;
+                record.remarks = payload.remarks || remarks;
+                record.approved_at = payload.approved_at || null;
+            }
+
+            liquidationQueueRecords = liquidationQueueRecords.filter((item) => Number(item.id) !== Number(liquidationId));
+            renderLiquidationQueue();
+            renderLiquidationDashboard();
+            showAccountingToast(payload?.message || 'Liquidation decision saved.', 'success');
+        } catch (error) {
+            showAccountingToast(error.message || 'Failed to update liquidation decision.', 'error');
+        }
     }
 
     function getEmployeeSummaries(records) {
@@ -789,6 +963,7 @@
         const visibleRecords = getVisibleRecords();
         updatePeriodToggles();
         updatePeriodLabels();
+        renderLiquidationQueue();
         renderSummaryCards(visibleRecords);
         renderWeekBreakdown(visibleRecords);
 
@@ -831,6 +1006,23 @@
         monthToggleBtn.addEventListener('click', () => setMonthView(currentPeriodStart));
     }
 
+    if (liquidationQueueBtn && liquidationQueuePanel) {
+        liquidationQueueBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            liquidationQueuePanel.classList.toggle('hidden');
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        if (
+            liquidationQueueWrapper &&
+            liquidationQueuePanel &&
+            !liquidationQueueWrapper.contains(event.target)
+        ) {
+            liquidationQueuePanel.classList.add('hidden');
+        }
+    });
+
     if (searchInput) {
         searchInput.addEventListener('input', () => renderEmployeeRows(getVisibleRecords()));
     }
@@ -866,5 +1058,12 @@
     });
 
     setMonthView(new Date());
+    fetchSubmittedLiquidationQueue();
+    liquidationQueuePollingInterval = setInterval(fetchSubmittedLiquidationQueue, 5000);
+    window.addEventListener('beforeunload', () => {
+        if (liquidationQueuePollingInterval) {
+            clearInterval(liquidationQueuePollingInterval);
+        }
+    });
 </script>
 @endpush
