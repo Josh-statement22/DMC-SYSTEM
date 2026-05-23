@@ -8,16 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('liquidation_expenses', function (Blueprint $table) {
-            $table->dropForeign(['particular_id']);
-            $table->dropColumn('particular_id');
-        });
+        // Kept as a no-op because the application still stores expenses by particular_id.
     }
 
     public function down(): void
     {
-        Schema::table('liquidation_expenses', function (Blueprint $table) {
-            $table->foreignId('particular_id')->constrained('particulars')->onDelete('cascade')->after('expense_date');
-        });
+        // No-op.
     }
 };

@@ -280,7 +280,7 @@
                                         </div>
                                         <!-- Options -->
                                         <div class="max-h-60 overflow-y-auto py-1" id="categoryFilterOptions">
-                                            @foreach($particulars as $id => $name)
+                                            @foreach($categories as $id => $name)
                                             <label class="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 cursor-pointer transition">
                                                 <input type="checkbox"
                                                        value="{{ $name }}"
@@ -297,20 +297,64 @@
                         </th>
                         <th class="text-left py-4 px-4 text-sm font-semibold text-gray-700">Particulars</th>
                         <th class="text-right py-4 px-4 text-sm font-semibold text-gray-700">Amount</th>
+                        <th class="text-center py-4 px-4 text-sm font-semibold text-gray-700">Receipt</th>
                         <th class="text-center py-4 px-4 text-sm font-semibold text-gray-700">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="expensesTableBody">
+                    @forelse($liquidationExpenses as $expense)
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition"
+                        data-expense-id="{{ $expense->id }}"
+                        data-expense-date="{{ $expense->expense_date }}"
+                        data-expense-amount="{{ $expense->amount }}"
+                        data-expense-category="{{ $expense->category_name }}"
+                        data-receipt-url="{{ $expense->receipt_path ? asset('storage/' . $expense->receipt_path) : '' }}">
+                        <td class="py-4 px-4 text-sm text-gray-700">
+                            {{ \Carbon\Carbon::parse($expense->expense_date)->format('F j, Y') }}
+                        </td>
+                        <td class="py-4 px-4 text-sm text-gray-800 font-medium">
+                            {{ $expense->category_name }}
+                        </td>
+                        <td class="py-4 px-4 text-sm text-gray-800 font-medium">
+                            {{ $expense->transaction_details }}
+                            @if($expense->description)
+                            <br><span class="text-xs text-gray-400">{{ $expense->description }}</span>
+                            @endif
+                        </td>
+                        <td class="py-4 px-4 text-sm text-right font-semibold text-red-600">
+                            &#8369;{{ number_format((float) $expense->amount, 2) }}
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            @if($expense->receipt_path)
+                            <a href="{{ asset('storage/' . $expense->receipt_path) }}"
+                               target="_blank"
+                               class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                                <i data-feather="image" class="w-3.5 h-3.5"></i>
+                                View
+                            </a>
+                            @else
+                            <span class="text-xs text-gray-400">None</span>
+                            @endif
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
+                                <i data-feather="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    @empty
                     <tr id="emptyExpenseRow" class="border-b border-gray-100">
-                        <td colspan="5" class="py-8 px-4 text-sm text-center text-gray-500">
+                        <td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">
                             No expense entries yet. Add expense records once funds are released.
                         </td>
                     </tr>
+                    @endforelse
                 </tbody>
                 <tfoot>
                     <tr class="border-t-2 border-gray-300">
-                        <td colspan="2" class="py-4 px-4 text-right text-lg font-bold text-gray-800">Total Expenses:</td>
+                        <td colspan="3" class="py-4 px-4 text-right text-lg font-bold text-gray-800">Total Expenses:</td>
                         <td id="totalExpensesAmount" class="py-4 px-4 text-right text-xl font-bold text-red-600">₱0.00</td>
+                        <td></td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -542,6 +586,22 @@
                            placeholder="0.00"
                            required>
                 </div>
+            </div>
+
+            <!-- Receipt Attachment Field -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    Receipt / Proof Image
+                </label>
+                <input type="file"
+                       id="expenseReceipt"
+                       accept="image/png,image/jpeg,image/webp"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-xl
+                              file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                              file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700
+                              hover:file:bg-blue-100 focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
+                              transition-all duration-200">
+                <p class="text-xs text-gray-500 mt-2">Optional screenshot/photo of the receipt. JPG, PNG, or WebP up to 5MB.</p>
             </div>
 
             <!-- Modal Footer -->
@@ -872,8 +932,50 @@
     }
 
     function isExpenseRowInCurrentPeriod(row) {
+        if (!currentPeriodStart || !currentPeriodEnd) {
+            return true;
+        }
+
         const expenseDate = getExpenseRowDate(row);
         return expenseDate ? isWithinRange(expenseDate, currentPeriodStart, currentPeriodEnd) : false;
+    }
+
+    function renderExpensesForCurrentFilters() {
+        const tbody = document.getElementById('expensesTableBody');
+        if (!tbody) return;
+
+        const selectedCategories = getSelectedCategories();
+        const rows = getExpenseRows();
+        let visibleCount = 0;
+
+        document.getElementById('filteredExpenseEmptyRow')?.remove();
+
+        rows.forEach(row => {
+            const matchesPeriod = isExpenseRowInCurrentPeriod(row);
+            const rowCategory = getExpenseRowCategory(row);
+            const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(rowCategory);
+            const isVisible = matchesPeriod && matchesCategory;
+
+            row.style.display = isVisible ? '' : 'none';
+            if (isVisible) {
+                visibleCount += 1;
+            }
+        });
+
+        const emptyExpenseRow = document.getElementById('emptyExpenseRow');
+        if (emptyExpenseRow) {
+            emptyExpenseRow.style.display = rows.length === 0 ? '' : 'none';
+        }
+
+        if (rows.length > 0 && visibleCount === 0) {
+            const filteredEmptyRow = document.createElement('tr');
+            filteredEmptyRow.id = 'filteredExpenseEmptyRow';
+            filteredEmptyRow.className = 'border-b border-gray-100';
+            filteredEmptyRow.innerHTML = '<td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">No expense entries match the selected filters.</td>';
+            tbody.appendChild(filteredEmptyRow);
+        }
+
+        renderExpenseSummary();
     }
 
     function updatePeriodToggles() {
@@ -1146,23 +1248,17 @@
                 return total;
             }
 
-            // Skip hidden rows (filtered out by date range)
             if (row.style.display === 'none') {
-                return;
+                return total;
             }
 
-            const amountCell = row.querySelectorAll('td')[3];
-            if (!amountCell) {
-                return;
-            }
-
-            const parsedAmount = Number((amountCell.textContent || '').replace(/[^0-9.-]+/g, ''));
+            const parsedAmount = getExpenseRowAmount(row);
             if (!Number.isNaN(parsedAmount)) {
-                total += parsedAmount;
+                return total + parsedAmount;
             }
-        });
 
-        return total;
+            return total;
+        }, 0);
     }
 
     function renderExpenseSummary(openingBalance = null) {
@@ -1171,10 +1267,6 @@
         const totalExpensesDisplay = document.getElementById('totalExpensesDisplay');
         const summaryRemainingAmount = document.getElementById('summaryRemainingAmount');
         const balanceAmountDisplay = document.getElementById('balanceAmountDisplay');
-
-        if (!summaryExpendedAmount || !summaryRemainingAmount) {
-            return;
-        }
 
         const expenseTotal = getCurrentExpenseTotal();
         // Use the stored total approved balance if no opening balance is provided
@@ -1186,11 +1278,15 @@
         if (totalExpensesAmount) {
             totalExpensesAmount.textContent = formatCurrency(expenseTotal);
         }
-        summaryExpendedAmount.textContent = formatCurrency(expenseTotal);
+        if (summaryExpendedAmount) {
+            summaryExpendedAmount.textContent = formatCurrency(expenseTotal);
+        }
         if (totalExpensesDisplay) {
             totalExpensesDisplay.textContent = formatCurrency(expenseTotal);
         }
-        summaryRemainingAmount.textContent = formatCurrency(remaining);
+        if (summaryRemainingAmount) {
+            summaryRemainingAmount.textContent = formatCurrency(remaining);
+        }
         
         // Update the current balance display to show remaining amount
         if (balanceAmountDisplay) {
@@ -1252,21 +1348,11 @@
     }
 
     function prevPeriod() {
-        if (currentPeriodType === 'week') {
-            weekOffset -= 1;
-        } else {
-            monthOffset -= 1;
-        }
-        updatePeriodLabel();
+        shiftPeriod(-1);
     }
 
     function nextPeriod() {
-        if (currentPeriodType === 'week') {
-            weekOffset += 1;
-        } else {
-            monthOffset += 1;
-        }
-        updatePeriodLabel();
+        shiftPeriod(1);
     }
 
     function applyLiquidationFilter() {
@@ -1531,8 +1617,7 @@
             const monthKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
 
             // Check if there are expenses
-            const expenseRows = document.querySelectorAll('#expensesTableBody tr:not(#emptyExpenseRow)');
-            if (expenseRows.length === 0) {
+            if (getExpenseRows().length === 0) {
                 showLiquidationToast('Please add at least one expense before submitting.', 'error');
                 return;
             }
@@ -1563,6 +1648,7 @@
             }
 
             showLiquidationToast('Liquidation submitted for accounting review!', 'success');
+            clearExpenseTableAfterSubmit();
             
             // Refresh the dashboard after submission
             setTimeout(() => {
@@ -1581,15 +1667,35 @@
         }
     }
 
+    function clearExpenseTableAfterSubmit() {
+        const tbody = document.getElementById('expensesTableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = `
+            <tr id="emptyExpenseRow" class="border-b border-gray-100">
+                <td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">
+                    No expense entries yet. Add expense records once funds are released.
+                </td>
+            </tr>
+        `;
+
+        renderExpenseSummary();
+        renderWeekBreakdown();
+        feather.replace();
+    }
+
     // Handle form submission
     document.getElementById('addExpenseForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const date        = document.getElementById('expenseDate').value;
-        const categoryId  = document.getElementById('expenseCategory').value;
+        const categorySelect = document.getElementById('expenseCategory');
+        const categoryId  = categorySelect.value;
+        const categoryName = categorySelect.options[categorySelect.selectedIndex]?.text || '';
         const details     = document.getElementById('expenseDetails').value;
         const description = document.getElementById('expenseDescription').value;
         const amount      = parseFloat(document.getElementById('expenseAmount').value);
+        const receiptFile = document.getElementById('expenseReceipt')?.files?.[0] || null;
 
         const formData = new FormData();
         formData.append('_token', document.querySelector('#addExpenseForm input[name="_token"]').value);
@@ -1598,6 +1704,9 @@
         formData.append('transaction_details', details);
         formData.append('description', description);
         formData.append('amount', amount);
+        if (receiptFile) {
+            formData.append('receipt_image', receiptFile);
+        }
 
         let savedExpense;
         try {
@@ -1624,15 +1733,11 @@
         }
         
         // Format date
-        const dateObj = new Date(savedExpense?.expense_date || date);
-        const formattedDate = dateObj.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-        });
+        const formattedDate = formatDate(savedExpense?.expense_date || date);
         
         // Format amount
-        const formattedAmount = amount.toLocaleString('en-US', {
+        const savedAmount = Number(savedExpense?.amount || amount);
+        const formattedAmount = savedAmount.toLocaleString('en-US', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
@@ -1650,13 +1755,21 @@
             newRow.dataset.expenseId = savedExpense.id;
         }
         newRow.dataset.expenseDate = savedExpense?.expense_date || date;
-        newRow.dataset.expenseAmount = String(savedExpense?.amount || amount);
+        newRow.dataset.expenseAmount = String(savedAmount);
         newRow.dataset.expenseCategory = savedExpense?.category_name || categoryName;
+        newRow.dataset.receiptUrl = savedExpense?.receipt_url || '';
+        const displayCategory = escapeHtml(savedExpense?.category_name || categoryName);
+        const displayDetails = escapeHtml(savedExpense?.transaction_details || details);
+        const displayDescription = savedExpense?.description || description;
+        const receiptCell = savedExpense?.receipt_url
+            ? `<a href="${savedExpense.receipt_url}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"><i data-feather="image" class="w-3.5 h-3.5"></i>View</a>`
+            : '<span class="text-xs text-gray-400">None</span>';
         newRow.innerHTML = `
             <td class="py-4 px-4 text-sm text-gray-700">${formattedDate}</td>
-            <td class="py-4 px-4 text-sm text-gray-800 font-medium">${savedExpense?.category_name || categoryName}</td>
-            <td class="py-4 px-4 text-sm text-gray-800 font-medium">${details}${description ? '<br><span class="text-xs text-gray-400">' + description + '</span>' : ''}</td>
+            <td class="py-4 px-4 text-sm text-gray-800 font-medium">${displayCategory}</td>
+            <td class="py-4 px-4 text-sm text-gray-800 font-medium">${displayDetails}${displayDescription ? '<br><span class="text-xs text-gray-400">' + escapeHtml(displayDescription) + '</span>' : ''}</td>
             <td class="py-4 px-4 text-sm text-right font-semibold text-red-600">₱${formattedAmount}</td>
+            <td class="py-4 px-4 text-center">${receiptCell}</td>
             <td class="py-4 px-4 text-center">
                 <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
                     <i data-feather="trash-2" class="w-4 h-4"></i>
@@ -1774,7 +1887,7 @@
                 const emptyRow = document.createElement('tr');
                 emptyRow.id = 'emptyExpenseRow';
                 emptyRow.className = 'border-b border-gray-100';
-                emptyRow.innerHTML = '<td colspan="5" class="py-8 px-4 text-sm text-center text-gray-500">No expense entries yet. Add expense records once funds are released.</td>';
+                emptyRow.innerHTML = '<td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">No expense entries yet. Add expense records once funds are released.</td>';
                 tbody.appendChild(emptyRow);
             }
 
@@ -1919,6 +2032,7 @@
     function renderLiquidationDashboard() {
         updatePeriodLabels();
         updatePeriodToggles();
+        renderExpensesForCurrentFilters();
         renderWeekBreakdown();
         renderEmployeeRequests();
         renderExpenseSummary();
@@ -1938,6 +2052,7 @@
             renderLiquidationDashboard();
             
             feather.replace();
+            startPolling();
             console.log('Dashboard initialization complete');
         } catch (error) {
             console.error('Error initializing dashboard:', error);
@@ -2063,27 +2178,5 @@
         }
     }
 
-    // Initialize and start polling
-    async function initializeMyCashAdvanceRequests() {
-        try {
-            await fetchMyCashAdvanceRequests();
-            renderEmployeeRequests();
-            renderLiquidationDashboard();
-            startPolling();
-        } catch (error) {
-            showLiquidationToast('Unable to load cash advance requests.', 'error');
-        }
-    }
-
-    // Start when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeMyCashAdvanceRequests);
-    } else {
-        initializeMyCashAdvanceRequests();
-    }
-
-    initializeMyCashAdvanceRequests();
-    updatePeriodLabel();
-    renderExpenseSummary();
 </script>
 @endpush

@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use App\Models\CashAdvanceMonthlyBalance;
 use App\Models\CashAdvanceRequest;
 
@@ -70,6 +71,7 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 'liquidation_expenses.transaction_details',
                 'liquidation_expenses.description',
                 'liquidation_expenses.amount',
+                'liquidation_expenses.receipt_path',
                 'particulars.particular_name',
                 'categories.particulars_category as category_name'
             )
@@ -106,6 +108,8 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                     'details' => trim((string) $expense->transaction_details),
                     'description' => trim((string) $expense->description),
                     'amount' => (float) $expense->amount,
+                    'receipt_path' => $expense->receipt_path,
+                    'receipt_url' => $expense->receipt_path ? Storage::disk('public')->url($expense->receipt_path) : null,
                     'label' => trim($expense->category_name . ' - ' . $expense->transaction_details . ' (₱' . number_format((float) $expense->amount, 2) . ')'),
                 ];
             })->values();
@@ -651,6 +655,79 @@ Route::get('/accounting/cash-advance/requests', function () {
     return response()->json(['requests' => $requests]);
 })->middleware('auth')->name('accounting.cash-advance.requests.index');
 
+Route::get('/accounting/cash-advance/requests/stream', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    return response()->stream(function () {
+        @set_time_limit(0);
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('implicit_flush', '1');
+
+        while (ob_get_level() > 0) {
+            @ob_end_flush();
+        }
+
+        echo "retry: 2000\n\n";
+        @flush();
+
+        $lastSignature = null;
+        $startedAt = time();
+
+        while (!connection_aborted() && time() - $startedAt < 300) {
+            $summary = DB::table('cash_advance_requests')
+                ->selectRaw("
+                    COUNT(*) as total_count,
+                    SUM(CASE WHEN LOWER(status) = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                    MAX(UNIX_TIMESTAMP(updated_at)) as latest_update
+                ")
+                ->first();
+
+            $latestRequest = DB::table('cash_advance_requests')
+                ->join('users as requesters', 'cash_advance_requests.requester_id', '=', 'requesters.id')
+                ->select(
+                    'cash_advance_requests.id',
+                    'cash_advance_requests.requested_amount',
+                    'cash_advance_requests.status',
+                    'cash_advance_requests.purpose',
+                    'cash_advance_requests.updated_at',
+                    'requesters.name as employee_name'
+                )
+                ->orderByDesc('cash_advance_requests.updated_at')
+                ->first();
+
+            $signature = implode('|', [
+                (int) ($summary->total_count ?? 0),
+                (int) ($summary->pending_count ?? 0),
+                (int) ($summary->latest_update ?? 0),
+            ]);
+
+            if ($signature !== $lastSignature) {
+                echo "event: cash-advance-requests-updated\n";
+                echo 'data: ' . json_encode([
+                    'signature' => $signature,
+                    'pending_count' => (int) ($summary->pending_count ?? 0),
+                    'latest_request' => $latestRequest,
+                    'timestamp' => now()->toIso8601String(),
+                ]) . "\n\n";
+
+                $lastSignature = $signature;
+            } else {
+                echo ": ping\n\n";
+            }
+
+            @flush();
+            sleep(1);
+        }
+    }, 200, [
+        'Content-Type' => 'text/event-stream',
+        'Cache-Control' => 'no-cache, no-transform',
+        'X-Accel-Buffering' => 'no',
+        'Connection' => 'keep-alive',
+    ]);
+})->middleware('auth')->name('accounting.cash-advance.requests.stream');
+
 Route::post('/cash-advance/requests', function (Request $request) {
     if ($redirect = redirect_if_role_not_allowed([2])) {
         return $redirect;
@@ -1168,6 +1245,8 @@ Route::get('/admin/liquidation', function () {
     $liquidation = DB::table('liquidations')
         ->where('user_id', $user->id)
         ->where('cutoff_period', $cutoffPeriod)
+        ->where('status', 'pending')
+        ->orderByDesc('id')
         ->first();
 
     if (!$liquidation) {
@@ -1204,7 +1283,8 @@ Route::get('/admin/liquidation', function () {
             'categories.particulars_category as category_name',
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
-            'liquidation_expenses.amount'
+            'liquidation_expenses.amount',
+            'liquidation_expenses.receipt_path'
         )
         ->orderBy('liquidation_expenses.expense_date')
         ->get();
@@ -1223,6 +1303,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'transaction_details' => 'required|string|max:255',
         'description' => 'nullable|string|max:1000',
         'amount' => 'required|numeric|min:0.01',
+        'receipt_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
     ]);
 
     $user = Auth::user();
@@ -1232,6 +1313,8 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
     $liquidation = DB::table('liquidations')
         ->where('user_id', $user->id)
         ->where('cutoff_period', $cutoffPeriod)
+        ->where('status', 'pending')
+        ->orderByDesc('id')
         ->first();
 
     if (!$liquidation) {
@@ -1268,6 +1351,11 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         $particularId = $particular->id;
     }
 
+    $receiptPath = null;
+    if ($request->hasFile('receipt_image')) {
+        $receiptPath = $request->file('receipt_image')->store('liquidation-receipts', 'public');
+    }
+
     $expenseId = DB::table('liquidation_expenses')->insertGetId([
         'liquidation_id' => $liquidation->id,
         'expense_date' => $validated['expense_date'],
@@ -1275,6 +1363,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'transaction_details' => $validated['transaction_details'],
         'description' => $validated['description'] ?? null,
         'amount' => $validated['amount'],
+        'receipt_path' => $receiptPath,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -1289,10 +1378,15 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
             'liquidation_expenses.amount',
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
+            'liquidation_expenses.receipt_path',
             'particulars.particular_name',
             'categories.particulars_category as category_name'
         )
         ->first();
+
+    if ($expense && $expense->receipt_path) {
+        $expense->receipt_url = Storage::disk('public')->url($expense->receipt_path);
+    }
 
     return response()->json([
         'message' => 'Expense saved successfully.',
@@ -1316,6 +1410,8 @@ Route::post('/admin/liquidation/submit', function (Request $request) {
     $liquidation = DB::table('liquidations')
         ->where('user_id', $user->id)
         ->where('cutoff_period', $cutoffPeriod)
+        ->where('status', 'pending')
+        ->orderByDesc('id')
         ->first();
 
     if (! $liquidation) {
@@ -1415,7 +1511,8 @@ Route::delete('/admin/liquidation/expenses/{expenseId}', function ($expenseId) {
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
         ->where('liquidation_expenses.id', $expenseId)
         ->where('liquidations.user_id', $user->id)
-        ->select('liquidation_expenses.id')
+        ->where('liquidations.status', 'pending')
+        ->select('liquidation_expenses.id', 'liquidation_expenses.receipt_path')
         ->first();
 
     if (! $expense) {
@@ -1427,6 +1524,10 @@ Route::delete('/admin/liquidation/expenses/{expenseId}', function ($expenseId) {
     DB::table('liquidation_expenses')
         ->where('id', $expenseId)
         ->delete();
+
+    if ($expense->receipt_path) {
+        Storage::disk('public')->delete($expense->receipt_path);
+    }
 
     return response()->json([
         'message' => 'Expense deleted successfully.',

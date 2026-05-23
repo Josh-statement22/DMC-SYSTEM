@@ -19,6 +19,7 @@ class LiquidationExpense extends Model
         'transaction_details',
         'description',
         'amount',
+        'receipt_path',
         'transaction_type',
     ];
 

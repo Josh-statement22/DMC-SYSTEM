@@ -200,6 +200,7 @@
                             <th class="py-3 px-3">Category</th>
                             <th class="py-3 px-3">Transaction details</th>
                             <th class="py-3 px-3">Description</th>
+                            <th class="py-3 px-3 text-center">Proof</th>
                             <th class="py-3 px-3 text-right">Amount</th>
                         </tr>
                     </thead>
@@ -878,6 +879,7 @@
                     category: line.category || '-',
                     details: line.details || '-',
                     description: line.description || '-',
+                    receipt_url: line.receipt_url || null,
                     amount: Number(line.amount || 0),
                 }));
             })
@@ -889,6 +891,9 @@
                 <td class="py-4 px-3 text-sm text-gray-700">${line.category}</td>
                 <td class="py-4 px-3 text-sm text-gray-700">${line.details}</td>
                 <td class="py-4 px-3 text-sm text-gray-700">${line.description}</td>
+                <td class="py-4 px-3 text-center text-sm">
+                    ${line.receipt_url ? `<a href="${line.receipt_url}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">View</a>` : '<span class="text-xs text-gray-400">None</span>'}
+                </td>
                 <td class="py-4 px-3 text-right text-sm font-semibold text-rose-700">${formatCurrency(line.amount)}</td>
             </tr>
         `).join('');

@@ -11,9 +11,30 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('particulars', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
+        if (!Schema::hasTable('particulars')) {
+            Schema::create('particulars', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('category_id')->constrained('categories')->cascadeOnDelete();
+                $table->string('particular_name');
+                $table->text('description')->nullable();
+                $table->timestamps();
+            });
+
+            return;
+        }
+
+        Schema::table('particulars', function (Blueprint $table) {
+            if (!Schema::hasColumn('particulars', 'category_id')) {
+                $table->foreignId('category_id')->nullable()->after('id')->constrained('categories')->cascadeOnDelete();
+            }
+
+            if (!Schema::hasColumn('particulars', 'particular_name')) {
+                $table->string('particular_name')->after('category_id');
+            }
+
+            if (!Schema::hasColumn('particulars', 'description')) {
+                $table->text('description')->nullable()->after('particular_name');
+            }
         });
     }
 
@@ -22,6 +43,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('particulars');
+        //
     }
 };

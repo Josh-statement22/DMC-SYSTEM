@@ -231,6 +231,7 @@
 		}
 	@endphp
 	const CASH_ADVANCE_INDEX_ROUTE = @json(route('accounting.cash-advance.requests.index'));
+	const CASH_ADVANCE_STREAM_ROUTE = @json(route('accounting.cash-advance.requests.stream'));
 	const CASH_ADVANCE_DECISION_BASE_URL = @json(url('/accounting/cash-advance/requests'));
 	const CASH_ADVANCE_DIRECT_SEND_ROUTE = @json(route('accounting.cash-advance.requests.send'));
 	const CASH_ADVANCE_MONTHLY_BALANCE_ROUTE = @json(route('accounting.cash-advance.monthly-balance.store'));
@@ -239,6 +240,9 @@
 	let currentMonthlyBalance = INITIAL_MONTHLY_BALANCE;
 	let cashAdvanceRequestsCache = [];
 	let accountingToastTimeout;
+	let cashAdvanceStreamSource = null;
+	let lastCashAdvanceStreamSignature = null;
+	let hasReceivedInitialCashAdvanceStreamEvent = false;
 
 	async function fetchCashAdvanceRequests() {
 		const response = await fetch(CASH_ADVANCE_INDEX_ROUTE, {
@@ -255,6 +259,56 @@
 		const payload = await response.json();
 		cashAdvanceRequestsCache = Array.isArray(payload?.requests) ? payload.requests : [];
 		return cashAdvanceRequestsCache;
+	}
+
+	async function refreshCashAdvanceDashboardFromRealtime(payload) {
+		if (payload?.signature && payload.signature === lastCashAdvanceStreamSignature) {
+			return;
+		}
+
+		lastCashAdvanceStreamSignature = payload?.signature || lastCashAdvanceStreamSignature;
+
+		try {
+			await fetchCashAdvanceRequests();
+			renderQueue();
+			renderBudgetWindowAmounts();
+			renderRecentDisbursements();
+
+			const latestRequest = payload?.latest_request;
+			const latestStatus = (latestRequest?.status || '').toLowerCase();
+			if (hasReceivedInitialCashAdvanceStreamEvent && latestStatus === 'pending') {
+				const employeeName = latestRequest?.employee_name || 'an employee';
+				const amount = formatCurrency(latestRequest?.requested_amount || 0);
+				showAccountingToast(`New cash advance request from ${employeeName}: ${amount}`, 'success');
+			}
+
+			hasReceivedInitialCashAdvanceStreamEvent = true;
+		} catch (error) {
+			showAccountingToast('Realtime update arrived, but the queue failed to refresh.', 'error');
+		}
+	}
+
+	function initializeCashAdvanceRealtimeStream() {
+		if (!window.EventSource || cashAdvanceStreamSource) {
+			return;
+		}
+
+		cashAdvanceStreamSource = new EventSource(CASH_ADVANCE_STREAM_ROUTE);
+
+		cashAdvanceStreamSource.addEventListener('cash-advance-requests-updated', function(event) {
+			const payload = JSON.parse(event.data || '{}');
+			refreshCashAdvanceDashboardFromRealtime(payload);
+		});
+
+		cashAdvanceStreamSource.addEventListener('error', function() {
+			hasReceivedInitialCashAdvanceStreamEvent = false;
+		});
+
+		window.addEventListener('beforeunload', function() {
+			if (cashAdvanceStreamSource) {
+				cashAdvanceStreamSource.close();
+			}
+		});
 	}
 
 	function formatCurrency(amount) {
@@ -719,6 +773,7 @@
 		renderBudgetWindowAmounts();
 		renderQueue();
 		renderRecentDisbursements();
+		initializeCashAdvanceRealtimeStream();
 		feather.replace();
 	}
 
