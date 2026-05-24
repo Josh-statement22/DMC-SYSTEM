@@ -336,16 +336,43 @@ Route::put('/superadmin/users/{id}', function (Request $request, $id) {
 */
 
 Route::get('/admin/dashboard', function () {
-    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
-        return $redirect;
+
+    $user = Auth::user();
+
+    if (!$user) {
+        return redirect()->route('login');
+    }
+
+    if (!in_array((int) $user->role_id, [1, 2], true)) {
+
+        return match ((int) $user->role_id) {
+            1 => redirect('/superadmin/dashboard'),
+            2 => redirect('/admin/dashboard'),
+            3 => redirect('/accounting/dashboard'),
+            default => abort(403),
+        };
     }
 
     return view('admin.dashboard');
+
 })->middleware('auth')->name('admin.dashboard');
 
 Route::get('/admin/dashboard/summary', function (Request $request) {
-    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
-        return $redirect;
+
+    $user = Auth::user();
+
+    if (!$user) {
+        return redirect()->route('login');
+    }
+
+    if (!in_array((int) $user->role_id, [1, 2], true)) {
+
+        return match ((int) $user->role_id) {
+            1 => redirect('/superadmin/dashboard'),
+            2 => redirect('/admin/dashboard'),
+            3 => redirect('/accounting/dashboard'),
+            default => abort(403),
+        };
     }
 
     $viewMode = in_array($request->query('view_mode'), ['week', 'month']) ? $request->query('view_mode') : 'week';
@@ -419,8 +446,14 @@ Route::get('/admin/dashboard/summary', function (Request $request) {
 */
 
 Route::get('/accounting/dashboard', function () {
-    if ($redirect = redirect_if_role_not_allowed([3])) {
-        return $redirect;
+    $user = Auth::user();
+
+    if (!$user) {
+        return redirect()->route('login');
+    }
+
+    if ((int) $user->role_id !== 3) {
+        return abort(403);
     }
 
     $currentMonth = now();
