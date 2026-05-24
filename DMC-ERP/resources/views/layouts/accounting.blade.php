@@ -88,6 +88,12 @@
                 <i data-feather="clipboard"></i>
                 <span class="menu-text">Liquidation Tracking</span>
             </a>
+
+            <a id="accountingSummaryNav" href="{{ route('accounting.summary') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.summary*') ? $active : $normal }}">
+                <i data-feather="bar-chart-2"></i>
+                <span class="menu-text">Summary</span>
+            </a>
         </nav>
 
         <div class="p-4 border-t text-xs text-gray-400 text-center">

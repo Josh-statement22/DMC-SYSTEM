@@ -621,6 +621,98 @@ Route::get('/accounting/liquidate-expenses', function () {
     return view('accounting.liquidate-expenses', compact('employees', 'categories'));
 })->middleware('auth')->name('accounting.liquidate-expenses');
 
+Route::get('/accounting/summary', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $employees = DB::table('users')
+        ->where('role_id', 2)
+        ->select('id', 'name', 'employee_id')
+        ->orderBy('name')
+        ->get();
+
+    return view('accounting.summary', compact('employees'));
+})->middleware('auth')->name('accounting.summary');
+
+Route::get('/accounting/summary/data', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $page = max(1, (int) $request->query('page', 1));
+    $perPage = 20;
+    $employeeId = $request->query('employee_id');
+    $fromDate = $request->query('from_date');
+    $toDate = $request->query('to_date');
+
+    // Build query for liquidation expenses
+    $expenseQuery = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->join('users', 'liquidations.user_id', '=', 'users.id')
+        ->leftJoin('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->leftJoin('categories', 'particulars.category_id', '=', 'categories.id')
+        ->select(
+            'liquidation_expenses.expense_date',
+            'users.name as employee_name',
+            'liquidation_expenses.transaction_type',
+            'liquidation_expenses.description',
+            'liquidation_expenses.transaction_details',
+            'liquidation_expenses.amount',
+            'particulars.particular_name',
+            'categories.particulars_category as category_name',
+            DB::raw('CASE WHEN liquidation_expenses.transaction_type = "Refund" THEN liquidation_expenses.amount ELSE 0 END as credit'),
+            DB::raw('CASE WHEN liquidation_expenses.transaction_type IN ("Expense", "Adjustment") THEN liquidation_expenses.amount ELSE 0 END as debit')
+        );
+
+    // Apply filters
+    if ($employeeId) {
+        $expenseQuery->where('liquidations.user_id', $employeeId);
+    }
+
+    if ($fromDate) {
+        $expenseQuery->where('liquidation_expenses.expense_date', '>=', $fromDate);
+    }
+
+    if ($toDate) {
+        $expenseQuery->where('liquidation_expenses.expense_date', '<=', $toDate);
+    }
+
+    // Get summary data before pagination
+    $summaryQuery = clone $expenseQuery;
+    $summary = $summaryQuery->selectRaw('
+        COUNT(*) as total_count,
+        SUM(CASE WHEN liquidation_expenses.transaction_type = "Refund" THEN liquidation_expenses.amount ELSE 0 END) as total_credits,
+        SUM(CASE WHEN liquidation_expenses.transaction_type IN ("Expense", "Adjustment") THEN liquidation_expenses.amount ELSE 0 END) as total_debits
+    ')->first();
+
+    $summary->total_credits = $summary->total_credits ?? 0;
+    $summary->total_debits = $summary->total_debits ?? 0;
+    $summary->net_amount = $summary->total_debits - $summary->total_credits;
+
+    // Get paginated expenses
+    $totalExpenses = $expenseQuery->count();
+    $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
+    $page = min($page, $totalPages);
+
+    $expenses = $expenseQuery
+        ->orderBy('liquidation_expenses.expense_date')
+        ->offset(($page - 1) * $perPage)
+        ->limit($perPage)
+        ->get();
+
+    return response()->json([
+        'expenses' => $expenses,
+        'summary' => $summary,
+        'pagination' => [
+            'current_page' => $page,
+            'total_pages' => $totalPages,
+            'total_items' => $totalExpenses,
+            'per_page' => $perPage,
+        ],
+    ]);
+})->middleware('auth')->name('accounting.summary.data');
+
 Route::get('/accounting/cash-advance/requests', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {
         return $redirect;
