@@ -603,23 +603,10 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
     return view('accounting.liquidation', compact('liquidationRecords', 'selectedEmployee'));
 })->middleware('auth')->name('accounting.liquidation.employee');
 
-Route::get('/accounting/liquidate-expenses', function () {
-    if ($redirect = redirect_if_role_not_allowed([3])) {
-        return $redirect;
-    }
-
-    $employees = DB::table('users')
-        ->where('role_id', 2)
-        ->select('id', 'name', 'employee_id')
-        ->orderBy('name')
-        ->get();
-
-    $categories = DB::table('categories')
-        ->orderBy('particulars_category')
-        ->get();
-
-    return view('accounting.liquidate-expenses', compact('employees', 'categories'));
-})->middleware('auth')->name('accounting.liquidate-expenses');
+Route::get('/accounting/liquidate-expenses', [\App\Http\Controllers\AccountingController::class, 'liquidateExpenses'])->middleware('auth')->name('accounting.liquidate-expenses');
+Route::post('/accounting/liquidate-expenses/expense', [\App\Http\Controllers\AccountingController::class, 'storeExpense'])->middleware('auth')->name('accounting.store-expense');
+Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
+Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
 
 Route::get('/accounting/summary', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {

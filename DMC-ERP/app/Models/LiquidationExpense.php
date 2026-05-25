@@ -15,6 +15,7 @@ class LiquidationExpense extends Model
     protected $fillable = [
         'liquidation_id',
         'expense_date',
+        'category_id',
         'particular_id',
         'transaction_details',
         'description',
@@ -31,6 +32,11 @@ class LiquidationExpense extends Model
     public function liquidation(): BelongsTo
     {
         return $this->belongsTo(Liquidation::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
     }
 
     public function particular(): BelongsTo
