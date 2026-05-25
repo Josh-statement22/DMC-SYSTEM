@@ -16,7 +16,6 @@ class LiquidationExpense extends Model
         'liquidation_id',
         'expense_date',
         'category_id',
-        'particular_id',
         'transaction_details',
         'description',
         'amount',
@@ -37,10 +36,5 @@ class LiquidationExpense extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
-    }
-
-    public function particular(): BelongsTo
-    {
-        return $this->belongsTo(Particular::class, 'particular_id');
     }
 }
