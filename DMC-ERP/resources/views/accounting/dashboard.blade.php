@@ -97,7 +97,7 @@
 				</div>
 				<div class="grid grid-cols-2 gap-4">
 					<div class="rounded-2xl bg-white/10 p-4">
-						<p class="text-xs text-gray-200">Sent This Month</p>
+						<p class="text-xs text-gray-200">Expenses This Month</p>
 						<p id="budgetSentToday" class="text-xl font-bold mt-1">PHP 0.00</p>
 					</div>
 					<div class="rounded-2xl bg-white/10 p-4">
@@ -225,6 +225,8 @@
 				'month_key' => sprintf('%04d-%02d', $currentMonthlyBalance->year, $currentMonthlyBalance->month),
 				'opening_balance' => (float) $currentMonthlyBalance->opening_balance,
 				'released_total' => (float) $currentMonthlyBalance->released_total,
+				'debit_total' => (float) ($currentMonthlyBalance->debit_total ?? 0),
+				'credit_total' => (float) ($currentMonthlyBalance->credit_total ?? 0),
 				'expense_total' => (float) $currentMonthlyBalance->expense_total,
 				'remaining_balance' => (float) $currentMonthlyBalance->remaining_balance,
 			];
@@ -352,6 +354,9 @@
 				monthKey: currentMonthKey,
 				monthLabel: getMonthLabel(today),
 				opening: Number(currentMonthlyBalance.opening_balance || 0),
+				expenses: Number(currentMonthlyBalance.debit_total ?? currentMonthlyBalance.expense_total ?? 0),
+				credits: Number(currentMonthlyBalance.credit_total || 0),
+				remaining: Number(currentMonthlyBalance.remaining_balance || 0),
 			};
 		}
 
@@ -359,6 +364,9 @@
 			monthKey: currentMonthKey,
 			monthLabel: getMonthLabel(today),
 			opening: 0,
+			expenses: 0,
+			credits: 0,
+			remaining: 0,
 		};
 	}
 
@@ -370,13 +378,11 @@
 		if (!budgetWindowLimit || !budgetSentToday || !budgetRemainingToday || !budgetMonthLabel) return;
 
 		const currentMonthBudget = getCurrentMonthBudget();
-		const spentThisMonth = getApprovedTotalForMonth(currentMonthBudget.monthKey);
-		const remainingThisMonth = currentMonthBudget.opening - spentThisMonth;
 
 		budgetMonthLabel.textContent = `Opening Balance for ${currentMonthBudget.monthLabel}`;
 		budgetWindowLimit.textContent = formatCurrency(currentMonthBudget.opening);
-		budgetSentToday.textContent = formatCurrency(spentThisMonth);
-		budgetRemainingToday.textContent = formatCurrency(remainingThisMonth);
+		budgetSentToday.textContent = formatCurrency(currentMonthBudget.expenses);
+		budgetRemainingToday.textContent = formatCurrency(currentMonthBudget.remaining);
 	}
 
 	function openMonthlyBudgetModal() {

@@ -2,6 +2,10 @@
 @section('title', 'Accounting - Liquidate Expenses')
 
 @section('content')
+@php
+    $pageOpeningBalance = (float) ($accountingBudgetBalance['opening_balance'] ?? 0);
+    $pageRemainingBalance = (float) ($accountingBudgetBalance['remaining_balance'] ?? 0);
+@endphp
 <div class="space-y-6">
     <div class="space-y-2">
         <div class="inline-flex items-center gap-2 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
@@ -28,7 +32,7 @@
         <h3 class="text-lg font-semibold text-gray-900 mb-6">Record Expense Transaction</h3>
         
         <form id="expenseForm" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- Date Input -->
                 <div>
                     <label for="expense_date" class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
@@ -44,10 +48,10 @@
 
                 <!-- Employee Name Input -->
                 <div>
-                    <label for="employee_name" class="block text-sm font-semibold text-gray-700 mb-2">Employee Name</label>
+                    <label for="employee_id" class="block text-sm font-semibold text-gray-700 mb-2">Employee Name</label>
                     <select 
-                        id="employee_name" 
-                        name="employee_name" 
+                        id="employee_id" 
+                        name="employee_id" 
                         class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                         required
                     >
@@ -86,6 +90,20 @@
                         class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                         required
                     >
+                </div>
+
+                <div>
+                    <label for="category_id" class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <select
+                        id="category_id"
+                        name="category_id"
+                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                    >
+                        <option value="">No category</option>
+                        @foreach($categories ?? [] as $category)
+                            <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+                        @endforeach
+                    </select>
                 </div>
             </div>
 
@@ -144,6 +162,7 @@
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Employee</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Particulars</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
                         <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
@@ -159,78 +178,65 @@
         </div>
     </div>
 
-    <!-- Submit Liquidation -->
-    <div class="flex gap-3 justify-end">
-        <button 
-            type="button"
-            id="submitLiquidationBtn"
-            class="px-6 py-2.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled
-        >
-            Submit Liquidation
-        </button>
-    </div>
 </div>
 
 <script>
     let transactions = [];
-    let currentBalance = 0;
-    const openingBalance = 0;
-
-    // Update particulars section visibility based on transaction type
-    document.getElementById('transaction_type').addEventListener('change', function() {
-        const particularsSection = document.getElementById('particularsSection');
-        if (this.value === 'debit') {
-            particularsSection.style.display = 'grid';
-            document.getElementById('category').setAttribute('required', 'required');
-        } else {
-            particularsSection.style.display = 'none';
-            document.getElementById('category').removeAttribute('required');
-        }
-    });
+    let currentBalance = @json($pageRemainingBalance);
+    const openingBalance = @json($pageOpeningBalance);
+    const storeExpenseRoute = @json(route('accounting.store-expense'));
+    const deleteExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
     // Handle form submission
-    document.getElementById('expenseForm').addEventListener('submit', function(e) {
+    document.getElementById('expenseForm').addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const formData = new FormData(this);
-        const categoryId = formData.get('category');
-        const particularText = formData.get('particular');
-        
-        let categoryName = '-';
-        let particularName = particularText || '-';
 
-        if (categoryId) {
-            const category = document.querySelector(`#category option[value="${categoryId}"]`);
-            categoryName = category ? category.text : '-';
+        try {
+            const response = await fetch(storeExpenseRoute, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                body: formData,
+            });
+
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(payload.message || 'Failed to record transaction.');
+            }
+
+            const savedExpense = payload.expense;
+            const transaction = {
+                id: savedExpense.id,
+                date: savedExpense.expense_date,
+                employee: savedExpense.employee_name,
+                type: savedExpense.transaction_type,
+                category: savedExpense.category_name || '-',
+                particular: savedExpense.particular_name || savedExpense.transaction_details || '-',
+                description: savedExpense.description || '',
+                amount: parseFloat(savedExpense.amount)
+            };
+
+            // Update balance
+            if (transaction.type === 'debit') {
+                currentBalance -= transaction.amount;
+            } else {
+                currentBalance += transaction.amount;
+            }
+
+            transactions.push(transaction);
+            updateTransactionsTable();
+            updateBalances();
+            this.reset();
+
+        } catch (error) {
+            alert(error.message || 'Failed to record transaction.');
         }
-
-        const transaction = {
-            id: transactions.length + 1,
-            date: formData.get('expense_date'),
-            employee: formData.get('employee_name'),
-            type: formData.get('transaction_type'),
-            category: categoryName,
-            particular: particularName,
-            description: formData.get('description'),
-            amount: parseFloat(formData.get('amount'))
-        };
-
-        // Update balance
-        if (transaction.type === 'debit') {
-            currentBalance -= transaction.amount;
-        } else {
-            currentBalance += transaction.amount;
-        }
-
-        transactions.push(transaction);
-        updateTransactionsTable();
-        updateBalances();
-        this.reset();
-        document.getElementById('transaction_type').dispatchEvent(new Event('change'));
-
-        // Enable submit button if we have transactions
-        document.getElementById('submitLiquidationBtn').disabled = transactions.length === 0;
     });
 
     function updateTransactionsTable() {
@@ -264,13 +270,30 @@
     }
 
     function updateBalances() {
-        document.getElementById('openingBalance').textContent = `PHP ${openingBalance.toFixed(2)}`;
-        document.getElementById('endingBalance').textContent = `PHP ${currentBalance.toFixed(2)}`;
+        document.getElementById('openingBalance').textContent = formatCurrencyValue(openingBalance);
+        document.getElementById('endingBalance').textContent = formatCurrencyValue(currentBalance);
     }
 
-    function deleteTransaction(id) {
+    function formatCurrencyValue(amount) {
+        return 'PHP ' + Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function deleteTransaction(id) {
         const transaction = transactions.find(t => t.id === id);
         if (transaction && confirm('Are you sure you want to delete this transaction?')) {
+            const response = await fetch(`${deleteExpenseBaseUrl}/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                alert('Failed to delete transaction.');
+                return;
+            }
+
             // Reverse the balance update
             if (transaction.type === 'debit') {
                 currentBalance += transaction.amount;
@@ -280,25 +303,8 @@
             transactions = transactions.filter(t => t.id !== id);
             updateTransactionsTable();
             updateBalances();
-            document.getElementById('submitLiquidationBtn').disabled = transactions.length === 0;
         }
     }
-
-    // Submit liquidation
-    document.getElementById('submitLiquidationBtn').addEventListener('click', function() {
-        if (transactions.length === 0) {
-            alert('Please add at least one transaction');
-            return;
-        }
-
-        console.log('Submitting liquidation with transactions:', transactions);
-        alert('Liquidation submitted successfully!');
-        transactions = [];
-        currentBalance = 0;
-        updateTransactionsTable();
-        updateBalances();
-        this.disabled = true;
-    });
 
     // Initialize
     updateBalances();
