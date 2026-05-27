@@ -9,13 +9,9 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up()
+    public function up(): void
     {
-        Schema::create('item_categories', function (Blueprint $table) {
-            $table->id();
-            $table->string('category_name')->unique();
-            $table->timestamps();
-        });
+        //
     }
 
     /**
@@ -23,6 +19,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('item_categories');
+        //
     }
 };

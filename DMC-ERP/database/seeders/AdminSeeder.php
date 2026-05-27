@@ -16,7 +16,7 @@ class AdminSeeder extends Seeder
                 'password' => Hash::make('superadmin123'),
                 'role_id' => 1,
                 'name' => 'Superadmin',
-                'email' => 'superadmin@example.com',
+                'email' => 'superadmin@dmc.com',
                 'created_at' => now(),
                 'updated_at' => now()
             ],
@@ -25,7 +25,16 @@ class AdminSeeder extends Seeder
                 'password' => Hash::make('admin123'),
                 'role_id' => 2,
                 'name' => 'Admin',
-                'email' => 'admin@example.com',
+                'email' => 'admin@dmc.com',
+                'created_at' => now(),
+                'updated_at' => now()
+            ],
+            [
+                'employee_id' => '202600003',
+                'password' => Hash::make('accounting123'),
+                'role_id' => 3,
+                'name' => 'Accounting',
+                'email' => 'accounting@dmc.com',
                 'created_at' => now(),
                 'updated_at' => now()
             ]
