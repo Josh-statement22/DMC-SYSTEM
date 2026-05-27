@@ -63,8 +63,7 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
             ->get();
 
         $expenseRowsByLiquidation = DB::table('liquidation_expenses')
-            ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
-            ->join('categories', 'particulars.category_id', '=', 'categories.id')
+            ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
             ->select(
                 'liquidation_expenses.liquidation_id',
                 'liquidation_expenses.expense_date',
@@ -72,7 +71,6 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 'liquidation_expenses.description',
                 'liquidation_expenses.amount',
                 'liquidation_expenses.receipt_path',
-                'particulars.particular_name',
                 'categories.particulars_category as category_name'
             )
             ->orderByDesc('liquidation_expenses.expense_date')
@@ -1295,24 +1293,17 @@ Route::get('/admin/liquidation', function () {
         $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
     }
 
-    $particulars = \Illuminate\Support\Facades\DB::table('particulars')
-        ->orderBy('particular_name')
-        ->pluck('particular_name', 'id');
-
     $categories = \Illuminate\Support\Facades\DB::table('categories')
         ->orderBy('particulars_category')
         ->pluck('particulars_category', 'id');
 
     $liquidationExpenses = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
-        ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
-        ->join('categories', 'particulars.category_id', '=', 'categories.id')
+        ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
         ->where('liquidation_expenses.liquidation_id', $liquidation->id)
         ->select(
             'liquidation_expenses.id',
             'liquidation_expenses.expense_date',
-            'liquidation_expenses.particular_id',
-            'particulars.particular_name',
             'categories.particulars_category as category_name',
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
@@ -1322,7 +1313,7 @@ Route::get('/admin/liquidation', function () {
         ->orderBy('liquidation_expenses.expense_date')
         ->get();
 
-    return view('admin.liquidation', compact('particulars', 'liquidationExpenses', 'categories'));
+    return view('admin.liquidation', compact('liquidationExpenses', 'categories'));
 })->middleware('auth')->name('admin.liquidation');
 
 Route::post('/admin/liquidation/expenses', function (Request $request) {
@@ -1363,27 +1354,6 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
     }
 
-    // Get the category name
-    $category = DB::table('categories')->where('id', $validated['category_id'])->first();
-    $categoryName = $category->particulars_category ?? 'General';
-
-    // Find or create a particular for this category
-    $particular = DB::table('particulars')
-        ->where('category_id', $validated['category_id'])
-        ->first();
-
-    if (!$particular) {
-        // If no particular exists for this category, create a default one
-        $particularId = DB::table('particulars')->insertGetId([
-            'particular_name' => $categoryName,
-            'category_id' => $validated['category_id'],
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    } else {
-        $particularId = $particular->id;
-    }
-
     $receiptPath = null;
     if ($request->hasFile('receipt_image')) {
         $receiptPath = $request->file('receipt_image')->store('liquidation-receipts', 'public');
@@ -1392,7 +1362,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
     $expenseId = DB::table('liquidation_expenses')->insertGetId([
         'liquidation_id' => $liquidation->id,
         'expense_date' => $validated['expense_date'],
-        'particular_id' => $particularId,
+        'category_id' => $validated['category_id'],
         'transaction_details' => $validated['transaction_details'],
         'description' => $validated['description'] ?? null,
         'amount' => $validated['amount'],
@@ -1402,8 +1372,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
     ]);
 
     $expense = DB::table('liquidation_expenses')
-        ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
-        ->join('categories', 'particulars.category_id', '=', 'categories.id')
+        ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
         ->where('liquidation_expenses.id', $expenseId)
         ->select(
             'liquidation_expenses.id',
@@ -1412,7 +1381,6 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
             'liquidation_expenses.receipt_path',
-            'particulars.particular_name',
             'categories.particulars_category as category_name'
         )
         ->first();
