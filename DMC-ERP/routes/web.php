@@ -65,7 +65,6 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
 
         $expenseRowsByLiquidation = DB::table('liquidation_expenses')
             ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
             ->select(
                 'liquidation_expenses.liquidation_id',
                 'liquidation_expenses.expense_date',
