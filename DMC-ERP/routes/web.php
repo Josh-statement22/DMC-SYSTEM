@@ -1317,7 +1317,8 @@ Route::get('/admin/liquidation', function () {
     $liquidationExpenses = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
         ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-        ->where('liquidation_expenses.liquidation_id', $liquidation->id)
+        ->where('liquidations.user_id', $user->id)
+        ->where('liquidations.status', 'pending')
         ->select(
             'liquidation_expenses.id',
             'liquidation_expenses.expense_date',

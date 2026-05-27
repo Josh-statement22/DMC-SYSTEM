@@ -135,8 +135,8 @@ class AccountingController extends Controller
         $expenseId = DB::table('liquidation_expenses')->insertGetId([
             'liquidation_id' => $liquidation->id,
             'expense_date' => $validated['expense_date'],
-            'category_id' => $validated['category_id'] ?? null,
             'transaction_type' => $validated['transaction_type'],
+            'category_id' => $validated['category_id'] ?? null,
             'transaction_details' => $validated['transaction_details'],
             'description' => $validated['description'] ?? null,
             'amount' => round((float) $validated['amount'], 2),

@@ -274,7 +274,14 @@
                                 {{ $expense->transaction_type === 'debit' ? '-' : '+' }}PHP {{ number_format($expense->amount, 2) }}
                             </td>
                             <td class="px-6 py-3 text-center">
-                                <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">Delete</button>
+                                @if($expense->transaction_type === 'debit')
+                                    <div class="flex items-center gap-2 justify-center">
+                                        <button type="button" class="text-blue-600 hover:text-blue-800 font-semibold breakdownBtn" data-id="{{ $expense->id }}" data-employee="{{ $expense->employee_name }}" data-date="{{ $expense->expense_date->format('Y-m-d') }}" data-amount="{{ $expense->amount }}">Breakdown</button>
+                                        <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">Delete</button>
+                                    </div>
+                                @else
+                                    <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">Delete</button>
+                                @endif
                             </td>
                         </tr>
                     @empty
@@ -284,6 +291,69 @@
                     @endforelse
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Breakdown Modal -->
+    <div id="breakdownModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-600 to-teal-600 p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Expense Breakdown</h3>
+                        <p class="text-blue-100 text-sm mt-1">Add transaction details for <span id="breakdownEmployeeName" class="font-semibold"></span></p>
+                    </div>
+                    <button id="closeBreakdownBtn" type="button" class="text-white hover:text-blue-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form id="breakdownForm" class="p-6 space-y-4">
+                @csrf
+                <input type="hidden" id="breakdownTransactionId" name="transaction_id">
+
+                <!-- Date -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                    <input type="date" id="breakdownDate" name="date" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <select id="breakdownCategory" name="category_id" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
+                        <option value="">Select Category</option>
+                        @forelse($categories ?? [] as $category)
+                            <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+                        @empty
+                        @endforelse
+                    </select>
+                </div>
+
+                <!-- Transaction Details -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Transaction Details</label>
+                    <input type="text" id="breakdownDetails" name="transaction_details" placeholder="e.g., Office Supplies, Utilities, Meals" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                    <textarea id="breakdownDescription" name="description" rows="3" placeholder="Enter additional details" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"></textarea>
+                </div>
+
+                <!-- Amount -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Amount (PHP)</label>
+                    <input type="number" id="breakdownAmount" name="amount" step="0.01" min="0" placeholder="0.00" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
+                </div>
+
+                <div class="pt-4 flex items-center gap-3">
+                    <button type="button" id="cancelBreakdownBtn" class="flex-1 px-4 py-2.5 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-teal-600 text-white font-semibold hover:shadow-lg transition">Save Breakdown</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -513,5 +583,56 @@
     // Initialize
     updatePeriodDisplay();
     setDateToFirstOfMonth();
+
+    // Breakdown Modal
+    const breakdownModal = document.getElementById('breakdownModal');
+    const closeBreakdownBtn = document.getElementById('closeBreakdownBtn');
+    const cancelBreakdownBtn = document.getElementById('cancelBreakdownBtn');
+    const breakdownForm = document.getElementById('breakdownForm');
+
+    // Open breakdown modal
+    document.querySelectorAll('.breakdownBtn').forEach(button => {
+        button.addEventListener('click', function() {
+            const transactionId = this.getAttribute('data-id');
+            const employeeName = this.getAttribute('data-employee');
+            const date = this.getAttribute('data-date');
+            const amount = this.getAttribute('data-amount');
+
+            document.getElementById('breakdownEmployeeName').textContent = employeeName;
+            document.getElementById('breakdownTransactionId').value = transactionId;
+            document.getElementById('breakdownDate').value = date;
+            document.getElementById('breakdownAmount').value = amount;
+            document.getElementById('breakdownDetails').value = '';
+            document.getElementById('breakdownDescription').value = '';
+            document.getElementById('breakdownCategory').value = '';
+
+            breakdownModal.classList.remove('hidden');
+            breakdownModal.style.display = 'flex';
+        });
+    });
+
+    closeBreakdownBtn.addEventListener('click', function() {
+        breakdownModal.classList.add('hidden');
+        breakdownModal.style.display = 'none';
+    });
+
+    cancelBreakdownBtn.addEventListener('click', function() {
+        breakdownModal.classList.add('hidden');
+        breakdownModal.style.display = 'none';
+    });
+
+    // Close modal when clicking outside
+    breakdownModal.addEventListener('click', function(e) {
+        if (e.target === breakdownModal) {
+            breakdownModal.classList.add('hidden');
+            breakdownModal.style.display = 'none';
+        }
+    });
+
+    // Breakdown form submission disabled - route not implemented
+    breakdownForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        alert('Breakdown feature is not yet available');
+    });
 </script>
 @endsection
