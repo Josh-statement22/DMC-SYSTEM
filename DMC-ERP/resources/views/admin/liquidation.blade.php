@@ -72,7 +72,7 @@
                             Current Month
                         </button>
 
-                        <button id="openPrevBalanceBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">
+                        <button id="openPrevBalanceBtn" type="button" class="hidden inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">
                             <i data-feather="dollar-sign" class="w-4 h-4"></i>
                             Set Previous Balance
                         </button>
@@ -797,9 +797,11 @@
     }
 
     function addMonths(date, months) {
-        const result = new Date(date);
-        result.setMonth(result.getMonth() + months);
-        return result;
+        return new Date(
+            date.getFullYear(),
+            date.getMonth() + months,
+            1
+        );
     }
 
     function getMonthStart(date) {
@@ -892,7 +894,10 @@
 
     function shiftPeriod(direction) {
         if (currentViewMode === 'month') {
-            setMonthView(addMonths(currentPeriodStart, direction));
+            // Always use the first day of the current month to avoid date overflow issues
+            const firstDayOfMonth = getMonthStart(currentPeriodStart);
+            const targetDate = new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth() + direction, 1);
+            setMonthView(targetDate);
             return;
         }
 
@@ -1094,7 +1099,12 @@
         const empty = document.getElementById('cashAdvanceNotificationsEmpty');
         if (!notifications || !empty) return;
 
+        // Filter by period and sort by recent activity
         const recentRequests = [...myRequests]
+            .filter(request => {
+                const requestDate = parseDate(request.request_date || request.submitted_at);
+                return requestDate >= currentPeriodStart && requestDate <= currentPeriodEnd;
+            })
             .sort((a, b) => parseDate(getRequestActivityDate(b)) - parseDate(getRequestActivityDate(a)));
 
         if (recentRequests.length === 0) {
@@ -1149,10 +1159,16 @@
 
             updateRequestStatusFilterButtons();
 
-            // Show all requests (bypass period filtering for now)
-            console.log('[RENDER] Showing ALL requests without period filter');
+            // Filter requests by selected period (month or week)
+            console.log('[RENDER] Filtering requests for period:', currentPeriodStart, 'to', currentPeriodEnd);
             
-            let filteredRequests = myRequests;
+            let filteredRequests = myRequests.filter(request => {
+                const requestDate = parseDate(request.request_date || request.submitted_at);
+                return requestDate >= currentPeriodStart && requestDate <= currentPeriodEnd;
+            });
+
+            console.log('[RENDER] After period filter:', filteredRequests.length, 'requests. Before status filter:', filteredRequests.length);
+
             if (requestStatusFilter !== 'all') {
                 filteredRequests = filteredRequests.filter(request => normalizeRequestStatus(request.status) === requestStatusFilter);
             }
@@ -1198,16 +1214,22 @@
 
     function renderApprovedSummary(myRequests) {
         try {
-            // Show ALL approved requests (bypass period filtering)
+            // Filter approved requests by selected period
             const approvedRequests = myRequests
-                .filter(request => (request.status || '').toLowerCase() === 'approved')
+                .filter(request => {
+                    // Filter by status
+                    if ((request.status || '').toLowerCase() !== 'approved') return false;
+                    // Filter by period
+                    const requestDate = parseDate(request.request_date || request.submitted_at);
+                    return requestDate >= currentPeriodStart && requestDate <= currentPeriodEnd;
+                })
                 .sort((a, b) => parseDate(getRequestPeriodDate(b)) - parseDate(getRequestPeriodDate(a)));
 
             const currentBalanceAmount = document.getElementById('currentBalanceAmount');
             const balanceAmountDisplay = document.getElementById('balanceAmountDisplay');
             const currentBalancePurpose = document.getElementById('currentBalancePurpose');
 
-            console.log('[BALANCE] approvedRequests.length =', approvedRequests.length, '(showing ALL, no period filter)');
+            console.log('[BALANCE] approvedRequests.length =', approvedRequests.length, '(filtered by period)');
 
             if (!currentBalanceAmount || !currentBalancePurpose) {
                 console.error('[BALANCE] Missing balance elements');
@@ -1295,174 +1317,6 @@
     }
 
     // Week and Month navigation helpers
-    let weekOffset = 0;
-    let monthOffset = 0;
-    let currentPeriodType = 'week'; // 'week' or 'month'
-
-    function getWeekRange(offset) {
-        const base = new Date();
-        base.setDate(base.getDate() + (offset * 7));
-        const dayIndex = (base.getDay() + 6) % 7; // Monday=0
-        const monday = new Date(base);
-        monday.setDate(base.getDate() - dayIndex);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        return {
-            start: monday.toISOString().split('T')[0],
-            end: sunday.toISOString().split('T')[0],
-            startObj: monday,
-            endObj: sunday,
-            label: `${formatDate(monday)} - ${formatDate(sunday)}`
-        };
-    }
-
-    function getMonthRange(offset) {
-        const today = new Date();
-        const targetMonth = new Date(today.getFullYear(), today.getMonth() + offset, 1);
-        const firstDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
-        const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0);
-        return {
-            start: firstDay.toISOString().split('T')[0],
-            end: lastDay.toISOString().split('T')[0],
-            startObj: firstDay,
-            endObj: lastDay,
-            label: firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-        };
-    }
-
-    function updatePeriodLabel() {
-        const label = document.getElementById('liquidationPeriodLabel');
-        let range;
-
-        if (currentPeriodType === 'week') {
-            range = getWeekRange(weekOffset);
-        } else {
-            range = getMonthRange(monthOffset);
-        }
-
-        if (label) {
-            label.textContent = range.label;
-        }
-
-        filterExpensesTable(range.start, range.end);
-    }
-
-    function prevPeriod() {
-        shiftPeriod(-1);
-    }
-
-    function nextPeriod() {
-        shiftPeriod(1);
-    }
-
-    function applyLiquidationFilter() {
-        const sel = document.getElementById('liquidationFilter');
-        const value = sel ? sel.value : 'week';
-
-        currentPeriodType = value;
-        weekOffset = 0;
-        monthOffset = 0;
-
-        updatePeriodLabel();
-    }
-
-    function filterExpensesTable(startDate, endDate) {
-        const rows = document.querySelectorAll('#expensesTableBody tr');
-        if (!startDate && !endDate) {
-            rows.forEach(r => r.style.display = '');
-            updateWeekAndMonthTotals();
-            return;
-        }
-        const s = startDate ? new Date(startDate) : null;
-        const e = endDate ? new Date(endDate) : null;
-
-        rows.forEach(row => {
-            if (row.id === 'emptyExpenseRow') return;
-            const dateCell = row.querySelectorAll('td')[0];
-            const txt = dateCell ? dateCell.textContent.trim() : '';
-            const rowDate = new Date(txt);
-            if (Number.isNaN(rowDate.getTime())) {
-                row.style.display = '';
-                return;
-            }
-            let show = true;
-            if (s && rowDate < s) show = false;
-            if (e && rowDate > new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23,59,59)) show = false;
-            row.style.display = show ? '' : 'none';
-        });
-
-        updateWeekAndMonthTotals();
-    }
-
-    function getThisWeekTotal() {
-        const today = new Date();
-        const dayIndex = (today.getDay() + 6) % 7; // Monday=0
-        const monday = new Date(today);
-        monday.setDate(today.getDate() - dayIndex);
-        
-        const rows = document.querySelectorAll('#expensesTableBody tr');
-        let total = 0;
-
-        rows.forEach(row => {
-            if (row.id === 'emptyExpenseRow') return;
-            if (row.style.display === 'none') return;
-
-            const dateCell = row.querySelectorAll('td')[0];
-            const amountCell = row.querySelectorAll('td')[3];
-            
-            if (!dateCell || !amountCell) return;
-
-            const rowDate = new Date(dateCell.textContent.trim());
-            if (Number.isNaN(rowDate.getTime())) return;
-
-            // Check if date is in this week (Monday to Sunday)
-            if (rowDate >= monday && rowDate <= new Date(monday.getTime() + 6.5 * 24 * 60 * 60 * 1000)) {
-                const parsedAmount = Number((amountCell.textContent || '').replace(/[^0-9.-]+/g, ''));
-                if (!Number.isNaN(parsedAmount)) {
-                    total += parsedAmount;
-                }
-            }
-        });
-
-        return total;
-    }
-
-    function getThisMonthTotal() {
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        
-        const rows = document.querySelectorAll('#expensesTableBody tr');
-        let total = 0;
-
-        rows.forEach(row => {
-            if (row.id === 'emptyExpenseRow') return;
-            if (row.style.display === 'none') return;
-
-            const dateCell = row.querySelectorAll('td')[0];
-            const amountCell = row.querySelectorAll('td')[3];
-            
-            if (!dateCell || !amountCell) return;
-
-            const rowDate = new Date(dateCell.textContent.trim());
-            if (Number.isNaN(rowDate.getTime())) return;
-
-            // Check if date is in this month
-            if (rowDate >= firstDay && rowDate <= lastDay) {
-                const parsedAmount = Number((amountCell.textContent || '').replace(/[^0-9.-]+/g, ''));
-                if (!Number.isNaN(parsedAmount)) {
-                    total += parsedAmount;
-                }
-            }
-        });
-
-        return total;
-    }
-
-    function updateWeekAndMonthTotals() {
-        // Currently not displayed in the new design, but kept for reference
-    }
-
     // Modal Functions
     function openRequestAdvanceModal() {
         const modal = document.getElementById('requestAdvanceModal');
@@ -1488,9 +1342,9 @@
         modal.classList.remove('hidden');
         modal.classList.add('flex');
         
-        // Set today's date as default
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('expenseDate').value = today;
+        // Set the first day of the selected period as default date (using local timezone)
+        const defaultDate = formatDateKey(currentPeriodStart);
+        document.getElementById('expenseDate').value = defaultDate;
         
         // Reset category dropdown
         document.getElementById('expenseCategory').value = '';
