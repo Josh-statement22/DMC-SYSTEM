@@ -28,10 +28,7 @@
                 <p class="text-sm text-gray-600">Current Period: <span class="font-semibold text-gray-900" id="currentPeriod">{{ now()->format('F Y') }}</span></p>
             </div>
         </div>
-    </div>
-
     <!-- Balance Display -->
-    <!-- Opening Balance -->
     <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 flex items-center justify-between">
         <div>
             <p class="text-sm font-semibold text-emerald-700">Opening Balance</p>
@@ -143,7 +140,7 @@
                 </div>
             </div>
 
-            <!-- Category (for debit transactions) -->
+            <!-- Category (dropdown) -->
             <div id="categorySection" style="display: none;">
                 <label for="category_id" class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
                 <select 
@@ -159,30 +156,8 @@
                 </select>
             </div>
 
-            <!-- Transaction Details/Particulars Input -->
-            <div>
-                <label for="transaction_details" class="block text-sm font-semibold text-gray-700 mb-2">Particulars/Details</label>
-                <input 
-                    type="text" 
-                    id="transaction_details" 
-                    name="transaction_details" 
-                    placeholder="Enter particulars (e.g., Office Supplies, Utilities, Meals)"
-                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                    required
-                >
-            </div>
-
-            <!-- Description -->
-            <div>
-                <label for="description" class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                <textarea 
-                    id="description" 
-                    name="description" 
-                    rows="3"
-                    placeholder="Enter transaction description"
-                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                ></textarea>
-            </div>
+            <!-- Accounting Remarks (auto-set to 'Manually Recorded' for liquidation entries) -->
+            <input type="hidden" id="accounting_remarks" name="accounting_remarks" value="Manually Recorded">
 
             <!-- Hidden fields for year and month -->
             <input type="hidden" id="year" name="year" value="{{ $year }}">
@@ -251,8 +226,8 @@
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Employee</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Particulars</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Purpose</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Remarks</th>
                         <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
                         <th class="px-6 py-3 text-center text-xs font-semibold text-gray-700">Actions</th>
                     </tr>
@@ -274,14 +249,27 @@
                                 {{ $expense->transaction_type === 'debit' ? '-' : '+' }}PHP {{ number_format($expense->amount, 2) }}
                             </td>
                             <td class="px-6 py-3 text-center">
-                                @if($expense->transaction_type === 'debit')
-                                    <div class="flex items-center gap-2 justify-center">
-                                        <button type="button" class="text-blue-600 hover:text-blue-800 font-semibold breakdownBtn" data-id="{{ $expense->id }}" data-employee="{{ $expense->employee_name }}" data-date="{{ $expense->expense_date->format('Y-m-d') }}" data-amount="{{ $expense->amount }}">Breakdown</button>
-                                        <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">Delete</button>
-                                    </div>
-                                @else
-                                    <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">Delete</button>
-                                @endif
+                                <div class="inline-flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        class="text-teal-600 hover:text-teal-800 font-semibold breakdownBtn"
+                                        data-id="{{ $expense->id }}"
+                                        data-employee-id="{{ $expense->employee_id ?? '' }}"
+                                        data-name="{{ $expense->employee_name }}"
+                                        data-date="{{ $expense->expense_date->format('Y-m-d') }}"
+                                    >
+                                        <i data-feather="edit-3" class="w-4 h-4"></i>
+                                        <span class="sr-only">Breakdown</span>
+                                    </button>
+                                    <button type="button" class="text-cyan-600 hover:text-cyan-800 font-semibold viewBreakdownBtn" data-id="{{ $expense->id }}">
+                                        <i data-feather="eye" class="w-4 h-4"></i>
+                                        <span class="sr-only">View</span>
+                                    </button>
+                                    <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">
+                                        <i data-feather="trash-2" class="w-4 h-4"></i>
+                                        <span class="sr-only">Delete</span>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -297,65 +285,128 @@
     <!-- Breakdown Modal -->
     <div id="breakdownModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-blue-600 to-teal-600 p-5">
-                <div class="flex items-center justify-between">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-600 p-5">
+                <div class="flex items-center justify-between gap-4">
                     <div>
-                        <h3 class="text-xl font-bold text-white">Expense Breakdown</h3>
-                        <p class="text-blue-100 text-sm mt-1">Add transaction details for <span id="breakdownEmployeeName" class="font-semibold"></span></p>
+                        <h3 class="text-xl font-bold text-white">Transaction Breakdown</h3>
+                        <p class="text-cyan-100 text-sm mt-1">Review the saved details for this entry</p>
                     </div>
-                    <button id="closeBreakdownBtn" type="button" class="text-white hover:text-blue-100 transition">
+                    <button id="closeBreakdownBtn" type="button" class="text-white hover:text-cyan-100 transition">
                         <i data-feather="x" class="w-6 h-6"></i>
                     </button>
                 </div>
             </div>
 
-            <form id="breakdownForm" class="p-6 space-y-4">
+            <form id="breakdownForm" class="p-6 space-y-6">
                 @csrf
-                <input type="hidden" id="breakdownTransactionId" name="transaction_id">
-
-                <!-- Date -->
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
-                    <input type="date" id="breakdownDate" name="date" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
+                <input type="hidden" id="breakdownRecordSource" name="record_source" value="breakdown">
+                <input type="hidden" id="breakdownEmployeeId" name="employee_id">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Name</label>
+                        <input id="breakdownName" type="text" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-gray-50 text-gray-900" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                        <input id="breakdownDate" type="date" name="expense_date" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                        <select id="breakdownCategory" name="category_id" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900" required>
+                            <option value="">Select Category</option>
+                            @forelse($categories ?? [] as $category)
+                                <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+                            @empty
+                            @endforelse
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                        <input id="breakdownAmount" name="amount" type="number" step="0.01" min="0" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900" required>
+                    </div>
                 </div>
 
-                <!-- Category -->
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-                    <select id="breakdownCategory" name="category_id" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
-                        <option value="">Select Category</option>
-                        @forelse($categories ?? [] as $category)
-                            <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
-                        @empty
-                        @endforelse
-                    </select>
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Transaction Details</label>
+                        <textarea id="breakdownDetails" name="transaction_details" rows="3" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                        <textarea id="breakdownDescription" name="description" rows="3" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900"></textarea>
+                    </div>
                 </div>
 
-                <!-- Transaction Details -->
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Transaction Details</label>
-                    <input type="text" id="breakdownDetails" name="transaction_details" placeholder="e.g., Office Supplies, Utilities, Meals" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
-                </div>
-
-                <!-- Description -->
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                    <textarea id="breakdownDescription" name="description" rows="3" placeholder="Enter additional details" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"></textarea>
-                </div>
-
-                <!-- Amount -->
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Amount (PHP)</label>
-                    <input type="number" id="breakdownAmount" name="amount" step="0.01" min="0" placeholder="0.00" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" required>
-                </div>
-
-                <div class="pt-4 flex items-center gap-3">
-                    <button type="button" id="cancelBreakdownBtn" class="flex-1 px-4 py-2.5 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition">Cancel</button>
-                    <button type="submit" class="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-teal-600 text-white font-semibold hover:shadow-lg transition">Save Breakdown</button>
+                <div class="flex justify-end pt-2">
+                    <div class="flex items-center gap-3">
+                        <button id="closeBreakdownFooterBtn" type="button" class="px-6 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition">
+                            Close
+                        </button>
+                        <button type="submit" class="px-6 py-2.5 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 transition">
+                            Save Breakdown
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- View Breakdown Modal -->
+    <div id="viewBreakdownModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden">
+            <div class="bg-gradient-to-r from-cyan-600 to-teal-600 p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Debit Breakdown View</h3>
+                        <p id="viewBreakdownSubtitle" class="text-cyan-100 text-sm mt-1"></p>
+                    </div>
+                    <button id="closeViewBreakdownBtn" type="button" class="text-white hover:text-cyan-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Name</label>
+                        <input id="viewBreakdownName" type="text" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-gray-50 text-gray-900" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                        <input id="viewBreakdownDate" type="text" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-gray-50 text-gray-900" readonly>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto rounded-2xl border border-gray-200">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Transaction Details</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700">Description</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="viewBreakdownTableBody">
+                            <tr>
+                                <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No breakdown loaded yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button id="closeViewBreakdownFooterBtn" type="button" class="px-6 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- End of Main Content -->
 </div>
 
 <script>
@@ -365,6 +416,15 @@
     const storeExpenseRoute = @json(route('accounting.store-expense'));
     const updateOpeningBalanceRoute = @json(route('accounting.update-opening-balance'));
     const deleteExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    const viewBreakdownBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    // No external cash-advance selection — form records manual liquidation entries
+    const breakdownModal = document.getElementById('breakdownModal');
+    const closeBreakdownBtn = document.getElementById('closeBreakdownBtn');
+    const closeBreakdownFooterBtn = document.getElementById('closeBreakdownFooterBtn');
+    const breakdownForm = document.getElementById('breakdownForm');
+    const viewBreakdownModal = document.getElementById('viewBreakdownModal');
+    const closeViewBreakdownBtn = document.getElementById('closeViewBreakdownBtn');
+    const closeViewBreakdownFooterBtn = document.getElementById('closeViewBreakdownFooterBtn');
 
     // Month selector change
     document.getElementById('monthSelector').addEventListener('change', function() {
@@ -380,9 +440,10 @@
         document.getElementById('currentPeriod').textContent = period;
     }
 
-    // Update transaction type change - show/hide category section
+    // Update transaction type change - show/hide cash advance sections
     document.getElementById('transaction_type').addEventListener('change', function() {
         const categorySection = document.getElementById('categorySection');
+
         if (this.value === 'debit') {
             categorySection.style.display = 'block';
             document.getElementById('category_id').setAttribute('required', 'required');
@@ -419,6 +480,77 @@
             feather.replace();
         }
     });
+
+    // Breakdown modal layout
+    document.querySelectorAll('.breakdownBtn').forEach(button => {
+        button.addEventListener('click', function() {
+            document.getElementById('breakdownName').value = this.dataset.name || '';
+            document.getElementById('breakdownDate').value = this.dataset.date || '';
+            document.getElementById('breakdownEmployeeId').value = this.dataset.employeeId || '';
+            document.getElementById('breakdownAmount').value = '';
+            document.getElementById('breakdownDetails').value = '';
+            document.getElementById('breakdownDescription').value = '';
+            document.getElementById('breakdownCategory').value = '';
+
+            breakdownModal.classList.remove('hidden');
+            breakdownModal.style.display = 'flex';
+
+            if (window.feather) {
+                feather.replace();
+            }
+        });
+    });
+
+    function closeBreakdownModal() {
+        breakdownModal.classList.add('hidden');
+        breakdownModal.style.display = 'none';
+    }
+
+    if (closeBreakdownBtn) {
+        closeBreakdownBtn.addEventListener('click', closeBreakdownModal);
+    }
+
+    if (closeBreakdownFooterBtn) {
+        closeBreakdownFooterBtn.addEventListener('click', closeBreakdownModal);
+    }
+
+    if (breakdownModal) {
+        breakdownModal.addEventListener('click', function(e) {
+            if (e.target === breakdownModal) {
+                closeBreakdownModal();
+            }
+        });
+    }
+
+    if (breakdownForm) {
+        breakdownForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+
+            fetch(storeExpenseRoute, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Breakdown saved successfully!');
+                    closeBreakdownModal();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while saving the breakdown');
+            });
+        });
+    }
 
     // Opening Balance Modal
     const openingBalanceModal = document.getElementById('openingBalanceModal');
@@ -566,6 +698,81 @@
         });
     });
 
+    document.querySelectorAll('.viewBreakdownBtn').forEach(button => {
+        button.addEventListener('click', function() {
+            const expenseId = this.getAttribute('data-id');
+
+            fetch(`${viewBreakdownBaseUrl}/${expenseId}/breakdown`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Error: ' + data.message);
+                    return;
+                }
+
+                document.getElementById('viewBreakdownName').value = data.debit.employee_name || '';
+                document.getElementById('viewBreakdownDate').value = data.debit.expense_date || '';
+                document.getElementById('viewBreakdownSubtitle').textContent = `Debit ID: ${data.debit.id}`;
+
+                const tbody = document.getElementById('viewBreakdownTableBody');
+                tbody.innerHTML = '';
+
+                if (!data.breakdowns.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No breakdown entries found</td></tr>';
+                } else {
+                    data.breakdowns.forEach(row => {
+                        tbody.insertAdjacentHTML('beforeend', `
+                            <tr class="border-b border-gray-200 last:border-b-0">
+                                <td class="px-4 py-3 text-sm text-gray-900">${row.expense_date ?? '-'}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900">${row.category_name ?? '-'}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900">${row.transaction_details ?? '-'}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600">${row.description ?? '-'}</td>
+                                <td class="px-4 py-3 text-sm text-right font-semibold text-teal-700">PHP ${Number(row.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                        `);
+                    });
+                }
+
+                viewBreakdownModal.classList.remove('hidden');
+                viewBreakdownModal.style.display = 'flex';
+
+                if (window.feather) {
+                    feather.replace();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while loading the breakdown');
+            });
+        });
+    });
+
+    function closeViewBreakdownModal() {
+        viewBreakdownModal.classList.add('hidden');
+        viewBreakdownModal.style.display = 'none';
+    }
+
+    if (closeViewBreakdownBtn) {
+        closeViewBreakdownBtn.addEventListener('click', closeViewBreakdownModal);
+    }
+
+    if (closeViewBreakdownFooterBtn) {
+        closeViewBreakdownFooterBtn.addEventListener('click', closeViewBreakdownModal);
+    }
+
+    if (viewBreakdownModal) {
+        viewBreakdownModal.addEventListener('click', function(e) {
+            if (e.target === viewBreakdownModal) {
+                closeViewBreakdownModal();
+            }
+        });
+    }
+
     function updateBalances() {
         // The page will reload after API calls, so this is mainly for visual feedback
         // Real balances are calculated on the server
@@ -584,55 +791,5 @@
     updatePeriodDisplay();
     setDateToFirstOfMonth();
 
-    // Breakdown Modal
-    const breakdownModal = document.getElementById('breakdownModal');
-    const closeBreakdownBtn = document.getElementById('closeBreakdownBtn');
-    const cancelBreakdownBtn = document.getElementById('cancelBreakdownBtn');
-    const breakdownForm = document.getElementById('breakdownForm');
-
-    // Open breakdown modal
-    document.querySelectorAll('.breakdownBtn').forEach(button => {
-        button.addEventListener('click', function() {
-            const transactionId = this.getAttribute('data-id');
-            const employeeName = this.getAttribute('data-employee');
-            const date = this.getAttribute('data-date');
-            const amount = this.getAttribute('data-amount');
-
-            document.getElementById('breakdownEmployeeName').textContent = employeeName;
-            document.getElementById('breakdownTransactionId').value = transactionId;
-            document.getElementById('breakdownDate').value = date;
-            document.getElementById('breakdownAmount').value = amount;
-            document.getElementById('breakdownDetails').value = '';
-            document.getElementById('breakdownDescription').value = '';
-            document.getElementById('breakdownCategory').value = '';
-
-            breakdownModal.classList.remove('hidden');
-            breakdownModal.style.display = 'flex';
-        });
-    });
-
-    closeBreakdownBtn.addEventListener('click', function() {
-        breakdownModal.classList.add('hidden');
-        breakdownModal.style.display = 'none';
-    });
-
-    cancelBreakdownBtn.addEventListener('click', function() {
-        breakdownModal.classList.add('hidden');
-        breakdownModal.style.display = 'none';
-    });
-
-    // Close modal when clicking outside
-    breakdownModal.addEventListener('click', function(e) {
-        if (e.target === breakdownModal) {
-            breakdownModal.classList.add('hidden');
-            breakdownModal.style.display = 'none';
-        }
-    });
-
-    // Breakdown form submission disabled - route not implemented
-    breakdownForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        alert('Breakdown feature is not yet available');
-    });
 </script>
 @endsection

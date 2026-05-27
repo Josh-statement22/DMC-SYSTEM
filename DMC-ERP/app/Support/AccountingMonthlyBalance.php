@@ -17,7 +17,7 @@ class AccountingMonthlyBalance
             ? (float) $storedBalance->opening_balance
             : self::previousEndingBalance($monthDate);
 
-        $debitTotal = self::liquidationAmountFor($monthDate, 'debit');
+        $debitTotal = self::cashAdvanceRequestAmountFor($monthDate);
         $creditTotal = self::liquidationAmountFor($monthDate, 'credit');
         $expenseTotal = $debitTotal - $creditTotal;
         $endingBalance = $openingBalance - $expenseTotal;
@@ -105,6 +105,16 @@ class AccountingMonthlyBalance
                 Carbon::parse($monthDate->toDateString())->endOfMonth()->toDateString(),
             ])
             ->sum('amount');
+    }
+
+    private static function cashAdvanceRequestAmountFor(CarbonInterface $monthDate): float
+    {
+        return (float) DB::table('cash_advance_requests')
+            ->whereBetween('request_date', [
+                $monthDate->toDateString(),
+                Carbon::parse($monthDate->toDateString())->endOfMonth()->toDateString(),
+            ])
+            ->sum(DB::raw('COALESCE(approved_amount, requested_amount, 0)'));
     }
 
     private static function releasedAmountFor(CarbonInterface $monthDate): float

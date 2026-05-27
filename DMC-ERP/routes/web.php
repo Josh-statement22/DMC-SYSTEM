@@ -535,6 +535,7 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
 
 Route::get('/accounting/liquidate-expenses', [\App\Http\Controllers\AccountingController::class, 'liquidateExpenses'])->middleware('auth')->name('accounting.liquidate-expenses');
 Route::post('/accounting/liquidate-expenses/expense', [\App\Http\Controllers\AccountingController::class, 'storeExpense'])->middleware('auth')->name('accounting.store-expense');
+Route::get('/accounting/liquidate-expenses/expense/{id}/breakdown', [\App\Http\Controllers\AccountingController::class, 'showExpenseBreakdown'])->middleware('auth')->name('accounting.show-expense-breakdown');
 Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
 Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
 
