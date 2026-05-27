@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\CashAdvanceMonthlyBalance;
 use App\Models\CashAdvanceRequest;
+use App\Support\AccountingMonthlyBalance;
 
 if (!function_exists('redirect_if_role_not_allowed')) {
     function redirect_if_role_not_allowed(array $allowedRoleIds)
@@ -64,6 +65,7 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
 
         $expenseRowsByLiquidation = DB::table('liquidation_expenses')
             ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
             ->select(
                 'liquidation_expenses.liquidation_id',
                 'liquidation_expenses.expense_date',
@@ -334,43 +336,16 @@ Route::put('/superadmin/users/{id}', function (Request $request, $id) {
 */
 
 Route::get('/admin/dashboard', function () {
-
-    $user = Auth::user();
-
-    if (!$user) {
-        return redirect()->route('login');
-    }
-
-    if (!in_array((int) $user->role_id, [1, 2], true)) {
-
-        return match ((int) $user->role_id) {
-            1 => redirect('/superadmin/dashboard'),
-            2 => redirect('/admin/dashboard'),
-            3 => redirect('/accounting/dashboard'),
-            default => abort(403),
-        };
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
     }
 
     return view('admin.dashboard');
-
 })->middleware('auth')->name('admin.dashboard');
 
 Route::get('/admin/dashboard/summary', function (Request $request) {
-
-    $user = Auth::user();
-
-    if (!$user) {
-        return redirect()->route('login');
-    }
-
-    if (!in_array((int) $user->role_id, [1, 2], true)) {
-
-        return match ((int) $user->role_id) {
-            1 => redirect('/superadmin/dashboard'),
-            2 => redirect('/admin/dashboard'),
-            3 => redirect('/accounting/dashboard'),
-            default => abort(403),
-        };
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
     }
 
     $viewMode = in_array($request->query('view_mode'), ['week', 'month']) ? $request->query('view_mode') : 'week';
@@ -444,14 +419,8 @@ Route::get('/admin/dashboard/summary', function (Request $request) {
 */
 
 Route::get('/accounting/dashboard', function () {
-    $user = Auth::user();
-
-    if (!$user) {
-        return redirect()->route('login');
-    }
-
-    if ((int) $user->role_id !== 3) {
-        return abort(403);
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
     }
 
     $currentMonth = now();
@@ -462,10 +431,7 @@ Route::get('/accounting/dashboard', function () {
         ->orderBy('name')
         ->get();
 
-    $currentMonthlyBalance = CashAdvanceMonthlyBalance::query()
-        ->where('year', $currentMonth->year)
-        ->where('month', $currentMonth->month)
-        ->first();
+    $currentMonthlyBalance = (object) AccountingMonthlyBalance::forMonth($currentMonth);
 
     return view('accounting.dashboard', compact('employees', 'currentMonthlyBalance'));
 })->middleware('auth')->name('accounting.dashboard');
@@ -478,38 +444,10 @@ Route::get('/accounting/cash-advance/monthly-balance', function (Request $reques
     $monthKey = (string) $request->query('month_key', now()->format('Y-m'));
     $monthDate = \Carbon\Carbon::createFromFormat('Y-m', $monthKey)->startOfMonth();
 
-    $monthlyBalance = CashAdvanceMonthlyBalance::query()
-        ->where('year', $monthDate->year)
-        ->where('month', $monthDate->month)
-        ->first();
-
-    $previousMonthDate = (clone $monthDate)->subMonth();
-    $previousMonthlyBalance = CashAdvanceMonthlyBalance::query()
-        ->where('year', $previousMonthDate->year)
-        ->where('month', $previousMonthDate->month)
-        ->first();
-
-    $carryoverBalance = $monthlyBalance ? (float) $monthlyBalance->carryover_balance : (float) ($previousMonthlyBalance->remaining_balance ?? 0);
-    $openingBalance = $monthlyBalance ? (float) $monthlyBalance->opening_balance : 0.0;
+    $balance = AccountingMonthlyBalance::forMonth($monthDate);
 
     return response()->json([
-        'balance' => [
-            'id' => $monthlyBalance?->id,
-            'exists' => (bool) $monthlyBalance,
-            'year' => (int) $monthDate->year,
-            'month' => (int) $monthDate->month,
-            'month_key' => $monthDate->format('Y-m'),
-            'month_label' => $monthDate->format('F Y'),
-            'carryover_balance' => $carryoverBalance,
-            'added_budget' => (float) ($monthlyBalance?->added_budget ?? 0),
-            'opening_balance' => $openingBalance,
-            'released_total' => (float) ($monthlyBalance?->released_total ?? 0),
-            'expense_total' => (float) ($monthlyBalance?->expense_total ?? 0),
-            'remaining_balance' => (float) ($monthlyBalance?->remaining_balance ?? 0),
-            'remarks' => $monthlyBalance?->remarks,
-            'prepared_by' => $monthlyBalance?->prepared_by,
-            'finalized_at' => optional($monthlyBalance?->finalized_at)?->toIso8601String(),
-        ],
+        'balance' => $balance,
     ]);
 })->middleware('auth')->name('accounting.cash-advance.monthly-balance.show');
 
@@ -520,8 +458,6 @@ Route::post('/accounting/cash-advance/monthly-balance', function (Request $reque
 
     $validated = $request->validate([
         'month_key' => 'nullable|date_format:Y-m',
-        'carryover_balance' => 'nullable|numeric|min:0',
-        'added_budget' => 'nullable|numeric|min:0',
         'opening_balance' => 'required|numeric|min:0',
     ]);
 
@@ -530,59 +466,22 @@ Route::post('/accounting/cash-advance/monthly-balance', function (Request $reque
         : now()->startOfMonth();
 
     $openingBalance = round((float) $validated['opening_balance'], 2);
-    $carryoverBalance = array_key_exists('carryover_balance', $validated)
-        ? round((float) $validated['carryover_balance'], 2)
-        : 0.0;
-    $addedBudget = array_key_exists('added_budget', $validated)
-        ? round((float) $validated['added_budget'], 2)
-        : 0.0;
-
-    if (!array_key_exists('carryover_balance', $validated) || $carryoverBalance === 0.0) {
-        $previousMonthDate = (clone $monthDate)->subMonth();
-        $previousMonthlyBalance = CashAdvanceMonthlyBalance::query()
-            ->where('year', $previousMonthDate->year)
-            ->where('month', $previousMonthDate->month)
-            ->first();
-
-        $carryoverBalance = (float) ($previousMonthlyBalance->remaining_balance ?? 0);
-    }
-
     $monthlyBalance = CashAdvanceMonthlyBalance::firstOrNew([
         'year' => $monthDate->year,
         'month' => $monthDate->month,
     ]);
 
-    $releasedTotal = (float) $monthlyBalance->released_total;
-    $expenseTotal = (float) $monthlyBalance->expense_total;
-
     $monthlyBalance->fill([
-        'carryover_balance' => $carryoverBalance,
-        'added_budget' => $addedBudget,
         'opening_balance' => $openingBalance,
-        'remaining_balance' => round($openingBalance - $releasedTotal - $expenseTotal, 2),
         'prepared_by' => Auth::id(),
     ]);
     $monthlyBalance->save();
+    AccountingMonthlyBalance::syncStoredMonth($monthDate);
+    $balance = AccountingMonthlyBalance::forMonth($monthDate);
 
     return response()->json([
         'message' => 'Monthly opening balance saved successfully.',
-        'balance' => [
-            'id' => $monthlyBalance->id,
-            'exists' => true,
-            'year' => (int) $monthlyBalance->year,
-            'month' => (int) $monthlyBalance->month,
-            'month_key' => sprintf('%04d-%02d', $monthlyBalance->year, $monthlyBalance->month),
-            'month_label' => $monthDate->format('F Y'),
-            'carryover_balance' => (float) $monthlyBalance->carryover_balance,
-            'added_budget' => (float) $monthlyBalance->added_budget,
-            'opening_balance' => (float) $monthlyBalance->opening_balance,
-            'released_total' => (float) $monthlyBalance->released_total,
-            'expense_total' => (float) $monthlyBalance->expense_total,
-            'remaining_balance' => (float) $monthlyBalance->remaining_balance,
-            'remarks' => $monthlyBalance->remarks,
-            'prepared_by' => $monthlyBalance->prepared_by,
-            'finalized_at' => optional($monthlyBalance->finalized_at)?->toIso8601String(),
-        ],
+        'balance' => $balance,
     ]);
 })->middleware('auth')->name('accounting.cash-advance.monthly-balance.store');
 
@@ -602,7 +501,8 @@ Route::get('/accounting/liquidation/submitted', function () {
     }
 
     $liquidations = buildLiquidationTrackingRecords()
-        ->filter(fn ($record) => strtolower((string) ($record['status'] ?? '')) === 'submitted')
+        ->filter(fn ($record) => strtolower((string) ($record['status'] ?? '')) === 'submitted'
+            || (!empty($record['submitted_at']) && strtolower((string) ($record['status'] ?? '')) === 'pending'))
         ->values();
 
     return response()->json([
@@ -634,7 +534,12 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
     return view('accounting.liquidation', compact('liquidationRecords', 'selectedEmployee'));
 })->middleware('auth')->name('accounting.liquidation.employee');
 
-Route::get('/accounting/liquidate-expenses', function () {
+Route::get('/accounting/liquidate-expenses', [\App\Http\Controllers\AccountingController::class, 'liquidateExpenses'])->middleware('auth')->name('accounting.liquidate-expenses');
+Route::post('/accounting/liquidate-expenses/expense', [\App\Http\Controllers\AccountingController::class, 'storeExpense'])->middleware('auth')->name('accounting.store-expense');
+Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
+Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
+
+Route::get('/accounting/summary', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {
         return $redirect;
     }
@@ -645,12 +550,87 @@ Route::get('/accounting/liquidate-expenses', function () {
         ->orderBy('name')
         ->get();
 
-    $categories = DB::table('categories')
-        ->orderBy('particulars_category')
+    return view('accounting.summary', compact('employees'));
+})->middleware('auth')->name('accounting.summary');
+
+Route::get('/accounting/summary/data', function (Request $request) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $page = max(1, (int) $request->query('page', 1));
+    $perPage = 20;
+    $employeeId = $request->query('employee_id');
+    $fromDate = $request->query('from_date');
+    $toDate = $request->query('to_date');
+
+    // Build query for liquidation expenses
+    $expenseQuery = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->join('users', 'liquidations.user_id', '=', 'users.id')
+        ->leftJoin('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->leftJoin('categories as direct_categories', 'liquidation_expenses.category_id', '=', 'direct_categories.id')
+        ->leftJoin('categories as particular_categories', 'particulars.category_id', '=', 'particular_categories.id');
+
+    // Apply filters
+    if ($employeeId) {
+        $expenseQuery->where('liquidations.user_id', $employeeId);
+    }
+
+    if ($fromDate) {
+        $expenseQuery->where('liquidation_expenses.expense_date', '>=', $fromDate);
+    }
+
+    if ($toDate) {
+        $expenseQuery->where('liquidation_expenses.expense_date', '<=', $toDate);
+    }
+
+    // Get summary data before pagination
+    $summaryQuery = clone $expenseQuery;
+    $summary = $summaryQuery->selectRaw('
+        COUNT(*) as total_count,
+        SUM(CASE WHEN liquidation_expenses.transaction_type = "credit" THEN liquidation_expenses.amount ELSE 0 END) as total_credits,
+        SUM(CASE WHEN liquidation_expenses.transaction_type = "debit" THEN liquidation_expenses.amount ELSE 0 END) as total_debits
+    ')->first();
+
+    $summary->total_credits = $summary->total_credits ?? 0;
+    $summary->total_debits = $summary->total_debits ?? 0;
+    $summary->net_amount = $summary->total_debits - $summary->total_credits;
+
+    // Get paginated expenses
+    $totalExpenses = (clone $expenseQuery)->count();
+    $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
+    $page = min($page, $totalPages);
+
+    $expenses = (clone $expenseQuery)
+        ->select(
+            'liquidation_expenses.expense_date',
+            'users.name as employee_name',
+            'liquidation_expenses.transaction_type',
+            'liquidation_expenses.description',
+            'liquidation_expenses.transaction_details',
+            'liquidation_expenses.amount',
+            DB::raw('COALESCE(particulars.particular_name, liquidation_expenses.transaction_details) as particular_name'),
+            DB::raw('COALESCE(direct_categories.particulars_category, particular_categories.particulars_category) as category_name'),
+            DB::raw('CASE WHEN liquidation_expenses.transaction_type = "credit" THEN liquidation_expenses.amount ELSE 0 END as credit'),
+            DB::raw('CASE WHEN liquidation_expenses.transaction_type = "debit" THEN liquidation_expenses.amount ELSE 0 END as debit')
+        )
+        ->orderBy('liquidation_expenses.expense_date')
+        ->offset(($page - 1) * $perPage)
+        ->limit($perPage)
         ->get();
 
-    return view('accounting.liquidate-expenses', compact('employees', 'categories'));
-})->middleware('auth')->name('accounting.liquidate-expenses');
+    return response()->json([
+        'expenses' => $expenses,
+        'summary' => $summary,
+        'pagination' => [
+            'current_page' => $page,
+            'total_pages' => $totalPages,
+            'total_items' => $totalExpenses,
+            'per_page' => $perPage,
+        ],
+    ]);
+})->middleware('auth')->name('accounting.summary.data');
 
 Route::get('/accounting/cash-advance/requests', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {
@@ -1299,7 +1279,8 @@ Route::get('/admin/liquidation', function () {
 
     $liquidationExpenses = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
-        ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+        ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->join('categories', 'particulars.category_id', '=', 'categories.id')
         ->where('liquidation_expenses.liquidation_id', $liquidation->id)
         ->select(
             'liquidation_expenses.id',
@@ -1354,6 +1335,27 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
     }
 
+    // Get the category name
+    $category = DB::table('categories')->where('id', $validated['category_id'])->first();
+    $categoryName = $category->particulars_category ?? 'General';
+
+    // Find or create a particular for this category
+    $particular = DB::table('particulars')
+        ->where('category_id', $validated['category_id'])
+        ->first();
+
+    if (!$particular) {
+        // If no particular exists for this category, create a default one
+        $particularId = DB::table('particulars')->insertGetId([
+            'particular_name' => $categoryName,
+            'category_id' => $validated['category_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    } else {
+        $particularId = $particular->id;
+    }
+
     $receiptPath = null;
     if ($request->hasFile('receipt_image')) {
         $receiptPath = $request->file('receipt_image')->store('liquidation-receipts', 'public');
@@ -1372,7 +1374,8 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
     ]);
 
     $expense = DB::table('liquidation_expenses')
-        ->join('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+        ->join('particulars', 'liquidation_expenses.particular_id', '=', 'particulars.id')
+        ->join('categories', 'particulars.category_id', '=', 'categories.id')
         ->where('liquidation_expenses.id', $expenseId)
         ->select(
             'liquidation_expenses.id',
@@ -1475,7 +1478,10 @@ Route::patch('/accounting/liquidation/{liquidation}/decision', function (Request
         ], 404);
     }
 
-    if (strtolower((string) $record->status) !== 'submitted') {
+    $isSubmittedForReview = strtolower((string) $record->status) === 'submitted'
+        || (!empty($record->submitted_at) && strtolower((string) $record->status) === 'pending');
+
+    if (! $isSubmittedForReview) {
         return response()->json([
             'message' => 'This liquidation is no longer pending accounting review.',
         ], 422);

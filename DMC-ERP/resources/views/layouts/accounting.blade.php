@@ -79,7 +79,7 @@
 
             <a id="accountingLiquidateExpensesNav" href="{{ route('accounting.liquidate-expenses') }}"
                class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.liquidate-expenses') ? $active : $normal }}">
-                <i data-feather="receipt"></i>
+                <i data-feather="edit-3"></i>
                 <span class="menu-text">Liquidate Expenses</span>
             </a>
 
@@ -87,6 +87,12 @@
                class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.liquidation*') ? $active : $normal }}">
                 <i data-feather="clipboard"></i>
                 <span class="menu-text">Liquidation Tracking</span>
+            </a>
+
+            <a id="accountingSummaryNav" href="{{ route('accounting.summary') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.summary*') ? $active : $normal }}">
+                <i data-feather="bar-chart-2"></i>
+                <span class="menu-text">Summary</span>
             </a>
         </nav>
 

@@ -52,6 +52,71 @@
         </div>
     </div>
 
+    <div id="liquidationReviewModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4">
+        <div class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div class="border-b border-gray-100 bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100">Liquidation Review</p>
+                        <h3 id="liquidationReviewTitle" class="mt-1 text-2xl font-bold">Submitted liquidation</h3>
+                        <p id="liquidationReviewSubtitle" class="mt-1 text-sm text-emerald-50"></p>
+                    </div>
+                    <button id="closeLiquidationReviewBtn" type="button" class="rounded-xl p-2 text-white transition hover:bg-white/15">
+                        <i data-feather="x" class="h-5 w-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-y-auto p-5">
+                <div class="grid gap-4 md:grid-cols-4">
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Submitted By</p>
+                        <p id="liquidationReviewSender" class="mt-1 text-sm font-bold text-gray-900">-</p>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Balance Sent</p>
+                        <p id="liquidationReviewBalance" class="mt-1 text-sm font-bold text-gray-900">PHP 0.00</p>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Total Expenses</p>
+                        <p id="liquidationReviewExpenses" class="mt-1 text-sm font-bold text-gray-900">PHP 0.00</p>
+                    </div>
+                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Remaining</p>
+                        <p id="liquidationReviewRemaining" class="mt-1 text-sm font-bold text-gray-900">PHP 0.00</p>
+                    </div>
+                </div>
+
+                <div class="mt-5 overflow-hidden rounded-2xl border border-gray-200">
+                    <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                        <p class="text-sm font-bold text-gray-900">Expense Breakdown</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-gray-200 bg-white text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                    <th class="px-4 py-3">Date</th>
+                                    <th class="px-4 py-3">Category</th>
+                                    <th class="px-4 py-3">Particulars</th>
+                                    <th class="px-4 py-3">Description</th>
+                                    <th class="px-4 py-3 text-right">Amount</th>
+                                    <th class="px-4 py-3 text-center">Receipt</th>
+                                </tr>
+                            </thead>
+                            <tbody id="liquidationReviewExpenseBody"></tbody>
+                        </table>
+                    </div>
+                    <p id="liquidationReviewEmpty" class="hidden px-4 py-8 text-center text-sm text-gray-500">No expenses attached to this liquidation.</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 p-4">
+                <button id="liquidationReviewRejectBtn" type="button" class="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700">Reject</button>
+                <button id="liquidationReviewApproveBtn" type="button" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700">Approve</button>
+            </div>
+        </div>
+    </div>
+
     <div class="rounded-3xl border border-slate-800 bg-slate-950 p-5 text-white shadow-2xl md:p-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex flex-wrap items-center gap-3">
@@ -302,7 +367,8 @@
     let currentPeriodStart = startOfDay(getMonthStart(new Date()));
     let currentPeriodEnd = endOfDay(getMonthEnd(new Date()));
     let sortState = { field: 'total_amount', direction: 'desc' };
-    let liquidationQueueRecords = liquidationRecords.filter((record) => String(record.status || '').toLowerCase() === 'submitted');
+    let liquidationQueueRecords = liquidationRecords.filter((record) => String(record.status || '').toLowerCase() === 'submitted'
+        || (record.submitted_at && String(record.status || '').toLowerCase() === 'pending'));
     let liquidationQueuePollingInterval = null;
     let liquidationQueueFetchInProgress = false;
 
@@ -332,6 +398,19 @@
     const liquidationQueueLabel = document.getElementById('liquidationQueueLabel');
     const liquidationQueueList = document.getElementById('liquidationQueueList');
     const liquidationQueueEmpty = document.getElementById('liquidationQueueEmpty');
+    const liquidationReviewModal = document.getElementById('liquidationReviewModal');
+    const liquidationReviewTitle = document.getElementById('liquidationReviewTitle');
+    const liquidationReviewSubtitle = document.getElementById('liquidationReviewSubtitle');
+    const liquidationReviewSender = document.getElementById('liquidationReviewSender');
+    const liquidationReviewBalance = document.getElementById('liquidationReviewBalance');
+    const liquidationReviewExpenses = document.getElementById('liquidationReviewExpenses');
+    const liquidationReviewRemaining = document.getElementById('liquidationReviewRemaining');
+    const liquidationReviewExpenseBody = document.getElementById('liquidationReviewExpenseBody');
+    const liquidationReviewEmpty = document.getElementById('liquidationReviewEmpty');
+    const closeLiquidationReviewBtn = document.getElementById('closeLiquidationReviewBtn');
+    const liquidationReviewRejectBtn = document.getElementById('liquidationReviewRejectBtn');
+    const liquidationReviewApproveBtn = document.getElementById('liquidationReviewApproveBtn');
+    let activeLiquidationReviewId = null;
 
     // Previous balances UI elements
     const openPrevBalanceBtn = document.getElementById('openPrevBalanceBtn');
@@ -385,7 +464,7 @@
         if (!prevOpeningBalanceText || !prevEndingBalanceText) return;
         fetchMonthlyBalance(monthKey).then((balance) => {
             prevOpeningBalanceText.textContent = `Opening Balance: ${formatCurrency(balance?.opening_balance || 0)}`;
-            prevEndingBalanceText.textContent = `Ending Balance: ${formatCurrency(balance?.carryover_balance || 0)}`;
+            prevEndingBalanceText.textContent = `Ending Balance: ${formatCurrency(balance?.remaining_balance || 0)}`;
         });
     }
 
@@ -529,6 +608,15 @@
         return `PHP ${numericAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     function formatDate(dateValue) {
         const date = dateValue instanceof Date ? dateValue : parseDate(dateValue);
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -650,7 +738,8 @@
 
     function getSubmittedLiquidations() {
         return liquidationQueueRecords
-            .filter((record) => normalizeLiquidationStatus(record.status) === 'submitted')
+            .filter((record) => normalizeLiquidationStatus(record.status) === 'submitted'
+                || (record.submitted_at && normalizeLiquidationStatus(record.status) === 'pending'))
             .sort((left, right) => new Date(right.submitted_at || right.record_timestamp || 0) - new Date(left.submitted_at || left.record_timestamp || 0));
     }
 
@@ -717,24 +806,81 @@
 
         liquidationQueueEmpty.classList.add('hidden');
         liquidationQueueList.innerHTML = submittedRecords.map((record) => `
-            <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+            <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-950">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <p class="text-sm font-bold">${record.name || 'Employee'} submitted ${record.period_month_label || record.cutoff_period || 'liquidation'}</p>
+                        <p class="text-sm font-bold">Submitted by: ${escapeHtml(record.name || 'Employee')}</p>
+                        <p class="mt-1 text-xs font-semibold text-emerald-800">${escapeHtml(record.period_month_label || record.cutoff_period || 'Liquidation')}</p>
                         <p class="mt-1 text-xs font-medium">Submitted: ${formatDate(record.submitted_at || record.record_date)}</p>
                         <p class="mt-1 text-xs font-medium">Amount: ${formatCurrency(record.balance_sent || 0)} | Expenses: ${formatCurrency(record.total_expenses || 0)}</p>
                     </div>
                 </div>
                 <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <button type="button" class="liquidation-decision-btn rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700" data-liquidation-id="${record.id}" data-decision="approved">Approve</button>
-                    <button type="button" class="liquidation-decision-btn rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-700" data-liquidation-id="${record.id}" data-decision="rejected">Reject</button>
+                    <button type="button" class="liquidation-review-btn rounded-lg bg-white px-3 py-2 text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition hover:bg-emerald-100" data-liquidation-id="${record.id}">View for approval</button>
                 </div>
             </div>
         `).join('');
 
-        document.querySelectorAll('.liquidation-decision-btn').forEach((button) => {
-            button.addEventListener('click', () => submitLiquidationDecision(button.dataset.liquidationId, button.dataset.decision));
+        document.querySelectorAll('.liquidation-review-btn').forEach((button) => {
+            button.addEventListener('click', () => openLiquidationReviewModal(button.dataset.liquidationId));
         });
+    }
+
+    function findLiquidationRecord(liquidationId) {
+        return liquidationRecords.find((item) => Number(item.id) === Number(liquidationId))
+            || liquidationQueueRecords.find((item) => Number(item.id) === Number(liquidationId));
+    }
+
+    function openLiquidationReviewModal(liquidationId) {
+        const record = findLiquidationRecord(liquidationId);
+        if (!record || !liquidationReviewModal) {
+            return;
+        }
+
+        activeLiquidationReviewId = record.id;
+        const senderLabel = `${record.name || 'Employee'}${record.employee_id ? ' (' + record.employee_id + ')' : ''}`;
+        const periodLabel = record.period_month_label || record.cutoff_period || 'Liquidation';
+        const expenseLines = Array.isArray(record.expense_breakdown) ? record.expense_breakdown : [];
+
+        liquidationReviewTitle.textContent = `${record.name || 'Employee'} - ${periodLabel}`;
+        liquidationReviewSubtitle.textContent = `Submitted ${formatDate(record.submitted_at || record.record_date)} for accounting review`;
+        liquidationReviewSender.textContent = senderLabel;
+        liquidationReviewBalance.textContent = formatCurrency(record.balance_sent || 0);
+        liquidationReviewExpenses.textContent = formatCurrency(record.total_expenses || 0);
+        liquidationReviewRemaining.textContent = formatCurrency(record.remaining_balance || 0);
+
+        if (expenseLines.length === 0) {
+            liquidationReviewExpenseBody.innerHTML = '';
+            liquidationReviewEmpty.classList.remove('hidden');
+        } else {
+            liquidationReviewEmpty.classList.add('hidden');
+            liquidationReviewExpenseBody.innerHTML = expenseLines.map((line) => `
+                <tr class="border-b border-gray-100">
+                    <td class="px-4 py-3 text-sm text-gray-700">${formatDate(line.expense_date || record.record_date)}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(line.category || '-')}</td>
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900">${escapeHtml(line.details || '-')}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(line.description || '-')}</td>
+                    <td class="px-4 py-3 text-right text-sm font-semibold text-gray-900">${formatCurrency(line.amount || 0)}</td>
+                    <td class="px-4 py-3 text-center">
+                        ${line.receipt_url ? `<a href="${escapeHtml(line.receipt_url)}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">View Receipt</a>` : '<span class="text-xs text-gray-400">None</span>'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        liquidationReviewModal.classList.remove('hidden');
+        liquidationReviewModal.classList.add('flex');
+        setTimeout(() => feather.replace(), 10);
+    }
+
+    function closeLiquidationReviewModal() {
+        if (!liquidationReviewModal) {
+            return;
+        }
+
+        activeLiquidationReviewId = null;
+        liquidationReviewModal.classList.add('hidden');
+        liquidationReviewModal.classList.remove('flex');
     }
 
     async function submitLiquidationDecision(liquidationId, decision) {
@@ -775,6 +921,7 @@
             }
 
             liquidationQueueRecords = liquidationQueueRecords.filter((item) => Number(item.id) !== Number(liquidationId));
+            closeLiquidationReviewModal();
             renderLiquidationQueue();
             renderLiquidationDashboard();
             showAccountingToast(payload?.message || 'Liquidation decision saved.', 'success');
@@ -1015,6 +1162,34 @@
         liquidationQueueBtn.addEventListener('click', (event) => {
             event.stopPropagation();
             liquidationQueuePanel.classList.toggle('hidden');
+        });
+    }
+
+    if (closeLiquidationReviewBtn) {
+        closeLiquidationReviewBtn.addEventListener('click', closeLiquidationReviewModal);
+    }
+
+    if (liquidationReviewRejectBtn) {
+        liquidationReviewRejectBtn.addEventListener('click', () => {
+            if (activeLiquidationReviewId) {
+                submitLiquidationDecision(activeLiquidationReviewId, 'rejected');
+            }
+        });
+    }
+
+    if (liquidationReviewApproveBtn) {
+        liquidationReviewApproveBtn.addEventListener('click', () => {
+            if (activeLiquidationReviewId) {
+                submitLiquidationDecision(activeLiquidationReviewId, 'approved');
+            }
+        });
+    }
+
+    if (liquidationReviewModal) {
+        liquidationReviewModal.addEventListener('click', (event) => {
+            if (event.target === liquidationReviewModal) {
+                closeLiquidationReviewModal();
+            }
         });
     }
 
