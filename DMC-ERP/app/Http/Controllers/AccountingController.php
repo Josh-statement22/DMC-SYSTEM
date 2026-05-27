@@ -172,19 +172,13 @@ class AccountingController extends Controller
             'employee_id' => 'required|integer|exists:users,id',
             'transaction_type' => 'required|in:debit,credit',
             'amount' => 'required|numeric|min:0.01',
-            'category_id' => 'nullable|integer|exists:categories,id',
+            'purpose' => 'required_if:transaction_type,debit|nullable|string|max:255',
         ]);
 
         $expenseDate = Carbon::parse($validated['expense_date']);
         $cutoffPeriod = $expenseDate->format('F Y');
 
-        $categoryId = $validated['category_id'] ?? null;
-        $transactionDetails = null;
-
-        if ($categoryId) {
-            $cat = DB::table('categories')->where('id', $categoryId)->select('particulars_category')->first();
-            $transactionDetails = $cat?->particulars_category ?? null;
-        }
+        $purpose = $validated['purpose'] ?? null;
 
         $liquidation = DB::table('liquidations')
             ->where('user_id', $validated['employee_id'])
@@ -218,7 +212,7 @@ class AccountingController extends Controller
             'requester_id' => $validated['employee_id'],
             'requested_amount' => round((float) $validated['amount'], 2),
             'approved_amount' => round((float) $validated['amount'], 2),
-            'purpose' => $transactionDetails ?? null,
+            'purpose' => $purpose,
             'request_date' => $validated['expense_date'],
             'date_needed' => $validated['expense_date'],
             'status' => 'approved',

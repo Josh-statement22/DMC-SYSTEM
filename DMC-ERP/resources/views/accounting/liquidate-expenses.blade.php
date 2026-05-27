@@ -141,19 +141,15 @@
             </div>
 
             <!-- Category (dropdown) -->
-            <div id="categorySection" style="display: none;">
-                <label for="category_id" class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-                <select 
-                    id="category_id" 
-                    name="category_id" 
+            <div id="purposeSection" style="display: none;">
+                <label for="purpose" class="block text-sm font-semibold text-gray-700 mb-2">Purpose</label>
+                <input
+                    type="text"
+                    id="purpose"
+                    name="purpose"
+                    placeholder="Enter purpose"
                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                 >
-                    <option value="">Select Category</option>
-                    @forelse($categories ?? [] as $category)
-                        <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
-                    @empty
-                    @endforelse
-                </select>
             </div>
 
             <!-- Accounting Remarks (auto-set to 'Manually Recorded' for liquidation entries) -->
@@ -225,7 +221,6 @@
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Employee</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Purpose</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Remarks</th>
                         <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
@@ -242,7 +237,6 @@
                                     {{ ucfirst($expense->transaction_type) }}
                                 </span>
                             </td>
-                            <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->category_name ?? '-' }}</td>
                             <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->transaction_details ?? '-' }}</td>
                             <td class="px-6 py-3 text-sm text-gray-600">{{ $expense->description ?? '-' }}</td>
                             <td class="px-6 py-3 text-sm text-right font-semibold {{ $expense->transaction_type === 'debit' ? 'text-red-600' : 'text-green-600' }}">
@@ -274,7 +268,7 @@
                         </tr>
                     @empty
                         <tr class="border-b border-gray-200">
-                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">No transactions recorded yet</td>
+                            <td colspan="7" class="px-6 py-8 text-center text-gray-500">No transactions recorded yet</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -440,16 +434,17 @@
         document.getElementById('currentPeriod').textContent = period;
     }
 
-    // Update transaction type change - show/hide cash advance sections
+    // Update transaction type change - show/hide purpose section for debit
     document.getElementById('transaction_type').addEventListener('change', function() {
-        const categorySection = document.getElementById('categorySection');
+        const purposeSection = document.getElementById('purposeSection');
+        const purposeInput = document.getElementById('purpose');
 
         if (this.value === 'debit') {
-            categorySection.style.display = 'block';
-            document.getElementById('category_id').setAttribute('required', 'required');
+            purposeSection.style.display = 'block';
+            purposeInput.setAttribute('required', 'required');
         } else {
-            categorySection.style.display = 'none';
-            document.getElementById('category_id').removeAttribute('required');
+            purposeSection.style.display = 'none';
+            purposeInput.removeAttribute('required');
         }
     });
 
