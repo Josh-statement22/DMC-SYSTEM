@@ -28,6 +28,7 @@
                 <p class="text-sm text-gray-600">Current Period: <span class="font-semibold text-gray-900" id="currentPeriod">{{ now()->format('F Y') }}</span></p>
             </div>
         </div>
+    </div>
     <!-- Balance Display -->
     <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 flex items-center justify-between">
         <div>
@@ -400,6 +401,26 @@
         </div>
     </div>
 
+    <!-- Success Modal -->
+    <div id="successModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Success</h3>
+                        <p class="text-emerald-100 text-sm mt-1">Your changes have been saved.</p>
+                    </div>
+                    <button id="closeSuccessModalBtn" type="button" class="text-white hover:text-emerald-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <p id="successModalMessage" class="text-sm text-gray-700"></p>
+            </div>
+        </div>
+    </div>
+
     <!-- End of Main Content -->
 </div>
 
@@ -419,6 +440,46 @@
     const viewBreakdownModal = document.getElementById('viewBreakdownModal');
     const closeViewBreakdownBtn = document.getElementById('closeViewBreakdownBtn');
     const closeViewBreakdownFooterBtn = document.getElementById('closeViewBreakdownFooterBtn');
+    const successModal = document.getElementById('successModal');
+    const closeSuccessModalBtn = document.getElementById('closeSuccessModalBtn');
+    const successModalMessage = document.getElementById('successModalMessage');
+    let successModalTimer = null;
+
+    function showSuccessModal(message) {
+        if (!successModal || !successModalMessage) {
+            return;
+        }
+
+        successModalMessage.textContent = message;
+        successModal.classList.remove('hidden');
+        successModal.style.display = 'flex';
+
+        if (window.feather) {
+            feather.replace();
+        }
+
+        if (successModalTimer) {
+            clearTimeout(successModalTimer);
+        }
+
+        successModalTimer = setTimeout(() => {
+            closeSuccessModal();
+        }, 5000);
+    }
+
+    function closeSuccessModal() {
+        if (!successModal) {
+            return;
+        }
+
+        successModal.classList.add('hidden');
+        successModal.style.display = 'none';
+
+        if (successModalTimer) {
+            clearTimeout(successModalTimer);
+            successModalTimer = null;
+        }
+    }
 
     // Month selector change
     document.getElementById('monthSelector').addEventListener('change', function() {
@@ -534,7 +595,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert('Breakdown saved successfully!');
+                    showSuccessModal('Breakdown saved successfully!');
                     closeBreakdownModal();
                 } else {
                     alert('Error: ' + data.message);
@@ -648,9 +709,11 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Expense recorded successfully!');
+                    showSuccessModal('Expense recorded successfully!');
                 // Reload the page to refresh the table
-                location.reload();
+                    setTimeout(() => {
+                        location.reload();
+                    }, 5000);
             } else {
                 alert('Error: ' + data.message);
             }
@@ -758,6 +821,18 @@
 
     if (closeViewBreakdownFooterBtn) {
         closeViewBreakdownFooterBtn.addEventListener('click', closeViewBreakdownModal);
+    }
+
+    if (closeSuccessModalBtn) {
+        closeSuccessModalBtn.addEventListener('click', closeSuccessModal);
+    }
+
+    if (successModal) {
+        successModal.addEventListener('click', function(e) {
+            if (e.target === successModal) {
+                closeSuccessModal();
+            }
+        });
     }
 
     if (viewBreakdownModal) {
