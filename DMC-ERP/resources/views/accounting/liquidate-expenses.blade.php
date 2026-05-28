@@ -213,7 +213,28 @@
     <!-- Transactions Table (Hidden by default) -->
     <div id="transactionsContainer" class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm" style="display: none;">
         <div class="p-6 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">Recorded Transactions</h3>
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">Recorded Transactions</h3>
+                    <p class="mt-1 text-sm text-gray-500"><span id="transactionsVisibleCount">{{ ($expenses ?? collect())->count() }}</span> transaction(s) shown</p>
+                </div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                    <div>
+                        <label for="transactionDateFilter" class="block text-sm font-semibold text-gray-700 mb-2">Filter Date</label>
+                        <select id="transactionDateFilter" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
+                            <option value="">All dates</option>
+                        </select>
+                    </div>
+                    <button
+                        type="button"
+                        id="resetTransactionDateFilter"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                    >
+                        <i data-feather="rotate-ccw" class="w-4 h-4"></i>
+                        Reset
+                    </button>
+                </div>
+            </div>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full">
@@ -230,7 +251,7 @@
                 </thead>
                 <tbody id="transactionsTableBody">
                     @forelse($expenses ?? [] as $expense)
-                        <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <tr class="transaction-row border-b border-gray-200 hover:bg-gray-50" data-transaction-date="{{ $expense->expense_date->format('Y-m-d') }}">
                             <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->expense_date->format('Y-m-d') }}</td>
                             <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->employee_name ?? 'Unassigned' }}</td>
                             <td class="px-6 py-3 text-sm">
@@ -272,8 +293,33 @@
                             <td colspan="7" class="px-6 py-8 text-center text-gray-500">No transactions recorded yet</td>
                         </tr>
                     @endforelse
+                    <tr id="transactionsFilterEmptyRow" class="hidden border-b border-gray-200">
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">No transactions found for the selected date</td>
+                    </tr>
                 </tbody>
             </table>
+        </div>
+        <div id="transactionsPaginationContainer" class="hidden border-t border-gray-200 px-6 py-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-gray-600">Page <span id="transactionsCurrentPageLabel">1</span> of <span id="transactionsTotalPagesLabel">1</span></p>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        id="transactionsPrevPageBtn"
+                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        Previous
+                    </button>
+                    <div id="transactionsPageNumbers" class="flex flex-wrap items-center gap-2"></div>
+                    <button
+                        type="button"
+                        id="transactionsNextPageBtn"
+                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        Next
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -440,9 +486,21 @@
     const viewBreakdownModal = document.getElementById('viewBreakdownModal');
     const closeViewBreakdownBtn = document.getElementById('closeViewBreakdownBtn');
     const closeViewBreakdownFooterBtn = document.getElementById('closeViewBreakdownFooterBtn');
+    const transactionDateFilter = document.getElementById('transactionDateFilter');
+    const resetTransactionDateFilter = document.getElementById('resetTransactionDateFilter');
+    const transactionsVisibleCount = document.getElementById('transactionsVisibleCount');
+    const transactionsFilterEmptyRow = document.getElementById('transactionsFilterEmptyRow');
+    const transactionsPaginationContainer = document.getElementById('transactionsPaginationContainer');
+    const transactionsPrevPageBtn = document.getElementById('transactionsPrevPageBtn');
+    const transactionsNextPageBtn = document.getElementById('transactionsNextPageBtn');
+    const transactionsPageNumbers = document.getElementById('transactionsPageNumbers');
+    const transactionsCurrentPageLabel = document.getElementById('transactionsCurrentPageLabel');
+    const transactionsTotalPagesLabel = document.getElementById('transactionsTotalPagesLabel');
     const successModal = document.getElementById('successModal');
     const closeSuccessModalBtn = document.getElementById('closeSuccessModalBtn');
     const successModalMessage = document.getElementById('successModalMessage');
+    const transactionsPerPage = 15;
+    let transactionsCurrentPage = 1;
     let successModalTimer = null;
 
     function showSuccessModal(message) {
@@ -496,6 +554,142 @@
     }
 
     // Purpose is always visible and required for manual entries.
+
+    function getMonthDateValue(day) {
+        return `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+
+    function formatTransactionFilterDate(dateValue) {
+        return new Date(`${dateValue}T00:00:00`).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    }
+
+    function populateTransactionDateFilter() {
+        if (!transactionDateFilter) {
+            return;
+        }
+
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+        let options = '<option value="">All dates</option>';
+
+        for (let day = 1; day <= daysInMonth; day += 1) {
+            const dateValue = getMonthDateValue(day);
+            options += `<option value="${dateValue}">${formatTransactionFilterDate(dateValue)}</option>`;
+        }
+
+        transactionDateFilter.innerHTML = options;
+    }
+
+    function renderTransactionsPagination(totalRows) {
+        if (!transactionsPaginationContainer || !transactionsPageNumbers) {
+            return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(totalRows / transactionsPerPage));
+        transactionsPaginationContainer.classList.toggle('hidden', totalRows <= transactionsPerPage);
+
+        if (transactionsCurrentPage > totalPages) {
+            transactionsCurrentPage = totalPages;
+        }
+
+        if (transactionsCurrentPageLabel) {
+            transactionsCurrentPageLabel.textContent = transactionsCurrentPage;
+        }
+
+        if (transactionsTotalPagesLabel) {
+            transactionsTotalPagesLabel.textContent = totalPages;
+        }
+
+        if (transactionsPrevPageBtn) {
+            transactionsPrevPageBtn.disabled = transactionsCurrentPage <= 1;
+        }
+
+        if (transactionsNextPageBtn) {
+            transactionsNextPageBtn.disabled = transactionsCurrentPage >= totalPages;
+        }
+
+        transactionsPageNumbers.innerHTML = '';
+
+        for (let page = 1; page <= totalPages; page += 1) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = page;
+            button.className = page === transactionsCurrentPage
+                ? 'inline-flex h-10 min-w-10 items-center justify-center rounded-lg bg-teal-600 px-3 text-sm font-bold text-white shadow-sm'
+                : 'inline-flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50';
+            button.addEventListener('click', () => {
+                transactionsCurrentPage = page;
+                applyTransactionDateFilter();
+            });
+            transactionsPageNumbers.appendChild(button);
+        }
+    }
+
+    function applyTransactionDateFilter(options = {}) {
+        if (options.resetPage) {
+            transactionsCurrentPage = 1;
+        }
+
+        const selectedDate = transactionDateFilter?.value || '';
+        const rows = Array.from(document.querySelectorAll('.transaction-row'));
+        const filteredRows = rows.filter(row => !selectedDate || row.dataset.transactionDate === selectedDate);
+        const totalPages = Math.max(1, Math.ceil(filteredRows.length / transactionsPerPage));
+
+        if (transactionsCurrentPage > totalPages) {
+            transactionsCurrentPage = totalPages;
+        }
+
+        const pageStart = (transactionsCurrentPage - 1) * transactionsPerPage;
+        const pageRows = filteredRows.slice(pageStart, pageStart + transactionsPerPage);
+
+        rows.forEach(row => {
+            row.classList.add('hidden');
+        });
+
+        pageRows.forEach(row => {
+            row.classList.remove('hidden');
+        });
+
+        if (transactionsVisibleCount) {
+            transactionsVisibleCount.textContent = filteredRows.length;
+        }
+
+        if (transactionsFilterEmptyRow) {
+            transactionsFilterEmptyRow.classList.toggle('hidden', filteredRows.length > 0 || rows.length === 0);
+        }
+
+        renderTransactionsPagination(filteredRows.length);
+    }
+
+    if (transactionDateFilter) {
+        transactionDateFilter.addEventListener('change', () => applyTransactionDateFilter({ resetPage: true }));
+    }
+
+    if (resetTransactionDateFilter) {
+        resetTransactionDateFilter.addEventListener('click', function() {
+            transactionDateFilter.value = '';
+            applyTransactionDateFilter({ resetPage: true });
+        });
+    }
+
+    if (transactionsPrevPageBtn) {
+        transactionsPrevPageBtn.addEventListener('click', function() {
+            if (transactionsCurrentPage > 1) {
+                transactionsCurrentPage -= 1;
+                applyTransactionDateFilter();
+            }
+        });
+    }
+
+    if (transactionsNextPageBtn) {
+        transactionsNextPageBtn.addEventListener('click', function() {
+            transactionsCurrentPage += 1;
+            applyTransactionDateFilter();
+        });
+    }
 
     // Toggle transactions visibility
     let transactionsVisible = false;
@@ -847,8 +1041,9 @@
 
     // Initialize
     updatePeriodDisplay();
+    populateTransactionDateFilter();
+    applyTransactionDateFilter();
     setDateToFirstOfMonth();
 
 </script>
 @endsection
-

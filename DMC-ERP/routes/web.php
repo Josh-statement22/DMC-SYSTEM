@@ -570,37 +570,46 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $categoryId = $request->query('category_id');
     $fromDate = $request->query('from_date');
     $toDate = $request->query('to_date');
+    $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
+    $hasLinkedCategories = DB::getSchemaBuilder()->hasTable('liquidation_expenses')
+        && DB::getSchemaBuilder()->hasColumn('liquidation_expenses', 'cash_advance_request_id')
+        && DB::getSchemaBuilder()->hasColumn('liquidation_expenses', 'category_id');
 
-    // Build query for liquidation expenses
-    $expenseQuery = DB::table('liquidation_expenses')
-        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
-        ->join('users', 'liquidations.user_id', '=', 'users.id')
-        ->leftJoin('categories as direct_categories', 'liquidation_expenses.category_id', '=', 'direct_categories.id');
+    // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
+    $expenseQuery = DB::table('cash_advance_requests')
+        ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id');
 
     // Apply filters
     if ($employeeId) {
-        $expenseQuery->where('liquidations.user_id', $employeeId);
+        $expenseQuery->where('cash_advance_requests.requester_id', $employeeId);
     }
 
     if ($fromDate) {
-        $expenseQuery->where('liquidation_expenses.expense_date', '>=', $fromDate);
+        $expenseQuery->where('cash_advance_requests.request_date', '>=', $fromDate);
     }
 
     if ($toDate) {
-        $expenseQuery->where('liquidation_expenses.expense_date', '<=', $toDate);
+        $expenseQuery->where('cash_advance_requests.request_date', '<=', $toDate);
     }
 
-    if ($categoryId) {
-        $expenseQuery->where('liquidation_expenses.category_id', $categoryId);
+    if ($categoryId && $hasLinkedCategories) {
+        $expenseQuery->whereExists(function ($query) use ($categoryId) {
+            $query->select(DB::raw(1))
+                ->from('liquidation_expenses')
+                ->whereColumn('liquidation_expenses.cash_advance_request_id', 'cash_advance_requests.id')
+                ->where('liquidation_expenses.category_id', $categoryId);
+        });
+    } elseif ($categoryId) {
+        $expenseQuery->whereRaw('1 = 0');
     }
 
     // Get summary data before pagination
     $summaryQuery = clone $expenseQuery;
-    $summary = $summaryQuery->selectRaw('
+    $summary = $summaryQuery->selectRaw("
         COUNT(*) as total_count,
-        SUM(CASE WHEN liquidation_expenses.transaction_type = "credit" THEN liquidation_expenses.amount ELSE 0 END) as total_credits,
-        SUM(CASE WHEN liquidation_expenses.transaction_type = "debit" THEN liquidation_expenses.amount ELSE 0 END) as total_debits
-    ')->first();
+        SUM(CASE WHEN {$transactionTypeSql} = 'credit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END) as total_credits,
+        SUM(CASE WHEN {$transactionTypeSql} = 'debit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END) as total_debits
+    ")->first();
 
     $summary->total_credits = $summary->total_credits ?? 0;
     $summary->total_debits = $summary->total_debits ?? 0;
@@ -613,18 +622,19 @@ Route::get('/accounting/summary/data', function (Request $request) {
 
     $expensesQuery = (clone $expenseQuery)
         ->select(
-            'liquidation_expenses.expense_date',
+            'cash_advance_requests.request_date as expense_date',
             'users.name as employee_name',
-            'liquidation_expenses.transaction_type',
-            'liquidation_expenses.description',
-            'liquidation_expenses.transaction_details',
-            'liquidation_expenses.amount',
-            'liquidation_expenses.transaction_details as particular_name',
-            'direct_categories.particulars_category as category_name',
-            DB::raw('CASE WHEN liquidation_expenses.transaction_type = "credit" THEN liquidation_expenses.amount ELSE 0 END as credit'),
-            DB::raw('CASE WHEN liquidation_expenses.transaction_type = "debit" THEN liquidation_expenses.amount ELSE 0 END as debit')
+            DB::raw("{$transactionTypeSql} as transaction_type"),
+            'cash_advance_requests.accounting_remarks as description',
+            'cash_advance_requests.purpose as transaction_details',
+            DB::raw('COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) as amount'),
+            'cash_advance_requests.purpose as particular_name',
+            DB::raw($hasLinkedCategories ? "(select GROUP_CONCAT(DISTINCT categories.particulars_category SEPARATOR ', ') from liquidation_expenses left join categories on liquidation_expenses.category_id = categories.id where liquidation_expenses.cash_advance_request_id = cash_advance_requests.id) as category_name" : 'NULL as category_name'),
+            DB::raw("CASE WHEN {$transactionTypeSql} = 'credit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END as credit"),
+            DB::raw("CASE WHEN {$transactionTypeSql} = 'debit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END as debit")
         )
-        ->orderBy('liquidation_expenses.expense_date');
+        ->orderByDesc('cash_advance_requests.request_date')
+        ->orderByDesc('cash_advance_requests.id');
 
     $expenses = $showAll
         ? $expensesQuery->get()

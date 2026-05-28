@@ -27,81 +27,52 @@
 		<div class="xl:col-span-3 space-y-6">
 			<!-- Filter Section -->
 			<div class="rounded-3xl bg-white p-6 shadow-lg border border-gray-100">
-				<div class="flex flex-col gap-4">
-					<div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-						<div class="md:col-span-1">
-							<label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
-							<select id="summaryMonthFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-								<option value="" selected>Select Month</option>
-								@php
-									for ($i = 0; $i < 12; $i++) {
-										$date = now()->subMonths($i);
-										$value = $date->format('Y-m');
-										$display = $date->format('F Y');
-										echo "<option value=\"$value\">$display</option>";
-									}
-								@endphp
-							</select>
-						</div>
+				<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+					<div class="w-full sm:max-w-xs">
+						<label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
+						<select id="summaryMonthFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+							@php
+								for ($i = 0; $i < 12; $i++) {
+									$date = now()->subMonths($i);
+									$value = $date->format('Y-m');
+									$display = $date->format('F Y');
+									$selected = $i === 0 ? ' selected' : '';
+									echo "<option value=\"$value\"$selected>$display</option>";
+								}
+							@endphp
+						</select>
+					</div>
 
-						<div class="md:col-span-1">
-							<button id="summaryThisWeekBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200 transition-all duration-200">
-								<i data-feather="calendar" class="w-4 h-4"></i>
-								<span class="hidden sm:inline">This Week</span>
-								<span class="sm:hidden">Week</span>
-							</button>
-						</div>
-
-						<div class="md:col-span-1">
-							<button id="summaryThisMonthBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-100 text-emerald-700 font-semibold hover:bg-emerald-200 transition-all duration-200">
-								<i data-feather="grid" class="w-4 h-4"></i>
-								<span class="hidden sm:inline">This Month</span>
-								<span class="sm:hidden">Month</span>
-							</button>
-						</div>
-
-						<div class="md:col-span-1">
-							<button id="summaryFilterBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
-								<i data-feather="filter" class="w-4 h-4"></i>
-								<span>Filters</span>
-							</button>
-						</div>
+					<div class="w-full sm:w-64">
+						<button id="summaryFilterBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
+							<i data-feather="filter" class="w-4 h-4"></i>
+							<span>Category</span>
+						</button>
 					</div>
 				</div>
 			</div>
 
 			<!-- Filter Modal -->
 			<div id="summaryFilterModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 px-4">
-				<div class="w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
+				<div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
 					<div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
 						<div>
-							<h3 class="text-xl font-bold text-gray-800">Filter Liquidation Summary</h3>
-							<p class="text-sm text-gray-500 mt-1">Choose employee and category, then save to update the table and print view.</p>
+							<h3 class="text-xl font-bold text-gray-800">Category Filter</h3>
+							<p class="text-sm text-gray-500 mt-1">Choose a category to update the table and print view.</p>
 						</div>
 						<button id="summaryCloseModalBtn" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
 							<i data-feather="x" class="w-5 h-5"></i>
 						</button>
 					</div>
 					<div class="p-6 space-y-5">
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<div>
-								<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
-								<select id="summaryEmployeeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-									<option value="">All Employees</option>
-									@foreach($employees as $employee)
-										<option value="{{ $employee->id }}">{{ $employee->name }} ({{ $employee->employee_id }})</option>
-									@endforeach
-								</select>
-							</div>
-							<div>
-								<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-								<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-									<option value="">All Categories</option>
-									@foreach($categories as $category)
-										<option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
-									@endforeach
-								</select>
-							</div>
+						<div>
+							<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+							<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+								<option value="">All Categories</option>
+								@foreach($categories as $category)
+									<option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+								@endforeach
+							</select>
 						</div>
 						<div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
 							<button id="summaryResetModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
@@ -110,7 +81,7 @@
 							</button>
 							<button id="summarySaveFiltersBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
 								<i data-feather="check" class="w-4 h-4"></i>
-								Save Filters
+								Apply Category
 							</button>
 						</div>
 					</div>
@@ -218,8 +189,8 @@
 	// Balance settings
 	let openingBalance = @json($pageOpeningBalance);
 	let endingBalance = @json($pageRemainingBalance);
-	let appliedEmployeeId = '';
 	let appliedCategoryId = '';
+	const summaryPrintedByName = @json(Auth::user()->name ?? Auth::user()->email ?? 'Current User');
 
 	function updateBalanceDisplay() {
 		document.getElementById('displayOpeningBalance').textContent = formatCurrencyValue(openingBalance);
@@ -232,13 +203,11 @@
 
 	function getAppliedFilters() {
 		return {
-			employeeId: appliedEmployeeId,
 			categoryId: appliedCategoryId,
 		};
 	}
 
 	function syncFilterModalFields() {
-		document.getElementById('summaryEmployeeFilter').value = appliedEmployeeId;
 		document.getElementById('summaryCategoryFilter').value = appliedCategoryId;
 	}
 
@@ -256,71 +225,58 @@
 	}
 
 	function applyFilterSelections() {
-		appliedEmployeeId = document.getElementById('summaryEmployeeFilter').value;
 		appliedCategoryId = document.getElementById('summaryCategoryFilter').value;
-		currentPeriod = document.getElementById('summaryMonthFilter').value ? 'custom' : 'this-month';
 		closeFilterModal();
 		loadExpenses(1);
 	}
 
 	function resetFilterSelections() {
-		document.getElementById('summaryEmployeeFilter').value = '';
 		document.getElementById('summaryCategoryFilter').value = '';
-		appliedEmployeeId = '';
 		appliedCategoryId = '';
 		closeFilterModal();
 		loadExpenses(1);
 	}
 
-	// Get date range based on period selection
-	let currentPeriod = 'this-month';
+	function formatDateValue(date) {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+
+		return `${year}-${month}-${day}`;
+	}
+
+	function updatePeriodLabel(fromDate, toDate) {
+		document.getElementById('summaryPeriodLabel').textContent = `${fromDate.toLocaleDateString('en-US', {
+			month: 'long',
+			day: 'numeric',
+			year: 'numeric',
+		})} - ${toDate.toLocaleDateString('en-US', {
+			month: 'long',
+			day: 'numeric',
+			year: 'numeric',
+		})}`;
+	}
 
 	function getDateRange() {
 		const selectedMonth = document.getElementById('summaryMonthFilter').value;
 		const now = new Date();
-		let fromDate, toDate;
+		const [year, month] = selectedMonth
+			? selectedMonth.split('-').map(Number)
+			: [now.getFullYear(), now.getMonth() + 1];
+		const fromDate = new Date(year, month - 1, 1);
+		const toDate = new Date(year, month, 0);
 
-		if (currentPeriod === 'this-month') {
-			fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-			toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-		} else if (currentPeriod === 'this-week') {
-			const day = now.getDate();
-			const diff = now.getDay() === 0 ? -6 : now.getDay() - 1; // Monday = 1
-			fromDate = new Date(now);
-			fromDate.setDate(day - diff);
-			toDate = new Date(fromDate);
-			toDate.setDate(toDate.getDate() + 6);
-		} else if (currentPeriod === 'custom' && selectedMonth) {
-			const [year, month] = selectedMonth.split('-');
-			fromDate = new Date(year, month - 1, 1);
-			toDate = new Date(year, month, 0);
-		} else {
-			// Default to this month
-			fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-			toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-		}
+		updatePeriodLabel(fromDate, toDate);
 
 		return {
-			from_date: fromDate.toISOString().split('T')[0],
-			to_date: toDate.toISOString().split('T')[0]
+			from_date: formatDateValue(fromDate),
+			to_date: formatDateValue(toDate)
 		};
 	}
 
-	// Period button handlers
-	document.getElementById('summaryThisWeekBtn').addEventListener('click', () => {
-		currentPeriod = 'this-week';
-		loadExpenses(1);
-	});
-
-	document.getElementById('summaryThisMonthBtn').addEventListener('click', () => {
-		currentPeriod = 'this-month';
-		document.getElementById('summaryMonthFilter').value = '';
-		loadExpenses(1);
-	});
-
 	// Load expenses data
 	async function loadExpenses(page = 1) {
-		const { employeeId, categoryId } = getAppliedFilters();
+		const { categoryId } = getAppliedFilters();
 		const dateRange = getDateRange();
 
 		if (!dateRange) return;
@@ -330,10 +286,6 @@
 			params.set('page', page);
 			params.set('from_date', dateRange.from_date);
 			params.set('to_date', dateRange.to_date);
-
-			if (employeeId) {
-				params.set('employee_id', employeeId);
-			}
 
 			if (categoryId) {
 				params.set('category_id', categoryId);
@@ -351,22 +303,18 @@
 	}
 
 	function getSummaryFilters() {
-		const { employeeId, categoryId } = getAppliedFilters();
+		const { categoryId } = getAppliedFilters();
 		const dateRange = getDateRange();
 
-		return { employeeId, categoryId, dateRange };
+		return { categoryId, dateRange };
 	}
 
 	async function fetchAllExpenses() {
-		const { employeeId, categoryId, dateRange } = getSummaryFilters();
+		const { categoryId, dateRange } = getSummaryFilters();
 		const params = new URLSearchParams();
 		params.set('all', '1');
 		params.set('from_date', dateRange.from_date);
 		params.set('to_date', dateRange.to_date);
-
-		if (employeeId) {
-			params.set('employee_id', employeeId);
-		}
 
 		if (categoryId) {
 			params.set('category_id', categoryId);
@@ -387,7 +335,8 @@
 
 	function buildPrintHtml(expenses, summary) {
 		const periodLabel = document.getElementById('summaryPeriodLabel').textContent || 'Current Period';
-		const employeeLabel = document.getElementById('summaryEmployeeFilter').selectedOptions[0]?.textContent || 'All Employees';
+		const categoryLabel = document.getElementById('summaryCategoryFilter').selectedOptions[0]?.textContent || 'All Categories';
+		const printedAt = new Date().toLocaleString();
 		const rows = expenses.length
 			? expenses.map(expense => `
 				<tr>
@@ -406,29 +355,32 @@
 <html>
 <head>
 	<meta charset="UTF-8">
-	<title>Liquidation Expenses Print</title>
+	<title>Liquidation Summary Print</title>
 	<style>
 		@page { size: landscape; margin: 14mm; }
-		body { font-family: Arial, sans-serif; color: #111827; }
+		body { font-family: Arial, sans-serif; color: #111827; margin: 0; }
 		.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; gap: 16px; }
-		.title { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
-		.meta { font-size: 12px; color: #4b5563; line-height: 1.5; }
+		.title { font-size: 24px; font-weight: 700; margin: 0 0 8px; color: #0f172a; }
+		.meta { font-size: 12px; color: #4b5563; line-height: 1.6; }
 		table { width: 100%; border-collapse: collapse; }
 		th, td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 12px; vertical-align: top; }
-		th { background: #f3f4f6; text-align: left; }
+		th { background: #f3f4f6; color: #1f2937; font-weight: 700; text-align: left; }
 		.text-right { text-align: right; }
 		.empty-state { text-align: center; padding: 16px 10px; color: #6b7280; }
-		.summary { margin-top: 14px; display: flex; gap: 20px; font-size: 12px; color: #374151; }
+		.summary { margin-top: 18px; padding-top: 14px; border-top: 2px solid #d1d5db; display: flex; justify-content: space-between; gap: 28px; font-size: 14px; color: #111827; }
+		.summary-item { flex: 1; font-weight: 700; white-space: nowrap; }
+		.summary-value { font-weight: 800; }
 	</style>
 </head>
 <body>
 	<div class="header">
 		<div>
-			<p class="title">Liquidation Expenses</p>
+			<p class="title">Liquidation Summary</p>
 			<div class="meta">
 				<div>Period: ${escapeHtml(periodLabel)}</div>
-				<div>Employee: ${escapeHtml(employeeLabel)}</div>
-				<div>Printed: ${escapeHtml(new Date().toLocaleString())}</div>
+				<div>Category: ${escapeHtml(categoryLabel)}</div>
+				<div>Printed: ${escapeHtml(printedAt)}</div>
+				<div>Printed By: ${escapeHtml(summaryPrintedByName)}</div>
 			</div>
 		</div>
 	</div>
@@ -447,9 +399,9 @@
 		<tbody>${rows}</tbody>
 	</table>
 	<div class="summary">
-		<div>Total Records: ${summary.total_count ?? 0}</div>
-		<div>Total Credits: ${formatCurrencyValue(summary.total_credits ?? 0)}</div>
-		<div>Total Debits: ${formatCurrencyValue(summary.total_debits ?? 0)}</div>
+		<div class="summary-item">Total Records: <span class="summary-value">${summary.total_count ?? 0}</span></div>
+		<div class="summary-item">Total Credits: <span class="summary-value">${formatCurrencyValue(summary.total_credits ?? 0)}</span></div>
+		<div class="summary-item">Total Debits: <span class="summary-value">${formatCurrencyValue(summary.total_debits ?? 0)}</span></div>
 	</div>
 </body>
 </html>`;
@@ -559,6 +511,10 @@
 		openFilterModal();
 	});
 
+	document.getElementById('summaryMonthFilter').addEventListener('change', () => {
+		loadExpenses(1);
+	});
+
 	document.getElementById('summaryCloseModalBtn').addEventListener('click', closeFilterModal);
 	document.getElementById('summarySaveFiltersBtn').addEventListener('click', applyFilterSelections);
 	document.getElementById('summaryResetModalBtn').addEventListener('click', resetFilterSelections);
@@ -572,7 +528,6 @@
 
 	// Initial load
 	updateBalanceDisplay();
-	currentPeriod = 'this-month';
 	loadExpenses(1);
 </script>
 
