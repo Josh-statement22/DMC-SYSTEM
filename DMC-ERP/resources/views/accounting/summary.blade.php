@@ -28,17 +28,7 @@
 			<!-- Filter Section -->
 			<div class="rounded-3xl bg-white p-6 shadow-lg border border-gray-100">
 				<div class="flex flex-col gap-4">
-					<div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-						<div class="md:col-span-1">
-							<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
-							<select id="summaryEmployeeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-								<option value="">All Employees</option>
-								@foreach($employees as $employee)
-									<option value="{{ $employee->id }}">{{ $employee->name }} ({{ $employee->employee_id }})</option>
-								@endforeach
-							</select>
-						</div>
-
+					<div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
 						<div class="md:col-span-1">
 							<label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
 							<select id="summaryMonthFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
@@ -70,14 +60,57 @@
 							</button>
 						</div>
 
-						<div class="md:col-span-2 flex gap-2">
-							<button id="summaryFilterBtn" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
+						<div class="md:col-span-1">
+							<button id="summaryFilterBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
 								<i data-feather="filter" class="w-4 h-4"></i>
-								<span class="hidden sm:inline">Filter</span>
+								<span>Filters</span>
 							</button>
-							<button id="summaryClearBtn" type="button" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
-								<i data-feather="x" class="w-4 h-4"></i>
-								<span class="hidden sm:inline">Clear</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Filter Modal -->
+			<div id="summaryFilterModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 px-4">
+				<div class="w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
+					<div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+						<div>
+							<h3 class="text-xl font-bold text-gray-800">Filter Liquidation Summary</h3>
+							<p class="text-sm text-gray-500 mt-1">Choose employee and category, then save to update the table and print view.</p>
+						</div>
+						<button id="summaryCloseModalBtn" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+							<i data-feather="x" class="w-5 h-5"></i>
+						</button>
+					</div>
+					<div class="p-6 space-y-5">
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div>
+								<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
+								<select id="summaryEmployeeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+									<option value="">All Employees</option>
+									@foreach($employees as $employee)
+										<option value="{{ $employee->id }}">{{ $employee->name }} ({{ $employee->employee_id }})</option>
+									@endforeach
+								</select>
+							</div>
+							<div>
+								<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+								<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+									<option value="">All Categories</option>
+									@foreach($categories as $category)
+										<option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+									@endforeach
+								</select>
+							</div>
+						</div>
+						<div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
+							<button id="summaryResetModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
+								<i data-feather="rotate-ccw" class="w-4 h-4"></i>
+								Reset
+							</button>
+							<button id="summarySaveFiltersBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
+								<i data-feather="check" class="w-4 h-4"></i>
+								Save Filters
 							</button>
 						</div>
 					</div>
@@ -88,9 +121,15 @@
 
 			<!-- Expenses Table -->
 			<div class="rounded-3xl bg-white p-6 shadow-lg border border-gray-100 overflow-hidden">
-				<div class="mb-6">
-					<h3 class="text-xl font-bold text-gray-800">Liquidation Expenses</h3>
-					<p class="text-sm text-gray-500 mt-1"><span id="summaryExpenseCount">0</span> records</p>
+				<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<h3 class="text-xl font-bold text-gray-800">Liquidation Expenses</h3>
+						<p class="text-sm text-gray-500 mt-1"><span id="summaryExpenseCount">0</span> records</p>
+					</div>
+					<button id="summaryPrintBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all duration-200 shadow-sm">
+						<i data-feather="printer" class="w-4 h-4"></i>
+						<span>Print</span>
+					</button>
 				</div>
 
 				<div class="overflow-x-auto">
@@ -179,6 +218,8 @@
 	// Balance settings
 	let openingBalance = @json($pageOpeningBalance);
 	let endingBalance = @json($pageRemainingBalance);
+	let appliedEmployeeId = '';
+	let appliedCategoryId = '';
 
 	function updateBalanceDisplay() {
 		document.getElementById('displayOpeningBalance').textContent = formatCurrencyValue(openingBalance);
@@ -187,6 +228,48 @@
 
 	function formatCurrencyValue(amount) {
 		return 'PHP ' + Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	function getAppliedFilters() {
+		return {
+			employeeId: appliedEmployeeId,
+			categoryId: appliedCategoryId,
+		};
+	}
+
+	function syncFilterModalFields() {
+		document.getElementById('summaryEmployeeFilter').value = appliedEmployeeId;
+		document.getElementById('summaryCategoryFilter').value = appliedCategoryId;
+	}
+
+	function openFilterModal() {
+		syncFilterModalFields();
+		const modal = document.getElementById('summaryFilterModal');
+		modal.classList.remove('hidden');
+		modal.classList.add('flex');
+	}
+
+	function closeFilterModal() {
+		const modal = document.getElementById('summaryFilterModal');
+		modal.classList.add('hidden');
+		modal.classList.remove('flex');
+	}
+
+	function applyFilterSelections() {
+		appliedEmployeeId = document.getElementById('summaryEmployeeFilter').value;
+		appliedCategoryId = document.getElementById('summaryCategoryFilter').value;
+		currentPeriod = document.getElementById('summaryMonthFilter').value ? 'custom' : 'this-month';
+		closeFilterModal();
+		loadExpenses(1);
+	}
+
+	function resetFilterSelections() {
+		document.getElementById('summaryEmployeeFilter').value = '';
+		document.getElementById('summaryCategoryFilter').value = '';
+		appliedEmployeeId = '';
+		appliedCategoryId = '';
+		closeFilterModal();
+		loadExpenses(1);
 	}
 
 	// Get date range based on period selection
@@ -231,18 +314,32 @@
 
 	document.getElementById('summaryThisMonthBtn').addEventListener('click', () => {
 		currentPeriod = 'this-month';
+		document.getElementById('summaryMonthFilter').value = '';
 		loadExpenses(1);
 	});
 
 	// Load expenses data
 	async function loadExpenses(page = 1) {
-		const employeeId = document.getElementById('summaryEmployeeFilter').value;
+		const { employeeId, categoryId } = getAppliedFilters();
 		const dateRange = getDateRange();
 
 		if (!dateRange) return;
 
 		try {
-			const response = await fetch(`/accounting/summary/data?page=${page}${employeeId ? '&employee_id=' + employeeId : ''}&from_date=${dateRange.from_date}&to_date=${dateRange.to_date}`);
+			const params = new URLSearchParams();
+			params.set('page', page);
+			params.set('from_date', dateRange.from_date);
+			params.set('to_date', dateRange.to_date);
+
+			if (employeeId) {
+				params.set('employee_id', employeeId);
+			}
+
+			if (categoryId) {
+				params.set('category_id', categoryId);
+			}
+
+			const response = await fetch(`/accounting/summary/data?${params.toString()}`);
 			const data = await response.json();
 
 			renderTable(data.expenses);
@@ -250,6 +347,137 @@
 			updatePagination(data.pagination);
 		} catch (error) {
 			console.error('Error loading expenses:', error);
+		}
+	}
+
+	function getSummaryFilters() {
+		const { employeeId, categoryId } = getAppliedFilters();
+		const dateRange = getDateRange();
+
+		return { employeeId, categoryId, dateRange };
+	}
+
+	async function fetchAllExpenses() {
+		const { employeeId, categoryId, dateRange } = getSummaryFilters();
+		const params = new URLSearchParams();
+		params.set('all', '1');
+		params.set('from_date', dateRange.from_date);
+		params.set('to_date', dateRange.to_date);
+
+		if (employeeId) {
+			params.set('employee_id', employeeId);
+		}
+
+		if (categoryId) {
+			params.set('category_id', categoryId);
+		}
+
+		const response = await fetch(`/accounting/summary/data?${params.toString()}`);
+		return response.json();
+	}
+
+	function escapeHtml(value) {
+		return String(value ?? '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
+
+	function buildPrintHtml(expenses, summary) {
+		const periodLabel = document.getElementById('summaryPeriodLabel').textContent || 'Current Period';
+		const employeeLabel = document.getElementById('summaryEmployeeFilter').selectedOptions[0]?.textContent || 'All Employees';
+		const rows = expenses.length
+			? expenses.map(expense => `
+				<tr>
+					<td>${escapeHtml(formatDate(expense.expense_date))}</td>
+					<td>${escapeHtml(expense.employee_name || '-')}</td>
+					<td>${escapeHtml(expense.category_name || '-')}</td>
+					<td>${escapeHtml(expense.particular_name || '-')}</td>
+					<td>${escapeHtml(formatTransactionType(expense.transaction_type) || '-')}</td>
+					<td class="text-right">${Number(expense.credit || 0) > 0 ? escapeHtml(formatCurrencyValue(expense.credit)) : '-'}</td>
+					<td class="text-right">${Number(expense.debit || 0) > 0 ? escapeHtml(formatCurrencyValue(expense.debit)) : '-'}</td>
+				</tr>
+			`).join('')
+			: '<tr><td colspan="7" class="empty-state">No data available</td></tr>';
+
+		return `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Liquidation Expenses Print</title>
+	<style>
+		@page { size: landscape; margin: 14mm; }
+		body { font-family: Arial, sans-serif; color: #111827; }
+		.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; gap: 16px; }
+		.title { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+		.meta { font-size: 12px; color: #4b5563; line-height: 1.5; }
+		table { width: 100%; border-collapse: collapse; }
+		th, td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 12px; vertical-align: top; }
+		th { background: #f3f4f6; text-align: left; }
+		.text-right { text-align: right; }
+		.empty-state { text-align: center; padding: 16px 10px; color: #6b7280; }
+		.summary { margin-top: 14px; display: flex; gap: 20px; font-size: 12px; color: #374151; }
+	</style>
+</head>
+<body>
+	<div class="header">
+		<div>
+			<p class="title">Liquidation Expenses</p>
+			<div class="meta">
+				<div>Period: ${escapeHtml(periodLabel)}</div>
+				<div>Employee: ${escapeHtml(employeeLabel)}</div>
+				<div>Printed: ${escapeHtml(new Date().toLocaleString())}</div>
+			</div>
+		</div>
+	</div>
+	<table>
+		<thead>
+			<tr>
+				<th>Date</th>
+				<th>Employee</th>
+				<th>Category</th>
+				<th>Particulars</th>
+				<th>Type</th>
+				<th class="text-right">Credit</th>
+				<th class="text-right">Debit</th>
+			</tr>
+		</thead>
+		<tbody>${rows}</tbody>
+	</table>
+	<div class="summary">
+		<div>Total Records: ${summary.total_count ?? 0}</div>
+		<div>Total Credits: ${formatCurrencyValue(summary.total_credits ?? 0)}</div>
+		<div>Total Debits: ${formatCurrencyValue(summary.total_debits ?? 0)}</div>
+	</div>
+</body>
+</html>`;
+	}
+
+	async function printSummary() {
+		const printWindow = window.open('', '_blank', 'width=1200,height=900');
+		if (!printWindow) {
+			alert('Popup blocked. Please allow popups to print the liquidation summary.');
+			return;
+		}
+
+		printWindow.document.write('<!doctype html><html><head><title>Preparing Print...</title></head><body style="font-family: Arial, sans-serif; padding: 24px;">Preparing print layout...</body></html>');
+		printWindow.document.close();
+
+		try {
+			const data = await fetchAllExpenses();
+			printWindow.document.open();
+			printWindow.document.write(buildPrintHtml(data.expenses || [], data.summary || {}));
+			printWindow.document.close();
+			setTimeout(() => {
+				printWindow.focus();
+				printWindow.print();
+			}, 250);
+		} catch (error) {
+			printWindow.close();
+			console.error('Error preparing print summary:', error);
+			alert('Unable to prepare the print view. Please try again.');
 		}
 	}
 
@@ -328,21 +556,19 @@
 
 	// Event listeners
 	document.getElementById('summaryFilterBtn').addEventListener('click', () => {
-		const selectedMonth = document.getElementById('summaryMonthFilter').value;
-		if (selectedMonth) {
-			currentPeriod = 'custom';
-		} else {
-			currentPeriod = 'this-month';
-		}
-		loadExpenses(1);
+		openFilterModal();
 	});
 
-	document.getElementById('summaryClearBtn').addEventListener('click', () => {
-		document.getElementById('summaryEmployeeFilter').value = '';
-		document.getElementById('summaryMonthFilter').value = '';
-		currentPeriod = 'this-month';
-		loadExpenses(1);
+	document.getElementById('summaryCloseModalBtn').addEventListener('click', closeFilterModal);
+	document.getElementById('summarySaveFiltersBtn').addEventListener('click', applyFilterSelections);
+	document.getElementById('summaryResetModalBtn').addEventListener('click', resetFilterSelections);
+	document.getElementById('summaryFilterModal').addEventListener('click', (event) => {
+		if (event.target.id === 'summaryFilterModal') {
+			closeFilterModal();
+		}
 	});
+
+	document.getElementById('summaryPrintBtn').addEventListener('click', printSummary);
 
 	// Initial load
 	updateBalanceDisplay();

@@ -17,8 +17,8 @@ class AccountingMonthlyBalance
             ? (float) $storedBalance->opening_balance
             : self::previousEndingBalance($monthDate);
 
-        $debitTotal = self::cashAdvanceRequestAmountFor($monthDate);
-        $creditTotal = self::liquidationAmountFor($monthDate, 'credit');
+        $debitTotal = self::cashAdvanceRequestAmountFor($monthDate, 'debit');
+        $creditTotal = self::cashAdvanceRequestAmountFor($monthDate, 'credit') + self::liquidationAmountFor($monthDate, 'credit');
         $expenseTotal = $debitTotal - $creditTotal;
         $endingBalance = $openingBalance - $expenseTotal;
 
@@ -90,8 +90,8 @@ class AccountingMonthlyBalance
             return 0.0;
         }
 
-        $debitTotal = self::liquidationAmountFor($previousMonth, 'debit');
-        $creditTotal = self::liquidationAmountFor($previousMonth, 'credit');
+        $debitTotal = self::cashAdvanceRequestAmountFor($previousMonth, 'debit');
+        $creditTotal = self::cashAdvanceRequestAmountFor($previousMonth, 'credit') + self::liquidationAmountFor($previousMonth, 'credit');
 
         return (float) $previousStoredBalance->opening_balance - ($debitTotal - $creditTotal);
     }
@@ -107,14 +107,21 @@ class AccountingMonthlyBalance
             ->sum('amount');
     }
 
-    private static function cashAdvanceRequestAmountFor(CarbonInterface $monthDate): float
+    private static function cashAdvanceRequestAmountFor(CarbonInterface $monthDate, ?string $transactionType = null): float
     {
-        return (float) DB::table('cash_advance_requests')
+        $query = DB::table('cash_advance_requests')
             ->whereBetween('request_date', [
                 $monthDate->toDateString(),
                 Carbon::parse($monthDate->toDateString())->endOfMonth()->toDateString(),
-            ])
-            ->sum(DB::raw('COALESCE(approved_amount, requested_amount, 0)'));
+            ]);
+
+        if ($transactionType === 'credit') {
+            $query->whereRaw('LOWER(COALESCE(accounting_remarks, "")) LIKE ?', ['%manual credit entry%']);
+        } elseif ($transactionType === 'debit') {
+            $query->whereRaw('LOWER(COALESCE(accounting_remarks, "")) NOT LIKE ?', ['%manual credit entry%']);
+        }
+
+        return (float) $query->sum(DB::raw('COALESCE(approved_amount, requested_amount, 0)'));
     }
 
     private static function releasedAmountFor(CarbonInterface $monthDate): float

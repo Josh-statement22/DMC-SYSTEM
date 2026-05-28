@@ -550,7 +550,12 @@ Route::get('/accounting/summary', function () {
         ->orderBy('name')
         ->get();
 
-    return view('accounting.summary', compact('employees'));
+    $categories = DB::table('categories')
+        ->select('id', 'particulars_category')
+        ->orderBy('particulars_category')
+        ->get();
+
+    return view('accounting.summary', compact('employees', 'categories'));
 })->middleware('auth')->name('accounting.summary');
 
 Route::get('/accounting/summary/data', function (Request $request) {
@@ -560,7 +565,9 @@ Route::get('/accounting/summary/data', function (Request $request) {
 
     $page = max(1, (int) $request->query('page', 1));
     $perPage = 20;
+    $showAll = $request->boolean('all', false);
     $employeeId = $request->query('employee_id');
+    $categoryId = $request->query('category_id');
     $fromDate = $request->query('from_date');
     $toDate = $request->query('to_date');
 
@@ -583,6 +590,10 @@ Route::get('/accounting/summary/data', function (Request $request) {
         $expenseQuery->where('liquidation_expenses.expense_date', '<=', $toDate);
     }
 
+    if ($categoryId) {
+        $expenseQuery->where('liquidation_expenses.category_id', $categoryId);
+    }
+
     // Get summary data before pagination
     $summaryQuery = clone $expenseQuery;
     $summary = $summaryQuery->selectRaw('
@@ -600,7 +611,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
     $page = min($page, $totalPages);
 
-    $expenses = (clone $expenseQuery)
+    $expensesQuery = (clone $expenseQuery)
         ->select(
             'liquidation_expenses.expense_date',
             'users.name as employee_name',
@@ -613,10 +624,11 @@ Route::get('/accounting/summary/data', function (Request $request) {
             DB::raw('CASE WHEN liquidation_expenses.transaction_type = "credit" THEN liquidation_expenses.amount ELSE 0 END as credit'),
             DB::raw('CASE WHEN liquidation_expenses.transaction_type = "debit" THEN liquidation_expenses.amount ELSE 0 END as debit')
         )
-        ->orderBy('liquidation_expenses.expense_date')
-        ->offset(($page - 1) * $perPage)
-        ->limit($perPage)
-        ->get();
+        ->orderBy('liquidation_expenses.expense_date');
+
+    $expenses = $showAll
+        ? $expensesQuery->get()
+        : $expensesQuery->offset(($page - 1) * $perPage)->limit($perPage)->get();
 
     return response()->json([
         'expenses' => $expenses,

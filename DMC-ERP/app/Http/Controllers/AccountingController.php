@@ -57,7 +57,7 @@ class AccountingController extends Controller
 
         // Show recorded transactions coming from cash advance requests (backtracking)
         $expenses = DB::table('cash_advance_requests')
-            ->join('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+            ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
             ->whereBetween('cash_advance_requests.request_date', [
                 $monthDate->toDateString(),
                 $monthDate->copy()->endOfMonth()->toDateString(),
@@ -66,7 +66,7 @@ class AccountingController extends Controller
                 'cash_advance_requests.id',
                 'cash_advance_requests.requester_id as employee_id',
                 'cash_advance_requests.request_date as expense_date',
-                DB::raw("'debit' as transaction_type"),
+                DB::raw("CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END as transaction_type"),
                 'cash_advance_requests.purpose as transaction_details',
                 'cash_advance_requests.accounting_remarks as description',
                 'cash_advance_requests.approved_amount as amount',
@@ -144,7 +144,7 @@ class AccountingController extends Controller
 
             $expense = DB::table('liquidation_expenses')
                 ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
-                ->join('users', 'liquidations.user_id', '=', 'users.id')
+                ->leftJoin('users', 'liquidations.user_id', '=', 'users.id')
                 ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
                 ->where('liquidation_expenses.id', $expenseId)
                 ->select(
@@ -169,35 +169,41 @@ class AccountingController extends Controller
 
         $validated = $request->validate([
             'expense_date' => 'required|date',
-            'employee_id' => 'required|integer|exists:users,id',
+            'employee_id' => 'nullable|integer|exists:users,id',
             'transaction_type' => 'required|in:debit,credit',
             'amount' => 'required|numeric|min:0.01',
-            'purpose' => 'required_if:transaction_type,debit|nullable|string|max:255',
+            'purpose' => 'required|string|max:2000',
         ]);
 
         $expenseDate = Carbon::parse($validated['expense_date']);
         $cutoffPeriod = $expenseDate->format('F Y');
+        $transactionType = $validated['transaction_type'];
 
-        $purpose = $validated['purpose'] ?? null;
+        $purpose = trim($validated['purpose']) ?: null;
 
-        $liquidation = DB::table('liquidations')
-            ->where('user_id', $validated['employee_id'])
-            ->where('cutoff_period', $cutoffPeriod)
-            ->where('status', 'pending')
-            ->orderByDesc('id')
-            ->first();
+        // Allow null user_id for liquidations when employee not selected.
+        $liquidationUserId = $validated['employee_id'] ?? null;
 
-        if (! $liquidation) {
-            $liquidationId = DB::table('liquidations')->insertGetId([
-                'user_id' => $validated['employee_id'],
-                'cutoff_period' => $cutoffPeriod,
-                'amount' => 0,
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+        if ($transactionType === 'debit') {
+            $liquidation = DB::table('liquidations')
+                ->where('user_id', $liquidationUserId)
+                ->where('cutoff_period', $cutoffPeriod)
+                ->where('status', 'pending')
+                ->orderByDesc('id')
+                ->first();
 
-            $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
+            if (! $liquidation) {
+                $liquidationId = DB::table('liquidations')->insertGetId([
+                    'user_id' => $liquidationUserId,
+                    'cutoff_period' => $cutoffPeriod,
+                    'amount' => 0,
+                    'status' => 'pending',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
+            }
         }
 
         // Create a cash advance request entry instead of a liquidation expense
@@ -207,16 +213,18 @@ class AccountingController extends Controller
         $currentUserId = Auth::id();
         $currentUserName = optional(Auth::user())->name;
 
+        $requesterId = $validated['employee_id'] ?? $currentUserId;
+
         $requestId = DB::table('cash_advance_requests')->insertGetId([
             'reference_no' => $referenceNo,
-            'requester_id' => $validated['employee_id'],
+            'requester_id' => $requesterId,
             'requested_amount' => round((float) $validated['amount'], 2),
             'approved_amount' => round((float) $validated['amount'], 2),
             'purpose' => $purpose,
             'request_date' => $validated['expense_date'],
             'date_needed' => $validated['expense_date'],
             'status' => 'approved',
-            'accounting_remarks' => 'Manually Recorded',
+            'accounting_remarks' => $transactionType === 'credit' ? 'Manual Credit Entry' : 'Manually Recorded',
             'reviewed_by' => $currentUserId,
             'approved_by_name' => $currentUserName,
             'sent_by_name' => $currentUserName,
@@ -228,12 +236,12 @@ class AccountingController extends Controller
         ]);
 
         $expense = DB::table('cash_advance_requests')
-            ->join('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+            ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
             ->where('cash_advance_requests.id', $requestId)
             ->select(
                 'cash_advance_requests.id',
                 'cash_advance_requests.request_date as expense_date',
-                DB::raw("'debit' as transaction_type"),
+                DB::raw("CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END as transaction_type"),
                 'cash_advance_requests.purpose as transaction_details',
                 'cash_advance_requests.accounting_remarks as description',
                 'cash_advance_requests.approved_amount as amount',

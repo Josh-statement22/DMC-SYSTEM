@@ -98,11 +98,10 @@
                 <div>
                     <label for="employee_id" class="block text-sm font-semibold text-gray-700 mb-2">Employee Name</label>
                     <select 
-                        id="employee_id" 
-                        name="employee_id" 
-                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                        required
-                    >
+                            id="employee_id" 
+                            name="employee_id" 
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                        >
                         <option value="">Select Employee</option>
                         @forelse($employees ?? [] as $employee)
                             <option value="{{ $employee->id }}">{{ $employee->name }}</option>
@@ -142,7 +141,7 @@
             </div>
 
             <!-- Category (dropdown) -->
-            <div id="purposeSection" style="display: none;">
+            <div id="purposeSection">
                 <label for="purpose" class="block text-sm font-semibold text-gray-700 mb-2">Purpose</label>
                 <input
                     type="text"
@@ -150,6 +149,7 @@
                     name="purpose"
                     placeholder="Enter purpose"
                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                    required
                 >
             </div>
 
@@ -232,7 +232,7 @@
                     @forelse($expenses ?? [] as $expense)
                         <tr class="border-b border-gray-200 hover:bg-gray-50">
                             <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->expense_date->format('Y-m-d') }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->employee_name }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->employee_name ?? 'Unassigned' }}</td>
                             <td class="px-6 py-3 text-sm">
                                 <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 {{ $expense->transaction_type === 'debit' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700' }}">
                                     {{ ucfirst($expense->transaction_type) }}
@@ -250,7 +250,7 @@
                                         class="text-teal-600 hover:text-teal-800 font-semibold breakdownBtn"
                                         data-id="{{ $expense->id }}"
                                         data-employee-id="{{ $expense->employee_id ?? '' }}"
-                                        data-name="{{ $expense->employee_name }}"
+                                        data-name="{{ $expense->employee_name ?? 'Unassigned' }}"
                                         data-date="{{ $expense->expense_date->format('Y-m-d') }}"
                                     >
                                         <i data-feather="edit-3" class="w-4 h-4"></i>
@@ -495,19 +495,7 @@
         document.getElementById('currentPeriod').textContent = period;
     }
 
-    // Update transaction type change - show/hide purpose section for debit
-    document.getElementById('transaction_type').addEventListener('change', function() {
-        const purposeSection = document.getElementById('purposeSection');
-        const purposeInput = document.getElementById('purpose');
-
-        if (this.value === 'debit') {
-            purposeSection.style.display = 'block';
-            purposeInput.setAttribute('required', 'required');
-        } else {
-            purposeSection.style.display = 'none';
-            purposeInput.removeAttribute('required');
-        }
-    });
+    // Purpose is always visible and required for manual entries.
 
     // Toggle transactions visibility
     let transactionsVisible = false;
@@ -863,3 +851,4 @@
 
 </script>
 @endsection
+
