@@ -535,7 +535,9 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
 
 Route::get('/accounting/liquidate-expenses', [\App\Http\Controllers\AccountingController::class, 'liquidateExpenses'])->middleware('auth')->name('accounting.liquidate-expenses');
 Route::post('/accounting/liquidate-expenses/expense', [\App\Http\Controllers\AccountingController::class, 'storeExpense'])->middleware('auth')->name('accounting.store-expense');
+Route::post('/accounting/liquidate-expenses/import', [\App\Http\Controllers\AccountingController::class, 'importExpenses'])->middleware('auth')->name('accounting.import-expenses');
 Route::get('/accounting/liquidate-expenses/expense/{id}/breakdown', [\App\Http\Controllers\AccountingController::class, 'showExpenseBreakdown'])->middleware('auth')->name('accounting.show-expense-breakdown');
+Route::patch('/accounting/liquidate-expenses/expense/{id}/category', [\App\Http\Controllers\AccountingController::class, 'updateExpenseCategory'])->middleware('auth')->name('accounting.update-expense-category');
 Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
 Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
 
@@ -571,9 +573,6 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $fromDate = $request->query('from_date');
     $toDate = $request->query('to_date');
     $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
-    $hasLinkedCategories = DB::getSchemaBuilder()->hasTable('liquidation_expenses')
-        && DB::getSchemaBuilder()->hasColumn('liquidation_expenses', 'cash_advance_request_id')
-        && DB::getSchemaBuilder()->hasColumn('liquidation_expenses', 'category_id');
 
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
     $expenseQuery = DB::table('cash_advance_requests')
@@ -592,15 +591,16 @@ Route::get('/accounting/summary/data', function (Request $request) {
         $expenseQuery->where('cash_advance_requests.request_date', '<=', $toDate);
     }
 
-    if ($categoryId && $hasLinkedCategories) {
-        $expenseQuery->whereExists(function ($query) use ($categoryId) {
-            $query->select(DB::raw(1))
-                ->from('liquidation_expenses')
-                ->whereColumn('liquidation_expenses.cash_advance_request_id', 'cash_advance_requests.id')
-                ->where('liquidation_expenses.category_id', $categoryId);
-        });
-    } elseif ($categoryId) {
-        $expenseQuery->whereRaw('1 = 0');
+    if ($categoryId) {
+        $categoryName = DB::table('categories')
+            ->where('id', $categoryId)
+            ->value('particulars_category');
+
+        if ($categoryName) {
+            $expenseQuery->where('cash_advance_requests.category', $categoryName);
+        } else {
+            $expenseQuery->whereRaw('1 = 0');
+        }
     }
 
     // Get summary data before pagination
@@ -619,6 +619,13 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $totalExpenses = (clone $expenseQuery)->count();
     $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
     $page = min($page, $totalPages);
+    $balance = $totalExpenses > 0
+        ? AccountingMonthlyBalance::forMonth($fromDate ?: now())
+        : [
+            'opening_balance' => 0,
+            'remaining_balance' => 0,
+            'ending_balance' => 0,
+        ];
 
     $expensesQuery = (clone $expenseQuery)
         ->select(
@@ -629,7 +636,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
             'cash_advance_requests.purpose as transaction_details',
             DB::raw('COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) as amount'),
             'cash_advance_requests.purpose as particular_name',
-            DB::raw($hasLinkedCategories ? "(select GROUP_CONCAT(DISTINCT categories.particulars_category SEPARATOR ', ') from liquidation_expenses left join categories on liquidation_expenses.category_id = categories.id where liquidation_expenses.cash_advance_request_id = cash_advance_requests.id) as category_name" : 'NULL as category_name'),
+            'cash_advance_requests.category as category_name',
             DB::raw("CASE WHEN {$transactionTypeSql} = 'credit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END as credit"),
             DB::raw("CASE WHEN {$transactionTypeSql} = 'debit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END as debit")
         )
@@ -643,6 +650,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     return response()->json([
         'expenses' => $expenses,
         'summary' => $summary,
+        'balance' => $balance,
         'pagination' => [
             'current_page' => $page,
             'total_pages' => $totalPages,

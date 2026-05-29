@@ -12,20 +12,32 @@
     </div>
 
     <!-- Month Selector -->
-    <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label for="monthSelector" class="block text-sm font-semibold text-gray-700 mb-2">Select Month</label>
-                <select id="monthSelector" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
-                    @foreach($months ?? [] as $m)
-                        <option value="{{ $m['value'] }}" {{ $m['year'] == $year && $m['month'] == $month ? 'selected' : '' }}>
-                            {{ $m['label'] }}
-                        </option>
-                    @endforeach
-                </select>
+    <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div class="flex w-full flex-col gap-3 md:flex-row md:items-center">
+                <div class="w-full md:w-[340px]">
+                    <label for="monthSelector" class="sr-only">Select Month</label>
+                    <select id="monthSelector" class="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20">
+                        @foreach($months ?? [] as $m)
+                            <option value="{{ $m['value'] }}" {{ $m['year'] == $year && $m['month'] == $month ? 'selected' : '' }}>
+                                {{ $m['label'] }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="inline-flex min-h-[42px] w-full items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2 text-sm md:w-auto md:justify-start">
+                    <span class="font-semibold text-teal-700">Current Period</span>
+                    <span class="rounded-full bg-white px-3 py-1 text-sm font-bold text-teal-900 shadow-sm" id="currentPeriod">{{ now()->format('F Y') }}</span>
+                </div>
             </div>
-            <div class="flex items-end">
-                <p class="text-sm text-gray-600">Current Period: <span class="font-semibold text-gray-900" id="currentPeriod">{{ now()->format('F Y') }}</span></p>
+
+            <div class="w-full md:w-auto">
+                <input id="liquidateExcelInput" type="file" class="hidden" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                <button id="liquidateImportExcelBtn" type="button" class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 md:w-auto">
+                    <i data-feather="upload" class="w-4 h-4"></i>
+                    <span>Import Excel</span>
+                </button>
             </div>
         </div>
     </div>
@@ -210,6 +222,76 @@
         </div>
     </div>
 
+    <!-- Excel Import Modal -->
+    <div id="liquidateImportModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 px-4" role="dialog" aria-modal="true" aria-labelledby="liquidateImportTitle">
+        <div class="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl">
+            <div class="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-5">
+                <div>
+                    <h3 id="liquidateImportTitle" class="text-xl font-bold text-gray-800">Import Excel</h3>
+                    <p id="liquidateImportFileName" class="mt-1 text-sm text-gray-500">No file selected</p>
+                </div>
+                <button id="liquidateImportCloseBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition hover:bg-gray-200" aria-label="Close import preview">
+                    <i data-feather="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 overflow-y-auto p-6">
+                <div id="liquidateImportStatus" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                    Waiting for file...
+                </div>
+
+                <div id="liquidateImportProgressWrap" class="hidden h-2 overflow-hidden rounded-full bg-gray-100">
+                    <div id="liquidateImportProgress" class="h-full w-1/3 rounded-full bg-teal-500 transition-all duration-300"></div>
+                </div>
+
+                <div id="liquidateImportSummary" class="hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Imported Rows</p>
+                        <p id="liquidateImportSuccessCount" class="mt-2 text-2xl font-bold text-emerald-900">0</p>
+                    </div>
+                    <div class="rounded-2xl border border-rose-100 bg-rose-50 p-4">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Failed Rows</p>
+                        <p id="liquidateImportFailedCount" class="mt-2 text-2xl font-bold text-rose-900">0</p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto rounded-2xl border border-gray-200">
+                    <table class="w-full min-w-[980px] text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                                <th class="px-4 py-3">Row</th>
+                                <th class="px-4 py-3">Status</th>
+                                <th class="px-4 py-3">Date</th>
+                                <th class="px-4 py-3">Employee</th>
+                                <th class="px-4 py-3">Type</th>
+                                <th class="px-4 py-3">Purpose</th>
+                                <th class="px-4 py-3">Category</th>
+                                <th class="px-4 py-3 text-right">Amount</th>
+                                <th class="px-4 py-3">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody id="liquidateImportPreviewBody">
+                            <tr>
+                                <td colspan="9" class="px-4 py-8 text-center text-gray-500">Select an Excel file to preview rows.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3 border-t border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+                <button id="liquidateImportCancelBtn" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-3 font-semibold text-gray-700 transition hover:bg-gray-200">
+                    <i data-feather="x-circle" class="w-4 h-4"></i>
+                    Cancel
+                </button>
+                <button id="liquidateImportConfirmBtn" type="button" disabled class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:bg-gray-300">
+                    <i data-feather="check-circle" class="w-4 h-4"></i>
+                    Confirm Import
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Transactions Table (Hidden by default) -->
     <div id="transactionsContainer" class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm" style="display: none;">
         <div class="p-6 border-b border-gray-200">
@@ -244,6 +326,7 @@
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Employee</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Purpose</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Remarks</th>
                         <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
                         <th class="px-6 py-3 text-center text-xs font-semibold text-gray-700">Actions</th>
@@ -260,6 +343,22 @@
                                 </span>
                             </td>
                             <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->transaction_details ?? '-' }}</td>
+                            <td class="px-6 py-2 text-sm text-gray-900">
+                                <select
+                                    class="transactionCategorySelect w-44 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-700 transition focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:cursor-wait disabled:bg-gray-50"
+                                    data-id="{{ $expense->id }}"
+                                    data-original-category="{{ $expense->category ?? '' }}"
+                                    aria-label="Transaction category"
+                                >
+                                    <option value="">{{ ($expense->category ?? null) ? 'Uncategorized' : 'Select category' }}</option>
+                                    @forelse($categories ?? [] as $category)
+                                        <option value="{{ $category->particulars_category }}" {{ ($expense->category ?? '') === $category->particulars_category ? 'selected' : '' }}>
+                                            {{ $category->particulars_category }}
+                                        </option>
+                                    @empty
+                                    @endforelse
+                                </select>
+                            </td>
                             <td class="px-6 py-3 text-sm text-gray-600">{{ $expense->description ?? '-' }}</td>
                             <td class="px-6 py-3 text-sm text-right font-semibold {{ $expense->transaction_type === 'debit' ? 'text-red-600' : 'text-green-600' }}">
                                 {{ $expense->transaction_type === 'debit' ? '-' : '+' }}PHP {{ number_format($expense->amount, 2) }}
@@ -290,11 +389,11 @@
                         </tr>
                     @empty
                         <tr class="border-b border-gray-200">
-                            <td colspan="7" class="px-6 py-8 text-center text-gray-500">No transactions recorded yet</td>
+                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">No transactions recorded yet</td>
                         </tr>
                     @endforelse
                     <tr id="transactionsFilterEmptyRow" class="hidden border-b border-gray-200">
-                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">No transactions found for the selected date</td>
+                        <td colspan="8" class="px-6 py-8 text-center text-gray-500">No transactions found for the selected date</td>
                     </tr>
                 </tbody>
             </table>
@@ -470,13 +569,16 @@
     <!-- End of Main Content -->
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
     const currentYear = {{ $year }};
     const currentMonth = {{ $month }};
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.querySelector('input[name="_token"]')?.value;
     const storeExpenseRoute = @json(route('accounting.store-expense'));
+    const importExpensesRoute = @json(route('accounting.import-expenses'));
     const updateOpeningBalanceRoute = @json(route('accounting.update-opening-balance'));
     const deleteExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    const updateExpenseCategoryBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const viewBreakdownBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     // No external cash-advance selection — form records manual liquidation entries
     const breakdownModal = document.getElementById('breakdownModal');
@@ -502,6 +604,8 @@
     const transactionsPerPage = 15;
     let transactionsCurrentPage = 1;
     let successModalTimer = null;
+    let importPreviewRows = [];
+    let importResultByRow = new Map();
 
     function showSuccessModal(message) {
         if (!successModal || !successModalMessage) {
@@ -539,10 +643,294 @@
         }
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatDateValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${day}`;
+    }
+
+    function setImportStatus(message, tone = 'slate') {
+        const status = document.getElementById('liquidateImportStatus');
+        const toneClasses = {
+            slate: 'border-slate-200 bg-slate-50 text-slate-700',
+            emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+            rose: 'border-rose-200 bg-rose-50 text-rose-800',
+            amber: 'border-amber-200 bg-amber-50 text-amber-800',
+        };
+
+        status.className = `rounded-2xl border px-4 py-3 text-sm font-semibold ${toneClasses[tone] || toneClasses.slate}`;
+        status.textContent = message;
+    }
+
+    function setImportBusy(isBusy) {
+        document.getElementById('liquidateImportProgressWrap').classList.toggle('hidden', !isBusy);
+        document.getElementById('liquidateImportProgress').classList.toggle('animate-pulse', isBusy);
+        document.getElementById('liquidateImportConfirmBtn').disabled = isBusy || importPreviewRows.length === 0;
+    }
+
+    function openImportModal() {
+        const modal = document.getElementById('liquidateImportModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    function closeImportModal() {
+        const modal = document.getElementById('liquidateImportModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    function resetImportPreview() {
+        importPreviewRows = [];
+        importResultByRow = new Map();
+        document.getElementById('liquidateExcelInput').value = '';
+        document.getElementById('liquidateImportFileName').textContent = 'No file selected';
+        document.getElementById('liquidateImportSummary').classList.add('hidden');
+        document.getElementById('liquidateImportSuccessCount').textContent = '0';
+        document.getElementById('liquidateImportFailedCount').textContent = '0';
+        document.getElementById('liquidateImportConfirmBtn').disabled = true;
+        setImportBusy(false);
+        setImportStatus('Waiting for file...');
+        renderImportPreview();
+    }
+
+    function normalizeImportHeader(value) {
+        return String(value ?? '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    }
+
+    function getHeaderIndex(headers, aliases) {
+        const normalizedHeaders = headers.map(normalizeImportHeader);
+        return aliases.map(normalizeImportHeader)
+            .map(alias => normalizedHeaders.indexOf(alias))
+            .find(index => index >= 0);
+    }
+
+    function formatImportDate(value) {
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+            return formatDateValue(value);
+        }
+
+        if (typeof value === 'number' && window.XLSX?.SSF) {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) {
+                return formatDateValue(new Date(parsed.y, parsed.m - 1, parsed.d));
+            }
+        }
+
+        const raw = String(value ?? '').trim();
+        if (!raw) {
+            return '';
+        }
+
+        const parsedDate = new Date(raw);
+        return Number.isNaN(parsedDate.getTime()) ? raw : formatDateValue(parsedDate);
+    }
+
+    function parseExcelRows(workbook) {
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+
+        if (rows.length < 2) {
+            throw new Error('The selected file does not contain import rows.');
+        }
+
+        const headers = rows[0];
+        const columns = {
+            date: getHeaderIndex(headers, ['Date']),
+            employee: getHeaderIndex(headers, ['Employee', 'Employee Name', 'Employee ID']),
+            type: getHeaderIndex(headers, ['Type', 'Transaction Type']),
+            purpose: getHeaderIndex(headers, ['Purpose', 'Particulars']),
+            category: getHeaderIndex(headers, ['Category']),
+            remarks: getHeaderIndex(headers, ['Remarks', 'Description']),
+            amount: getHeaderIndex(headers, ['Amount']),
+        };
+
+        const missingColumns = Object.entries(columns)
+            .filter(([key, index]) => key !== 'remarks' && typeof index === 'undefined')
+            .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1));
+
+        if (missingColumns.length > 0) {
+            throw new Error(`Missing column(s): ${missingColumns.join(', ')}.`);
+        }
+
+        return rows.slice(1)
+            .map((row, index) => ({
+                row_number: index + 2,
+                date: formatImportDate(row[columns.date]),
+                employee: String(row[columns.employee] ?? '').trim(),
+                type: String(row[columns.type] ?? '').trim(),
+                purpose: String(row[columns.purpose] ?? '').trim(),
+                category: String(row[columns.category] ?? '').trim(),
+                remarks: typeof columns.remarks === 'undefined' ? '' : String(row[columns.remarks] ?? '').trim(),
+                amount: String(row[columns.amount] ?? '').trim(),
+            }))
+            .filter(row => ['date', 'employee', 'type', 'purpose', 'category', 'remarks', 'amount']
+                .some(key => String(row[key] ?? '').trim() !== ''));
+    }
+
+    function renderImportPreview() {
+        const tbody = document.getElementById('liquidateImportPreviewBody');
+
+        if (importPreviewRows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Select an Excel file to preview rows.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = importPreviewRows.map(row => {
+            const result = importResultByRow.get(row.row_number) || { status: 'Pending', errors: [] };
+            const statusClass = result.status === 'Imported'
+                ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                : result.status === 'Failed'
+                    ? 'bg-rose-100 text-rose-700 border-rose-200'
+                    : 'bg-slate-100 text-slate-700 border-slate-200';
+            const statusTitle = (result.errors || []).join(' ');
+
+            return `
+                <tr class="border-t border-gray-100 align-top">
+                    <td class="px-4 py-3 font-semibold text-gray-700">${row.row_number}</td>
+                    <td class="px-4 py-3">
+                        <span title="${escapeHtml(statusTitle)}" class="inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass}">
+                            ${escapeHtml(result.status)}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-700">${escapeHtml(row.date)}</td>
+                    <td class="px-4 py-3 text-gray-700">${escapeHtml(row.employee)}</td>
+                    <td class="px-4 py-3 text-gray-700">${escapeHtml(row.type)}</td>
+                    <td class="px-4 py-3 text-gray-700">${escapeHtml(row.purpose)}</td>
+                    <td class="px-4 py-3 text-gray-700">${escapeHtml(row.category)}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-gray-800">${escapeHtml(row.amount)}</td>
+                    <td class="px-4 py-3 text-gray-600">${escapeHtml(result.status === 'Failed' ? statusTitle : row.remarks)}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function handleExcelFileSelection(event) {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        openImportModal();
+        document.getElementById('liquidateImportFileName').textContent = file.name;
+        document.getElementById('liquidateImportSummary').classList.add('hidden');
+        importResultByRow = new Map();
+
+        if (!/\.(xlsx|xls)$/i.test(file.name)) {
+            importPreviewRows = [];
+            renderImportPreview();
+            setImportStatus('Please select a .xlsx or .xls file.', 'rose');
+            return;
+        }
+
+        if (!window.XLSX) {
+            importPreviewRows = [];
+            renderImportPreview();
+            setImportStatus('Excel parser is unavailable. Check your connection and reload the page.', 'rose');
+            return;
+        }
+
+        try {
+            setImportBusy(true);
+            setImportStatus('Reading workbook...', 'amber');
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+            importPreviewRows = parseExcelRows(workbook);
+            renderImportPreview();
+            setImportStatus(`${importPreviewRows.length} row(s) ready for validation.`, 'emerald');
+            document.getElementById('liquidateImportConfirmBtn').disabled = importPreviewRows.length === 0;
+        } catch (error) {
+            importPreviewRows = [];
+            renderImportPreview();
+            setImportStatus(error.message || 'Unable to read the selected Excel file.', 'rose');
+        } finally {
+            setImportBusy(false);
+        }
+    }
+
+    async function confirmExcelImport() {
+        if (importPreviewRows.length === 0) {
+            return;
+        }
+
+        try {
+            setImportBusy(true);
+            setImportStatus('Validating and saving rows...', 'amber');
+            const response = await fetch(importExpensesRoute, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({ rows: importPreviewRows }),
+            });
+            const data = await response.json();
+
+            importResultByRow = new Map();
+            (data.imported || []).forEach(row => {
+                importResultByRow.set(Number(row.row_number), { status: 'Imported', errors: [] });
+            });
+            (data.failures || []).forEach(row => {
+                importResultByRow.set(Number(row.row_number), { status: 'Failed', errors: row.errors || [] });
+            });
+            renderImportPreview();
+
+            document.getElementById('liquidateImportSummary').classList.remove('hidden');
+            document.getElementById('liquidateImportSuccessCount').textContent = data.imported_rows || 0;
+            document.getElementById('liquidateImportFailedCount').textContent = data.failed_rows || 0;
+
+            if ((data.imported_rows || 0) > 0) {
+                setImportStatus('Import completed. Refreshing transactions...', (data.failed_rows || 0) > 0 ? 'amber' : 'emerald');
+                setTimeout(() => {
+                    location.reload();
+                }, 2500);
+            } else {
+                setImportStatus(data.message || 'No rows were imported.', 'rose');
+            }
+        } catch (error) {
+            setImportStatus('Import failed. Please try again.', 'rose');
+            console.error('Error importing Excel rows:', error);
+        } finally {
+            setImportBusy(false);
+            document.getElementById('liquidateImportConfirmBtn').disabled = true;
+        }
+    }
+
     // Month selector change
     document.getElementById('monthSelector').addEventListener('change', function() {
         const [year, month] = this.value.split('-');
         window.location.href = `{{ route('accounting.liquidate-expenses') }}?year=${year}&month=${month}`;
+    });
+
+    document.getElementById('liquidateImportExcelBtn').addEventListener('click', () => {
+        resetImportPreview();
+        document.getElementById('liquidateExcelInput').click();
+    });
+    document.getElementById('liquidateExcelInput').addEventListener('change', handleExcelFileSelection);
+    document.getElementById('liquidateImportConfirmBtn').addEventListener('click', confirmExcelImport);
+    document.getElementById('liquidateImportCloseBtn').addEventListener('click', closeImportModal);
+    document.getElementById('liquidateImportCancelBtn').addEventListener('click', closeImportModal);
+    document.getElementById('liquidateImportModal').addEventListener('click', function(event) {
+        if (event.target.id === 'liquidateImportModal') {
+            closeImportModal();
+        }
     });
 
     // Update current period display
@@ -690,6 +1078,53 @@
             applyTransactionDateFilter();
         });
     }
+
+    function updateTransactionCategory(select) {
+        const transactionId = select.dataset.id;
+        const previousCategory = select.dataset.originalCategory || '';
+
+        if (!transactionId || select.value === previousCategory) {
+            return;
+        }
+
+        select.disabled = true;
+        select.classList.add('opacity-70');
+
+        fetch(`${updateExpenseCategoryBaseUrl}/${transactionId}/category`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({
+                category: select.value || null
+            })
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                throw new Error(data.message || 'Unable to update category');
+            }
+
+            select.dataset.originalCategory = data.transaction?.category || '';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            select.value = previousCategory;
+            alert('An error occurred while updating the category');
+        })
+        .finally(() => {
+            select.disabled = false;
+            select.classList.remove('opacity-70');
+        });
+    }
+
+    document.querySelectorAll('.transactionCategorySelect').forEach(select => {
+        select.addEventListener('change', function() {
+            updateTransactionCategory(this);
+        });
+    });
 
     // Toggle transactions visibility
     let transactionsVisible = false;
