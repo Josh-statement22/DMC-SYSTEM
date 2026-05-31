@@ -88,7 +88,6 @@
                 <div class="w-full rounded-2xl border border-green-300/40 bg-green-500/15 p-6 md:max-w-xl lg:w-[34rem] lg:max-w-none lg:flex-shrink-0">
                     <div class="flex flex-col items-start gap-3 text-lg font-semibold md:text-xl">
                         <span id="currentBalanceAmount" class="text-green-100">Current Balance: <span id="balanceAmountDisplay">₱0.00</span></span>
-                        <span id="currentBalancePurpose" class="text-green-50">Total Balance: ₱0.00 • No approved requests yet</span>
                     </div>
                 </div>
             </div>
@@ -1227,11 +1226,10 @@
 
             const currentBalanceAmount = document.getElementById('currentBalanceAmount');
             const balanceAmountDisplay = document.getElementById('balanceAmountDisplay');
-            const currentBalancePurpose = document.getElementById('currentBalancePurpose');
 
             console.log('[BALANCE] approvedRequests.length =', approvedRequests.length, '(filtered by period)');
 
-            if (!currentBalanceAmount || !currentBalancePurpose) {
+            if (!currentBalanceAmount || !balanceAmountDisplay) {
                 console.error('[BALANCE] Missing balance elements');
                 return;
             }
@@ -1239,7 +1237,6 @@
             if (approvedRequests.length === 0) {
                 totalApprovedBalance = 0;
                 if (balanceAmountDisplay) balanceAmountDisplay.textContent = '₱0.00';
-                currentBalancePurpose.textContent = 'Total Balance: ₱0.00 • No approved requests';
                 console.log('[BALANCE] No approved requests found');
                 renderExpenseSummary();
                 return;
@@ -1255,8 +1252,6 @@
             totalApprovedBalance = totalApprovedAmount;
             
             console.log('[BALANCE] totalApprovedAmount =', totalApprovedAmount);
-            
-            currentBalancePurpose.textContent = 'Total Balance: ' + formatCurrency(totalApprovedAmount) + ' • ' + approvedRequests.length + ' request' + (approvedRequests.length > 1 ? 's' : '');
 
             renderExpenseSummary();
         } catch (error) {
