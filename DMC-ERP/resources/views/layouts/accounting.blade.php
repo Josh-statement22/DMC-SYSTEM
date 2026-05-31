@@ -77,6 +77,12 @@
                 <span class="menu-text">Dashboard</span>
             </a>
 
+            <a id="accountingSendCashNav" href="{{ route('accounting.send-cash') }}"
+               class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.send-cash') ? $active : $normal }}">
+                <i data-feather="send"></i>
+                <span class="menu-text">Send Cash</span>
+            </a>
+
             <a id="accountingLiquidateExpensesNav" href="{{ route('accounting.liquidate-expenses') }}"
                class="menu-item flex items-center space-x-3 px-4 py-3 rounded-xl font-medium {{ request()->routeIs('accounting.liquidate-expenses') ? $active : $normal }}">
                 <i data-feather="edit-3"></i>
@@ -150,10 +156,10 @@
                 : 'Accounting - Cash Disbursement';
         }
 
-        const dashboardNav = document.getElementById('accountingDashboardNav');
+        const sendCashNav = document.getElementById('accountingSendCashNav');
         const liquidationNav = document.getElementById('accountingLiquidationNav');
-        if (dashboardNav && liquidationNav) {
-            dashboardNav.classList.toggle('active-item', tabId !== 'liquidationTab');
+        if (sendCashNav && liquidationNav) {
+            sendCashNav.classList.toggle('active-item', tabId !== 'liquidationTab');
             liquidationNav.classList.toggle('active-item', tabId === 'liquidationTab');
         }
 

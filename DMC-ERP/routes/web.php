@@ -31,8 +31,8 @@ if (!function_exists('redirect_if_role_not_allowed')) {
     }
 }
 
-if (!function_exists('buildLiquidationTrackingRecords')) {
-    function buildLiquidationTrackingRecords(?int $employeeId = null)
+if (!function_exists('buildLiquidationQueueRecords')) {
+    function buildLiquidationQueueRecords(?int $employeeId = null)
     {
         $expenseTotalsSubquery = DB::raw('(select liquidation_id, sum(amount) as total_expended, count(*) as expense_count from liquidation_expenses group by liquidation_id) as expense_totals');
 
@@ -53,12 +53,17 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 'liquidations.submitted_at',
                 'liquidations.approved_at',
                 'liquidations.created_at',
-                'liquidations.amount as balance_sent',
+                'liquidations.amount as liquidation_amount',
                 DB::raw('COALESCE(expense_totals.total_expended, 0) as total_expended'),
                 DB::raw('COALESCE(expense_totals.expense_count, 0) as expense_count')
             )
             ->when($employeeId, function ($query) use ($employeeId) {
                 $query->where('liquidations.user_id', $employeeId);
+            })
+            ->whereRaw('COALESCE(expense_totals.expense_count, 0) > 0')
+            ->where(function ($query) {
+                $query->whereNotNull('liquidations.submitted_at')
+                    ->orWhereIn('liquidations.status', ['submitted', 'approved', 'rejected']);
             })
             ->orderByDesc(DB::raw('COALESCE(liquidations.submitted_at, liquidations.approved_at, liquidations.created_at)'))
             ->get();
@@ -78,28 +83,17 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
             ->get()
             ->groupBy('liquidation_id');
 
-        $cashAdvanceRows = DB::table('cash_advance_requests')
-            ->select(
-                'requester_id',
-                DB::raw("DATE_FORMAT(COALESCE(released_at, reviewed_at, request_date), '%Y-%m') as month_key"),
-                DB::raw('SUM(COALESCE(approved_amount, requested_amount, 0)) as total_released')
-            )
-            ->where('status', 'approved')
-            ->groupBy('requester_id', 'month_key')
-            ->get();
+        return $records->map(function ($row) use ($expenseRowsByLiquidation) {
+            try {
+                $recordDate = \Carbon\Carbon::createFromFormat('F Y', (string) $row->cutoff_period)->startOfMonth();
+            } catch (\Throwable $exception) {
+                $recordDate = \Carbon\Carbon::parse($row->submitted_at ?? $row->approved_at ?? $row->created_at);
+            }
 
-        $releasedByUserMonth = $cashAdvanceRows->mapWithKeys(function ($row) {
-            return [((int) $row->requester_id) . '|' . $row->month_key => (float) $row->total_released];
-        });
-
-        return $records->map(function ($row) use ($expenseRowsByLiquidation, $releasedByUserMonth) {
-            $recordDate = \Carbon\Carbon::parse($row->submitted_at ?? $row->approved_at ?? $row->created_at);
             $weekStart = $recordDate->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
             $weekEnd = $recordDate->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
             $monthKey = $recordDate->format('Y-m');
-            $releasedKey = ((int) $row->user_id) . '|' . $monthKey;
-            $releasedAmount = (float) ($releasedByUserMonth[$releasedKey] ?? 0);
-            $balanceSent = $releasedAmount > 0 ? $releasedAmount : (float) $row->balance_sent;
+            $liquidationAmount = (float) $row->liquidation_amount;
             $expenseBreakdown = ($expenseRowsByLiquidation->get($row->id) ?? collect())->map(function ($expense) {
                 return [
                     'expense_date' => $expense->expense_date,
@@ -115,6 +109,8 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
 
             return [
                 'id' => (int) $row->id,
+                'record_type' => 'liquidation',
+                'queue_record' => true,
                 'user_id' => (int) $row->user_id,
                 'employee_id' => $row->employee_id,
                 'name' => $row->name,
@@ -132,9 +128,10 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 'week_start' => $weekStart->format('Y-m-d'),
                 'week_end' => $weekEnd->format('Y-m-d'),
                 'week_label' => $weekStart->format('M j') . '–' . $weekEnd->format('M j'),
-                'balance_sent' => $balanceSent,
+                'balance_sent' => $liquidationAmount,
+                'liquidation_amount' => $liquidationAmount,
                 'total_expenses' => (float) $row->total_expended,
-                'remaining_balance' => $balanceSent - (float) $row->total_expended,
+                'remaining_balance' => $liquidationAmount - (float) $row->total_expended,
                 'expense_count' => (int) $row->expense_count,
                 'expense_breakdown' => $expenseBreakdown,
                 'search_text' => strtolower(trim(
@@ -142,6 +139,134 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                     ($row->name ?? '') . ' ' .
                     ($row->role_name ?? '') . ' ' .
                     ($row->cutoff_period ?? '') . ' ' .
+                    ($row->status ?? '')
+                )),
+            ];
+        })->values();
+    }
+}
+
+if (!function_exists('buildLiquidationTrackingRecords')) {
+    function buildLiquidationTrackingRecords(?int $employeeId = null)
+    {
+        $liquidationTotalsSubquery = DB::table('liquidation_expenses')
+            ->whereNotNull('cash_advance_request_id')
+            ->groupBy('cash_advance_request_id')
+            ->selectRaw('cash_advance_request_id, SUM(amount) as total_expended, COUNT(*) as expense_count');
+
+        $records = DB::table('cash_advance_requests')
+            ->join('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+            ->leftJoin('roles', 'users.role_id', '=', 'roles.id')
+            ->leftJoinSub($liquidationTotalsSubquery, 'liquidation_totals', function ($join) {
+                $join->on('liquidation_totals.cash_advance_request_id', '=', 'cash_advance_requests.id');
+            })
+            ->select(
+                'cash_advance_requests.id',
+                'cash_advance_requests.requester_id as user_id',
+                'users.employee_id',
+                'users.name',
+                DB::raw("COALESCE(roles.name, 'Employee') as role_name"),
+                'cash_advance_requests.reference_no',
+                'cash_advance_requests.request_date',
+                'cash_advance_requests.purpose',
+                'cash_advance_requests.category',
+                'cash_advance_requests.accounting_remarks',
+                'cash_advance_requests.status',
+                'cash_advance_requests.submitted_at',
+                'cash_advance_requests.reviewed_at',
+                'cash_advance_requests.released_at',
+                'cash_advance_requests.created_at',
+                DB::raw('COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) as liquidation_amount'),
+                DB::raw('COALESCE(liquidation_totals.total_expended, 0) as total_expended'),
+                DB::raw('COALESCE(liquidation_totals.expense_count, 0) as expense_count')
+            )
+            ->when($employeeId, function ($query) use ($employeeId) {
+                $query->where('cash_advance_requests.requester_id', $employeeId);
+            })
+            ->orderByDesc('cash_advance_requests.request_date')
+            ->orderByDesc('cash_advance_requests.id')
+            ->get();
+
+        $expenseRowsByRequest = DB::table('liquidation_expenses')
+            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+            ->select(
+                'liquidation_expenses.cash_advance_request_id',
+                'liquidation_expenses.expense_date',
+                'liquidation_expenses.transaction_details',
+                'liquidation_expenses.description',
+                'liquidation_expenses.amount',
+                'liquidation_expenses.receipt_path',
+                'categories.particulars_category as category_name'
+            )
+            ->whereNotNull('liquidation_expenses.cash_advance_request_id')
+            ->orderByDesc('liquidation_expenses.expense_date')
+            ->get()
+            ->groupBy('cash_advance_request_id');
+
+        return $records->map(function ($row) use ($expenseRowsByRequest) {
+            $recordDate = \Carbon\Carbon::parse($row->request_date);
+            $weekStart = $recordDate->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
+            $weekEnd = $recordDate->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
+            $monthKey = $recordDate->format('Y-m');
+            $liquidationAmount = (float) $row->liquidation_amount;
+            $expenseBreakdown = ($expenseRowsByRequest->get($row->id) ?? collect())->map(function ($expense) {
+                return [
+                    'expense_date' => $expense->expense_date,
+                    'category' => $expense->category_name,
+                    'details' => trim((string) $expense->transaction_details),
+                    'description' => trim((string) $expense->description),
+                    'amount' => (float) $expense->amount,
+                    'receipt_path' => $expense->receipt_path,
+                    'receipt_url' => $expense->receipt_path ? Storage::disk('public')->url($expense->receipt_path) : null,
+                ];
+            })->values();
+
+            if ($expenseBreakdown->isEmpty()) {
+                $expenseBreakdown = collect([[
+                    'expense_date' => $row->request_date,
+                    'category' => $row->category ?: '-',
+                    'details' => trim((string) $row->purpose) ?: ($row->reference_no ?: 'Cash advance request'),
+                    'description' => trim((string) $row->accounting_remarks),
+                    'amount' => $liquidationAmount,
+                    'receipt_path' => null,
+                    'receipt_url' => null,
+                ]]);
+            }
+
+            return [
+                'id' => (int) $row->id,
+                'record_type' => 'cash_advance_request',
+                'queue_record' => false,
+                'user_id' => (int) $row->user_id,
+                'employee_id' => $row->employee_id,
+                'name' => $row->name,
+                'role_name' => $row->role_name ?: 'Employee',
+                'reference_no' => $row->reference_no,
+                'cutoff_period' => $recordDate->format('F Y'),
+                'status' => $row->status,
+                'remarks' => $row->accounting_remarks,
+                'document_path' => null,
+                'submitted_at' => $row->submitted_at,
+                'approved_at' => $row->reviewed_at,
+                'record_date' => $recordDate->format('Y-m-d'),
+                'record_timestamp' => $recordDate->toIso8601String(),
+                'period_month_key' => $monthKey,
+                'period_month_label' => $recordDate->format('F Y'),
+                'week_start' => $weekStart->format('Y-m-d'),
+                'week_end' => $weekEnd->format('Y-m-d'),
+                'week_label' => $weekStart->format('M j') . '–' . $weekEnd->format('M j'),
+                'balance_sent' => $liquidationAmount,
+                'liquidation_amount' => $liquidationAmount,
+                'total_expenses' => (float) $row->total_expended,
+                'remaining_balance' => $liquidationAmount - (float) $row->total_expended,
+                'expense_count' => max(1, (int) $row->expense_count),
+                'expense_breakdown' => $expenseBreakdown,
+                'search_text' => strtolower(trim(
+                    ($row->employee_id ?? '') . ' ' .
+                    ($row->name ?? '') . ' ' .
+                    ($row->role_name ?? '') . ' ' .
+                    ($row->reference_no ?? '') . ' ' .
+                    ($row->purpose ?? '') . ' ' .
                     ($row->status ?? '')
                 )),
             ];
@@ -422,6 +547,194 @@ Route::get('/accounting/dashboard', function () {
         return $redirect;
     }
 
+    $availableMonths = collect(range(1, 12))
+        ->map(function (int $month) {
+            $date = \Carbon\Carbon::createFromDate(2026, $month, 1);
+
+            return [
+                'value' => $date->format('Y-m'),
+                'label' => $date->format('F Y'),
+            ];
+        });
+
+    $currentMonthKey = now()->year === 2026 ? now()->format('Y-m') : '2026-12';
+    $availableMonthKeys = $availableMonths->pluck('value');
+    $requestedMonthKey = (string) request()->query('month', '');
+    $selectedMonthKey = $availableMonthKeys->contains($requestedMonthKey)
+        ? $requestedMonthKey
+        : ($availableMonthKeys->contains($currentMonthKey) ? $currentMonthKey : '2026-12');
+
+    $selectedMonth = \Carbon\Carbon::createFromFormat('Y-m', $selectedMonthKey)->startOfMonth();
+    $monthStart = $selectedMonth->toDateString();
+    $monthEnd = $selectedMonth->copy()->endOfMonth()->toDateString();
+    $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
+    $debitWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) NOT LIKE ?";
+    $creditWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE ?";
+
+    $currentMonthlyBalance = (object) AccountingMonthlyBalance::forMonth($selectedMonth);
+
+    $allBreakdownsSubquery = DB::table('liquidation_expenses')
+        ->whereNotNull('cash_advance_request_id')
+        ->groupBy('cash_advance_request_id')
+        ->selectRaw('cash_advance_request_id, COUNT(*) as breakdown_count');
+
+    $monthlyTransactionSummary = DB::table('cash_advance_requests')
+        ->whereBetween('request_date', [$monthStart, $monthEnd])
+        ->selectRaw("
+            COUNT(*) as transaction_count,
+            SUM(CASE WHEN {$creditWhereSql} THEN {$transactionAmountSql} ELSE 0 END) as total_credits,
+            SUM(CASE WHEN {$debitWhereSql} THEN {$transactionAmountSql} ELSE 0 END) as total_debits
+        ", ['%manual credit entry%', '%manual credit entry%'])
+        ->first();
+
+    if ((int) ($monthlyTransactionSummary->transaction_count ?? 0) === 0) {
+        $currentMonthlyBalance = (object) [
+            'opening_balance' => 0,
+            'remaining_balance' => 0,
+            'ending_balance' => 0,
+        ];
+    }
+
+    $breakdownCategoryQuery = DB::table('cash_advance_requests')
+        ->join('liquidation_expenses', 'liquidation_expenses.cash_advance_request_id', '=', 'cash_advance_requests.id')
+        ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+        ->whereBetween('request_date', [$monthStart, $monthEnd])
+        ->whereRaw($debitWhereSql, ['%manual credit entry%'])
+        ->whereNotNull('categories.particulars_category')
+        ->groupBy('categories.particulars_category')
+        ->selectRaw("
+            categories.particulars_category as category_name,
+            SUM(liquidation_expenses.amount) as total_amount,
+            COUNT(DISTINCT cash_advance_requests.id) as transaction_count
+        ");
+
+    $transactionCategoryQuery = DB::table('cash_advance_requests')
+        ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
+            $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
+        })
+        ->whereBetween('cash_advance_requests.request_date', [$monthStart, $monthEnd])
+        ->whereRaw($debitWhereSql, ['%manual credit entry%'])
+        ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
+        ->whereNotNull('cash_advance_requests.category')
+        ->where('cash_advance_requests.category', '<>', '')
+        ->groupBy('cash_advance_requests.category')
+        ->selectRaw("
+            cash_advance_requests.category as category_name,
+            SUM({$transactionAmountSql}) as total_amount,
+            COUNT(*) as transaction_count
+        ");
+
+    $categorySummaries = DB::query()
+        ->fromSub($breakdownCategoryQuery->unionAll($transactionCategoryQuery), 'category_allocations')
+        ->selectRaw('category_name, SUM(total_amount) as total_amount, SUM(transaction_count) as transaction_count')
+        ->groupBy('category_name')
+        ->orderByDesc('total_amount')
+        ->get();
+
+    $topCategories = $categorySummaries->take(5)->values();
+    $totalCategoryAmount = (float) $categorySummaries->sum('total_amount');
+    $distribution = $categorySummaries->take(4)->map(function ($category) use ($totalCategoryAmount) {
+        return [
+            'category_name' => $category->category_name,
+            'total_amount' => (float) $category->total_amount,
+            'percentage' => $totalCategoryAmount > 0 ? ((float) $category->total_amount / $totalCategoryAmount) * 100 : 0,
+        ];
+    })->values();
+
+    $otherCategoryAmount = max(0, $totalCategoryAmount - (float) $distribution->sum('total_amount'));
+    if ($otherCategoryAmount > 0) {
+        $distribution->push([
+            'category_name' => 'Others',
+            'total_amount' => $otherCategoryAmount,
+            'percentage' => $totalCategoryAmount > 0 ? ($otherCategoryAmount / $totalCategoryAmount) * 100 : 0,
+        ]);
+    }
+
+    $trendStart = $selectedMonth->copy()->subMonths(5)->startOfMonth();
+    $trendEnd = $selectedMonth->copy()->endOfMonth();
+
+    $trendBreakdownQuery = DB::table('cash_advance_requests')
+        ->join('liquidation_expenses', 'liquidation_expenses.cash_advance_request_id', '=', 'cash_advance_requests.id')
+        ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+        ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
+        ->whereRaw($debitWhereSql, ['%manual credit entry%'])
+        ->whereNotNull('categories.particulars_category')
+        ->groupBy('month_key', 'categories.particulars_category')
+        ->selectRaw("
+            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
+            categories.particulars_category as category_name,
+            SUM(liquidation_expenses.amount) as total_amount
+        ");
+
+    $trendTransactionCategoryQuery = DB::table('cash_advance_requests')
+        ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
+            $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
+        })
+        ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
+        ->whereRaw($debitWhereSql, ['%manual credit entry%'])
+        ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
+        ->whereNotNull('cash_advance_requests.category')
+        ->where('cash_advance_requests.category', '<>', '')
+        ->groupBy('month_key', 'cash_advance_requests.category')
+        ->selectRaw("
+            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
+            cash_advance_requests.category as category_name,
+            SUM({$transactionAmountSql}) as total_amount
+        ");
+
+    $trendRows = DB::query()
+        ->fromSub($trendBreakdownQuery->unionAll($trendTransactionCategoryQuery), 'trend_allocations')
+        ->selectRaw('month_key, category_name, SUM(total_amount) as total_amount')
+        ->groupBy('month_key', 'category_name')
+        ->get();
+
+    $trendCategoryNames = $topCategories->pluck('category_name')->take(4)->values();
+    $monthlyTrend = collect(range(5, 0))->map(function (int $monthsAgo) use ($selectedMonth, $trendRows, $trendCategoryNames) {
+        $monthDate = $selectedMonth->copy()->subMonths($monthsAgo)->startOfMonth();
+        $monthKey = $monthDate->format('Y-m');
+        $monthRows = $trendRows->where('month_key', $monthKey);
+        $categoryRows = $trendCategoryNames->map(function (string $categoryName) use ($monthRows) {
+            return [
+                'category_name' => $categoryName,
+                'total_amount' => (float) optional($monthRows->firstWhere('category_name', $categoryName))->total_amount,
+            ];
+        });
+        $otherAmount = max(0, (float) $monthRows->sum('total_amount') - (float) $categoryRows->sum('total_amount'));
+
+        if ($otherAmount > 0) {
+            $categoryRows->push([
+                'category_name' => 'Others',
+                'total_amount' => $otherAmount,
+            ]);
+        }
+
+        return [
+            'month_key' => $monthKey,
+            'label' => $monthDate->format('M Y'),
+            'categories' => $categoryRows->values(),
+            'total_amount' => (float) $monthRows->sum('total_amount'),
+        ];
+    });
+
+    return view('accounting.dashboard', compact(
+        'availableMonths',
+        'selectedMonthKey',
+        'selectedMonth',
+        'currentMonthlyBalance',
+        'monthlyTransactionSummary',
+        'categorySummaries',
+        'topCategories',
+        'distribution',
+        'totalCategoryAmount',
+        'monthlyTrend'
+    ));
+})->middleware('auth')->name('accounting.dashboard');
+
+Route::get('/accounting/send-cash', function () {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
     $currentMonth = now();
 
     $employees = DB::table('users')
@@ -432,8 +745,8 @@ Route::get('/accounting/dashboard', function () {
 
     $currentMonthlyBalance = (object) AccountingMonthlyBalance::forMonth($currentMonth);
 
-    return view('accounting.dashboard', compact('employees', 'currentMonthlyBalance'));
-})->middleware('auth')->name('accounting.dashboard');
+    return view('accounting.send-cash', compact('employees', 'currentMonthlyBalance'));
+})->middleware('auth')->name('accounting.send-cash');
 
 Route::get('/accounting/cash-advance/monthly-balance', function (Request $request) {
     if ($redirect = redirect_if_role_not_allowed([3])) {
@@ -499,7 +812,7 @@ Route::get('/accounting/liquidation/submitted', function () {
         return $redirect;
     }
 
-    $liquidations = buildLiquidationTrackingRecords()
+    $liquidations = buildLiquidationQueueRecords()
         ->filter(fn ($record) => strtolower((string) ($record['status'] ?? '')) === 'submitted'
             || (!empty($record['submitted_at']) && strtolower((string) ($record['status'] ?? '')) === 'pending'))
         ->values();
@@ -523,7 +836,6 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
             DB::raw("COALESCE(roles.name, 'Employee') as role_name")
         )
         ->where('users.id', (int) $employee)
-        ->where('users.role_id', 2)
         ->first();
 
     abort_if(!$selectedEmployee, 404);
@@ -557,7 +869,20 @@ Route::get('/accounting/summary', function () {
         ->orderBy('particulars_category')
         ->get();
 
-    return view('accounting.summary', compact('employees', 'categories'));
+    $summaryMonths = collect(range(1, 12))
+        ->map(function (int $month) {
+            $date = \Carbon\Carbon::createFromDate(2026, $month, 1);
+
+            return [
+                'value' => $date->format('Y-m'),
+                'label' => $date->format('F Y'),
+            ];
+        });
+    $defaultSummaryMonth = now()->year === 2026
+        ? now()->format('Y-m')
+        : '2026-01';
+
+    return view('accounting.summary', compact('employees', 'categories', 'summaryMonths', 'defaultSummaryMonth'));
 })->middleware('auth')->name('accounting.summary');
 
 Route::get('/accounting/summary/data', function (Request $request) {
@@ -573,6 +898,29 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $fromDate = $request->query('from_date');
     $toDate = $request->query('to_date');
     $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
+    $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
+    $categoryName = null;
+
+    try {
+        $periodDate = $fromDate
+            ? \Carbon\Carbon::parse($fromDate)->startOfMonth()
+            : (now()->year === 2026 ? now()->startOfMonth() : \Carbon\Carbon::createFromDate(2026, 1, 1));
+    } catch (\Throwable $exception) {
+        $periodDate = \Carbon\Carbon::createFromDate(2026, 1, 1);
+    }
+
+    if ((int) $periodDate->year !== 2026) {
+        $periodDate = \Carbon\Carbon::createFromDate(2026, 1, 1);
+    }
+
+    $fromDate = $periodDate->toDateString();
+    $toDate = $periodDate->copy()->endOfMonth()->toDateString();
+
+    if ($categoryId) {
+        $categoryName = DB::table('categories')
+            ->where('id', $categoryId)
+            ->value('particulars_category');
+    }
 
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
     $expenseQuery = DB::table('cash_advance_requests')
@@ -583,21 +931,58 @@ Route::get('/accounting/summary/data', function (Request $request) {
         $expenseQuery->where('cash_advance_requests.requester_id', $employeeId);
     }
 
-    if ($fromDate) {
-        $expenseQuery->where('cash_advance_requests.request_date', '>=', $fromDate);
-    }
+    $expenseQuery->whereBetween('cash_advance_requests.request_date', [$fromDate, $toDate]);
 
-    if ($toDate) {
-        $expenseQuery->where('cash_advance_requests.request_date', '<=', $toDate);
-    }
+    $effectiveAmountSql = $transactionAmountSql;
+    $categoryParticularSql = 'cash_advance_requests.purpose';
+    $categoryDescriptionSql = 'cash_advance_requests.accounting_remarks';
+    $categoryNameSql = 'cash_advance_requests.category';
 
     if ($categoryId) {
-        $categoryName = DB::table('categories')
-            ->where('id', $categoryId)
-            ->value('particulars_category');
-
         if ($categoryName) {
-            $expenseQuery->where('cash_advance_requests.category', $categoryName);
+            $allBreakdownsSubquery = DB::table('liquidation_expenses')
+                ->whereNotNull('cash_advance_request_id')
+                ->groupBy('cash_advance_request_id')
+                ->selectRaw('
+                    cash_advance_request_id,
+                    COUNT(*) as breakdown_count,
+                    SUM(amount) as breakdown_amount
+                ');
+
+            $categoryBreakdownsSubquery = DB::table('liquidation_expenses')
+                ->whereNotNull('cash_advance_request_id')
+                ->where('category_id', $categoryId)
+                ->groupBy('cash_advance_request_id')
+                ->selectRaw("
+                    cash_advance_request_id,
+                    COUNT(*) as matching_count,
+                    SUM(amount) as matching_amount,
+                    GROUP_CONCAT(NULLIF(transaction_details, '') ORDER BY id SEPARATOR ', ') as matching_particular_name,
+                    GROUP_CONCAT(NULLIF(description, '') ORDER BY id SEPARATOR ', ') as matching_description
+                ");
+
+            $expenseQuery
+                ->leftJoinSub($allBreakdownsSubquery, 'summary_breakdowns', function ($join) {
+                    $join->on('summary_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
+                })
+                ->leftJoinSub($categoryBreakdownsSubquery, 'summary_category_breakdowns', function ($join) {
+                    $join->on('summary_category_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
+                })
+                ->where(function ($query) use ($categoryName) {
+                    $query->where(function ($breakdownQuery) {
+                        $breakdownQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) > 0')
+                            ->whereRaw('COALESCE(summary_category_breakdowns.matching_amount, 0) > 0');
+                    })->orWhere(function ($transactionQuery) use ($categoryName) {
+                        $transactionQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) = 0')
+                            ->where('cash_advance_requests.category', $categoryName);
+                    });
+                });
+
+            $hasBreakdownSql = 'COALESCE(summary_breakdowns.breakdown_count, 0) > 0';
+            $effectiveAmountSql = "CASE WHEN {$hasBreakdownSql} THEN COALESCE(summary_category_breakdowns.matching_amount, 0) ELSE {$transactionAmountSql} END";
+            $categoryParticularSql = "CASE WHEN {$hasBreakdownSql} THEN COALESCE(summary_category_breakdowns.matching_particular_name, cash_advance_requests.purpose) ELSE cash_advance_requests.purpose END";
+            $categoryDescriptionSql = "CASE WHEN {$hasBreakdownSql} THEN COALESCE(summary_category_breakdowns.matching_description, cash_advance_requests.accounting_remarks) ELSE cash_advance_requests.accounting_remarks END";
+            $categoryNameSql = "'" . str_replace("'", "''", $categoryName) . "'";
         } else {
             $expenseQuery->whereRaw('1 = 0');
         }
@@ -607,38 +992,42 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $summaryQuery = clone $expenseQuery;
     $summary = $summaryQuery->selectRaw("
         COUNT(*) as total_count,
-        SUM(CASE WHEN {$transactionTypeSql} = 'credit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END) as total_credits,
-        SUM(CASE WHEN {$transactionTypeSql} = 'debit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END) as total_debits
+        SUM(CASE WHEN {$transactionTypeSql} = 'credit' THEN {$effectiveAmountSql} ELSE 0 END) as total_credits,
+        SUM(CASE WHEN {$transactionTypeSql} = 'debit' THEN {$effectiveAmountSql} ELSE 0 END) as total_debits
     ")->first();
 
     $summary->total_credits = $summary->total_credits ?? 0;
     $summary->total_debits = $summary->total_debits ?? 0;
     $summary->net_amount = $summary->total_debits - $summary->total_credits;
+    $summary->total_category_amount = (float) $summary->total_debits + (float) $summary->total_credits;
+    $summary->selected_category_name = $categoryName;
 
     // Get paginated expenses
     $totalExpenses = (clone $expenseQuery)->count();
     $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
     $page = min($page, $totalPages);
-    $balance = $totalExpenses > 0
-        ? AccountingMonthlyBalance::forMonth($fromDate ?: now())
-        : [
-            'opening_balance' => 0,
-            'remaining_balance' => 0,
-            'ending_balance' => 0,
-        ];
+    $balance = AccountingMonthlyBalance::forMonth($periodDate);
+
+    if ($categoryId) {
+        $balance['debit_total'] = round((float) $summary->total_debits, 2);
+        $balance['credit_total'] = round((float) $summary->total_credits, 2);
+        $balance['expense_total'] = round((float) $summary->net_amount, 2);
+        $balance['remaining_balance'] = round((float) $balance['opening_balance'] - (float) $summary->net_amount, 2);
+        $balance['ending_balance'] = $balance['remaining_balance'];
+    }
 
     $expensesQuery = (clone $expenseQuery)
         ->select(
             'cash_advance_requests.request_date as expense_date',
             'users.name as employee_name',
             DB::raw("{$transactionTypeSql} as transaction_type"),
-            'cash_advance_requests.accounting_remarks as description',
-            'cash_advance_requests.purpose as transaction_details',
-            DB::raw('COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) as amount'),
-            'cash_advance_requests.purpose as particular_name',
-            'cash_advance_requests.category as category_name',
-            DB::raw("CASE WHEN {$transactionTypeSql} = 'credit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END as credit"),
-            DB::raw("CASE WHEN {$transactionTypeSql} = 'debit' THEN COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0) ELSE 0 END as debit")
+            DB::raw("{$categoryDescriptionSql} as description"),
+            DB::raw("{$categoryParticularSql} as transaction_details"),
+            DB::raw("{$effectiveAmountSql} as amount"),
+            DB::raw("{$categoryParticularSql} as particular_name"),
+            DB::raw("{$categoryNameSql} as category_name"),
+            DB::raw("CASE WHEN {$transactionTypeSql} = 'credit' THEN {$effectiveAmountSql} ELSE 0 END as credit"),
+            DB::raw("CASE WHEN {$transactionTypeSql} = 'debit' THEN {$effectiveAmountSql} ELSE 0 END as debit")
         )
         ->orderByDesc('cash_advance_requests.request_date')
         ->orderByDesc('cash_advance_requests.id');

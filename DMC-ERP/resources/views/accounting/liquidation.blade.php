@@ -4,6 +4,15 @@
 @section('content')
 @php
     $selectedEmployeeData = $selectedEmployee ?? null;
+    $selectedMonthKey = request('month', now()->format('Y-m'));
+    $liquidationMonths = collect(range(1, 12))->map(function (int $month) {
+        $date = \Carbon\Carbon::createFromDate(2026, $month, 1);
+
+        return [
+            'value' => $date->format('Y-m'),
+            'label' => $date->format('F Y'),
+        ];
+    });
 @endphp
 
 <div class="space-y-6">
@@ -20,31 +29,15 @@
                     <i data-feather="chevron-right" class="w-4 h-4"></i>
                     <span class="font-semibold text-gray-700">{{ $selectedEmployeeData->name }}</span>
                 </div>
-                <p class="max-w-3xl text-sm text-gray-500">Review the liquidation records for this employee within the selected period. Use the period navigator to move across months or 7-day windows without leaving the page.</p>
+                <p class="max-w-3xl text-sm text-gray-500">Review this employee's liquidation records for the selected month.</p>
             @else
-                <p class="max-w-3xl text-sm text-gray-500">Track liquidation activity by month or week, compare totals at a glance, and drill into a single employee without expanding rows on the same page.</p>
+                <p class="max-w-3xl text-sm text-gray-500">Track which employees submitted liquidations during the selected month and open their liquidation records.</p>
             @endif
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
-            <div class="relative" id="liquidationQueueWrapper">
-                <button id="liquidationQueueBtn" type="button" class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100">
-                    <i data-feather="inbox" class="w-4 h-4"></i>
-                    <span id="liquidationQueueLabel">Liquidation Queue</span>
-                </button>
-
-                <div id="liquidationQueuePanel" class="hidden absolute right-0 top-14 z-40 w-[min(28rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-                    <div class="border-b border-gray-100 px-4 py-3">
-                        <p class="text-sm font-bold text-gray-900">Liquidation Review Queue</p>
-                        <p class="text-xs font-medium text-gray-500">Submitted liquidations waiting for accounting decision</p>
-                    </div>
-                    <div id="liquidationQueueList" class="max-h-96 space-y-3 overflow-y-auto p-4"></div>
-                    <p id="liquidationQueueEmpty" class="hidden px-4 py-8 text-center text-sm text-gray-500">No submitted liquidations for review.</p>
-                </div>
-            </div>
-
             @if($selectedEmployeeData)
-                <a href="{{ route('accounting.liquidation') }}" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-teal-200 hover:text-teal-700 hover:shadow-md">
+                <a id="backToEmployeeListLink" href="{{ route('accounting.liquidation', $selectedMonthKey ? ['month' => $selectedMonthKey] : []) }}" class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-teal-200 hover:text-teal-700 hover:shadow-md">
                     <i data-feather="arrow-left" class="w-4 h-4"></i>
                     Back to employee list
                 </a>
@@ -117,130 +110,37 @@
         </div>
     </div>
 
-    <div class="rounded-3xl border border-slate-800 bg-slate-950 p-5 text-white shadow-2xl md:p-6">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex flex-wrap items-center gap-3">
-                <button id="liquidationPrevPeriodBtn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white transition hover:bg-white/15 hover:scale-105">
-                    <i data-feather="arrow-left" class="w-4 h-4"></i>
+    <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <div class="w-full sm:w-72">
+                    <label for="liquidationMonthFilter" class="block text-sm font-semibold text-gray-700">Month</label>
+                    <select id="liquidationMonthFilter" class="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-teal-300 focus:ring-4 focus:ring-teal-100">
+                        @foreach($liquidationMonths as $month)
+                            <option value="{{ $month['value'] }}" {{ $month['value'] === $selectedMonthKey ? 'selected' : '' }}>{{ $month['label'] }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="relative" id="liquidationQueueWrapper">
+                <button id="liquidationQueueBtn" type="button" class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 sm:w-auto">
+                    <i data-feather="inbox" class="w-4 h-4"></i>
+                    <span id="liquidationQueueLabel">Liquidation Queue</span>
+                    <span id="liquidationQueueBadge" class="hidden min-w-6 rounded-full bg-emerald-600 px-2 py-0.5 text-center text-xs font-bold text-white">0</span>
                 </button>
 
-                <div>
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Selected period</p>
-                    <h2 id="liquidationPeriodLabel" class="mt-1 text-2xl font-bold md:text-3xl">April 2026</h2>
-                    <p id="liquidationPeriodSubLabel" class="mt-1 text-sm text-slate-300">Month view</p>
-                </div>
-
-                <button id="liquidationNextPeriodBtn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white transition hover:bg-white/15 hover:scale-105">
-                    <i data-feather="arrow-right" class="w-4 h-4"></i>
-                </button>
-            </div>
-
-            <div class="flex flex-col items-start gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <div class="inline-flex rounded-2xl border border-white/10 bg-white/10 p-1">
-                        <button id="liquidationWeekToggle" type="button" data-view-toggle="week" class="rounded-xl px-4 py-2 text-sm font-semibold text-slate-200 transition hover:text-white">Week</button>
-                        <button id="liquidationMonthToggle" type="button" data-view-toggle="month" class="rounded-xl px-4 py-2 text-sm font-semibold text-slate-200 transition hover:text-white">Month</button>
+                <div id="liquidationQueuePanel" class="hidden absolute right-0 top-14 z-40 w-[min(28rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                    <div class="border-b border-gray-100 px-4 py-3">
+                        <p class="text-sm font-bold text-gray-900">Liquidation Review Queue</p>
+                        <p class="text-xs font-medium text-gray-500">Submitted liquidations waiting for accounting decision</p>
                     </div>
-
-                    <button id="liquidationCurrentWeekBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25">
-                        <i data-feather="calendar" class="w-4 h-4"></i>
-                        Current Week
-                    </button>
-
-                    <button id="liquidationCurrentMonthBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15">
-                        <i data-feather="grid" class="w-4 h-4"></i>
-                        Current Month
-                    </button>
-
-                    <button id="openPrevBalanceBtn" type="button" class="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15">
-                        <i data-feather="dollar-sign" class="w-4 h-4"></i>
-                        Set Previous Balance
-                    </button>
+                    <div id="liquidationQueueList" class="max-h-96 space-y-3 overflow-y-auto p-4"></div>
+                    <p id="liquidationQueueEmpty" class="hidden px-4 py-8 text-center text-sm text-gray-500">No submitted liquidations for review.</p>
                 </div>
             </div>
         </div>
 
-        <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div id="liquidationWeekBreakdown" class="flex flex-wrap gap-2"></div>
-
-            <div class="w-full rounded-2xl border border-emerald-300/30 bg-emerald-500/10 p-6 md:max-w-xl lg:w-[34rem] lg:max-w-none lg:flex-shrink-0">
-                <div class="flex flex-col items-start gap-3 text-lg font-semibold md:text-xl">
-                    <span id="prevOpeningBalanceText" class="text-emerald-100">Opening Balance: PHP 0.00</span>
-                    <span id="prevEndingBalanceText" class="text-cyan-100">Ending Balance: PHP 0.00</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Previous Balance Modal -->
-        <div id="previousBalanceModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div class="bg-gradient-to-r from-emerald-600 to-teal-600 p-5">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="text-xl font-bold text-white">Set Previous Month Balance</h3>
-                            <p id="previousBalanceModalMonth" class="text-emerald-100 text-sm mt-1"></p>
-                        </div>
-                        <button id="closePreviousBalanceBtn" type="button" class="text-white hover:text-emerald-100 transition">
-                            <i data-feather="x" class="w-6 h-6"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <form id="previousBalanceForm" class="p-6 space-y-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
-                        <input id="previousBalanceMonthInput" type="month" class="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-xl text-emerald-700 font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Opening Balance</label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">PHP</span>
-                            <input id="previousOpeningInput" type="number" min="0" step="0.01" class="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-xl text-gray-900 font-semibold focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Previous Balance</label>
-                        <div class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-                            <p id="previousEndingBalanceDisplay" class="text-lg font-bold text-emerald-900">PHP 0.00</p>
-                            <p class="mt-1 text-xs text-emerald-700">Ending balance from the previous month</p>
-                        </div>
-                    </div>
-
-                    <div class="pt-2 flex items-center gap-3">
-                        <button type="button" id="cancelPreviousBalanceBtn" class="flex-1 px-4 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-all duration-200">Cancel</button>
-                        <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-200">Save Balance</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div class="rounded-3xl border border-gray-100 bg-white p-5 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">
-            <p class="text-sm font-medium text-gray-500">Total liquidations</p>
-            <p id="summaryLiquidationCount" class="mt-2 text-3xl font-bold text-slate-900">0</p>
-            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Selected period</p>
-        </div>
-
-        <div class="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">
-            <p class="text-sm font-medium text-emerald-700">Total amount sent</p>
-            <p id="summaryAmountSent" class="mt-2 text-3xl font-bold text-emerald-800">PHP 0.00</p>
-            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-emerald-700/70">Funds released</p>
-        </div>
-
-        <div class="rounded-3xl border border-rose-100 bg-rose-50 p-5 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">
-            <p class="text-sm font-medium text-rose-700">Total expenses</p>
-            <p id="summaryTotalExpenses" class="mt-2 text-3xl font-bold text-rose-700">PHP 0.00</p>
-            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-rose-700/70">Expenses recorded</p>
-        </div>
-
-        <div class="rounded-3xl border border-teal-100 bg-teal-50 p-5 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">
-            <p class="text-sm font-medium text-teal-700">Remaining balance</p>
-            <p id="summaryRemainingBalance" class="mt-2 text-3xl font-bold text-teal-800">PHP 0.00</p>
-            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-teal-700/70">After expenses</p>
-        </div>
     </div>
 
     @if($selectedEmployeeData)
@@ -357,23 +257,22 @@
     const liquidationRecords = @json($liquidationRecords ?? []);
     const selectedEmployee = @json($selectedEmployeeData);
     const isDetailView = Boolean(selectedEmployee);
+    const initialMonthKey = @json($selectedMonthKey);
+    const liquidationIndexRoute = @json(route('accounting.liquidation'));
     const employeeRouteTemplate = @json(route('accounting.liquidation.employee', ['employee' => '__EMPLOYEE__']));
     const liquidationSubmittedRoute = @json(route('accounting.liquidation.submitted'));
     const liquidationDecisionRouteTemplate = @json(route('accounting.liquidation.decision', ['liquidation' => '__LIQUIDATION__']));
-    const monthlyBalanceShowRoute = @json(route('accounting.cash-advance.monthly-balance.show'));
-    const monthlyBalanceStoreRoute = @json(route('accounting.cash-advance.monthly-balance.store'));
 
     let currentViewMode = 'month';
-    let currentPeriodStart = startOfDay(getMonthStart(new Date()));
-    let currentPeriodEnd = endOfDay(getMonthEnd(new Date()));
+    let currentPeriodStart = startOfDay(getMonthStart(monthKeyToDate(initialMonthKey) || new Date()));
+    let currentPeriodEnd = endOfDay(getMonthEnd(currentPeriodStart));
     let sortState = { field: 'total_amount', direction: 'desc' };
-    let liquidationQueueRecords = liquidationRecords.filter((record) => String(record.status || '').toLowerCase() === 'submitted'
-        || (record.submitted_at && String(record.status || '').toLowerCase() === 'pending'));
+    let liquidationQueueRecords = liquidationRecords.filter((record) => Boolean(record.queue_record)
+        && (String(record.status || '').toLowerCase() === 'submitted'
+            || (record.submitted_at && String(record.status || '').toLowerCase() === 'pending')));
     let liquidationQueuePollingInterval = null;
     let liquidationQueueFetchInProgress = false;
 
-    const periodLabel = document.getElementById('liquidationPeriodLabel');
-    const periodSubLabel = document.getElementById('liquidationPeriodSubLabel');
     const weekBreakdown = document.getElementById('liquidationWeekBreakdown');
     const prevPeriodBtn = document.getElementById('liquidationPrevPeriodBtn');
     const nextPeriodBtn = document.getElementById('liquidationNextPeriodBtn');
@@ -381,6 +280,8 @@
     const currentMonthBtn = document.getElementById('liquidationCurrentMonthBtn');
     const weekToggleBtn = document.getElementById('liquidationWeekToggle');
     const monthToggleBtn = document.getElementById('liquidationMonthToggle');
+    const monthFilter = document.getElementById('liquidationMonthFilter');
+    const backToEmployeeListLink = document.getElementById('backToEmployeeListLink');
     const searchInput = document.getElementById('liquidationSearchInput');
     const employeeTableBody = document.getElementById('liquidationEmployeeTableBody');
     const employeeEmptyState = document.getElementById('liquidationEmployeeEmptyState');
@@ -388,14 +289,11 @@
     const recordEmptyState = document.getElementById('liquidationRecordEmptyState');
     const employeeRecordCount = document.getElementById('employeeRecordCount');
 
-    const summaryLiquidationCount = document.getElementById('summaryLiquidationCount');
-    const summaryAmountSent = document.getElementById('summaryAmountSent');
-    const summaryTotalExpenses = document.getElementById('summaryTotalExpenses');
-    const summaryRemainingBalance = document.getElementById('summaryRemainingBalance');
     const liquidationQueueWrapper = document.getElementById('liquidationQueueWrapper');
     const liquidationQueueBtn = document.getElementById('liquidationQueueBtn');
     const liquidationQueuePanel = document.getElementById('liquidationQueuePanel');
     const liquidationQueueLabel = document.getElementById('liquidationQueueLabel');
+    const liquidationQueueBadge = document.getElementById('liquidationQueueBadge');
     const liquidationQueueList = document.getElementById('liquidationQueueList');
     const liquidationQueueEmpty = document.getElementById('liquidationQueueEmpty');
     const liquidationReviewModal = document.getElementById('liquidationReviewModal');
@@ -412,19 +310,6 @@
     const liquidationReviewApproveBtn = document.getElementById('liquidationReviewApproveBtn');
     let activeLiquidationReviewId = null;
 
-    // Previous balances UI elements
-    const openPrevBalanceBtn = document.getElementById('openPrevBalanceBtn');
-    const prevOpeningBalanceText = document.getElementById('prevOpeningBalanceText');
-    const prevEndingBalanceText = document.getElementById('prevEndingBalanceText');
-    const previousBalanceModal = document.getElementById('previousBalanceModal');
-    const previousBalanceModalMonth = document.getElementById('previousBalanceModalMonth');
-    const previousBalanceMonthInput = document.getElementById('previousBalanceMonthInput');
-    const previousOpeningInput = document.getElementById('previousOpeningInput');
-    const previousEndingBalanceDisplay = document.getElementById('previousEndingBalanceDisplay');
-    const previousBalanceForm = document.getElementById('previousBalanceForm');
-    const closePreviousBalanceBtn = document.getElementById('closePreviousBalanceBtn');
-    const cancelPreviousBalanceBtn = document.getElementById('cancelPreviousBalanceBtn');
-
     function formatMonthKey(date) {
         const y = date.getFullYear();
         const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -435,125 +320,14 @@
         return String(monthKey || '').slice(0, 7);
     }
 
-    async function fetchMonthlyBalance(monthKey) {
-        if (!monthKey) return null;
-
-        try {
-            const url = new URL(monthlyBalanceShowRoute, window.location.origin);
-            url.searchParams.set('month_key', normalizeMonthKey(monthKey));
-
-            const response = await fetch(url.toString(), {
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (!response.ok) {
-                return null;
-            }
-
-            const payload = await response.json();
-            return payload?.balance || null;
-        } catch (error) {
+    function monthKeyToDate(monthKey) {
+        const normalized = normalizeMonthKey(monthKey);
+        const match = normalized.match(/^(\d{4})-(\d{2})$/);
+        if (!match) {
             return null;
         }
-    }
 
-    function updatePrevBalanceDisplay(monthKey) {
-        if (!prevOpeningBalanceText || !prevEndingBalanceText) return;
-        fetchMonthlyBalance(monthKey).then((balance) => {
-            prevOpeningBalanceText.textContent = `Opening Balance: ${formatCurrency(balance?.opening_balance || 0)}`;
-            prevEndingBalanceText.textContent = `Ending Balance: ${formatCurrency(balance?.remaining_balance || 0)}`;
-        });
-    }
-
-    async function openPreviousBalanceModal() {
-        if (!previousBalanceModal || !previousBalanceMonthInput || !previousOpeningInput || !previousEndingBalanceDisplay || !previousBalanceModalMonth) return;
-        // default to the currently viewed month in liquidation tracking
-        const defaultDate = new Date(currentPeriodStart);
-        const monthVal = `${defaultDate.getFullYear()}-${String(defaultDate.getMonth() + 1).padStart(2, '0')}`;
-        previousBalanceMonthInput.value = monthVal;
-        previousBalanceModalMonth.textContent = formatMonthLabel(defaultDate);
-
-        const balance = await fetchMonthlyBalance(monthVal);
-        previousOpeningInput.value = balance?.exists ? balance.opening_balance : '';
-        previousEndingBalanceDisplay.textContent = formatCurrency(balance?.carryover_balance || 0);
-
-        previousBalanceModal.classList.remove('hidden');
-        previousBalanceModal.classList.add('flex');
-        setTimeout(() => feather.replace(), 10);
-    }
-
-    function closePreviousBalanceModal() {
-        if (!previousBalanceModal) return;
-        previousBalanceModal.classList.add('hidden');
-        previousBalanceModal.classList.remove('flex');
-    }
-
-    if (openPrevBalanceBtn) {
-        openPrevBalanceBtn.addEventListener('click', openPreviousBalanceModal);
-    }
-
-    if (closePreviousBalanceBtn) {
-        closePreviousBalanceBtn.addEventListener('click', closePreviousBalanceModal);
-    }
-
-    if (cancelPreviousBalanceBtn) {
-        cancelPreviousBalanceBtn.addEventListener('click', closePreviousBalanceModal);
-    }
-
-    if (previousBalanceMonthInput) {
-        previousBalanceMonthInput.addEventListener('change', async function () {
-            const v = this.value;
-            if (!v) return;
-            const [y, m] = v.split('-').map(Number);
-            const d = new Date(y, m - 1, 1);
-            previousBalanceModalMonth.textContent = formatMonthLabel(d);
-            const balance = await fetchMonthlyBalance(v);
-            previousOpeningInput.value = balance?.exists ? balance.opening_balance : '';
-            previousEndingBalanceDisplay.textContent = formatCurrency(balance?.carryover_balance || 0);
-        });
-    }
-
-    if (previousBalanceForm) {
-        previousBalanceForm.addEventListener('submit', async function (event) {
-            event.preventDefault();
-            const monthKey = previousBalanceMonthInput.value;
-            const opening = Number(previousOpeningInput.value || 0);
-            if (!monthKey) return showAccountingToast('Please select a month.', 'error');
-
-            try {
-                const response = await fetch(monthlyBalanceStoreRoute, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': @json(csrf_token()),
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: JSON.stringify({
-                        month_key: monthKey,
-                        opening_balance: opening,
-                    }),
-                });
-
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(payload?.message || 'Failed to save previous month balance.');
-                }
-
-                const currentMonthKey = formatMonthKey(currentPeriodStart);
-                if (monthKey === currentMonthKey) {
-                    updatePrevBalanceDisplay(currentMonthKey);
-                }
-
-                closePreviousBalanceModal();
-                showAccountingToast(payload?.message || 'Previous month balance saved.', 'success');
-            } catch (error) {
-                showAccountingToast(error.message || 'Failed to save previous month balance.', 'error');
-            }
-        });
+        return new Date(Number(match[1]), Number(match[2]) - 1, 1);
     }
 
     function parseDate(value) {
@@ -707,29 +481,7 @@
     }
 
     function getVisibleRecords() {
-        return liquidationRecords.filter((record) => isWithinRange(record.record_date, currentPeriodStart, currentPeriodEnd));
-    }
-
-    function getSummaryMetrics(records) {
-        return records.reduce((totals, record) => {
-            totals.liquidations += 1;
-            totals.sent += Number(record.balance_sent || 0);
-            totals.expenses += Number(record.total_expenses || 0);
-            totals.remaining += Number(record.remaining_balance || 0);
-            return totals;
-        }, { liquidations: 0, sent: 0, expenses: 0, remaining: 0 });
-    }
-
-    function renderSummaryCards(records) {
-        if (!summaryLiquidationCount || !summaryAmountSent || !summaryTotalExpenses || !summaryRemainingBalance) {
-            return;
-        }
-
-        const totals = getSummaryMetrics(records);
-        summaryLiquidationCount.textContent = totals.liquidations.toLocaleString('en-US');
-        summaryAmountSent.textContent = formatCurrency(totals.sent);
-        summaryTotalExpenses.textContent = formatCurrency(totals.expenses);
-        summaryRemainingBalance.textContent = formatCurrency(totals.remaining);
+        return liquidationRecords.filter((record) => !record.queue_record && isWithinRange(record.record_date, currentPeriodStart, currentPeriodEnd));
     }
 
     function normalizeLiquidationStatus(status) {
@@ -796,7 +548,12 @@
         }
 
         const submittedRecords = getSubmittedLiquidations();
-        liquidationQueueLabel.textContent = `Liquidation Queue${submittedRecords.length ? ': ' + submittedRecords.length : ''}`;
+        liquidationQueueLabel.textContent = 'Liquidation Queue';
+
+        if (liquidationQueueBadge) {
+            liquidationQueueBadge.textContent = submittedRecords.length.toLocaleString('en-US');
+            liquidationQueueBadge.classList.toggle('hidden', submittedRecords.length === 0);
+        }
 
         if (submittedRecords.length === 0) {
             liquidationQueueList.innerHTML = '';
@@ -943,17 +700,13 @@
                     role_name: record.role_name || 'Employee',
                     total_liquidations: 0,
                     total_amount: 0,
-                    total_expenses: 0,
-                    remaining_balance: 0,
                     search_text: `${record.name} ${record.employee_id} ${record.role_name || 'Employee'}`.toLowerCase(),
                 });
             }
 
             const summary = grouped.get(key);
             summary.total_liquidations += 1;
-            summary.total_amount += Number(record.balance_sent || 0);
-            summary.total_expenses += Number(record.total_expenses || 0);
-            summary.remaining_balance += Number(record.remaining_balance || 0);
+            summary.total_amount += Number(record.liquidation_amount ?? record.balance_sent ?? 0);
         });
 
         return Array.from(grouped.values());
@@ -996,11 +749,12 @@
         });
 
         employeeTableBody.innerHTML = summaries.map((summary) => {
-            const employeeUrl = employeeRouteTemplate.replace('__EMPLOYEE__', summary.user_id);
+            const employeeUrl = new URL(employeeRouteTemplate.replace('__EMPLOYEE__', summary.user_id), window.location.origin);
+            employeeUrl.searchParams.set('month', formatMonthKey(currentPeriodStart));
             return `
                 <tr class="border-b border-gray-100 transition hover:bg-gray-50/80">
                     <td class="py-4 px-3">
-                        <a href="${employeeUrl}" class="font-semibold text-slate-900 transition hover:text-teal-700">${summary.name}</a>
+                        <a href="${employeeUrl.toString()}" class="font-semibold text-slate-900 transition hover:text-teal-700">${summary.name}</a>
                     </td>
                     <td class="py-4 px-3 text-sm text-gray-600">${summary.employee_id || '-'}</td>
                     <td class="py-4 px-3 text-sm text-gray-600">${summary.role_name}</td>
@@ -1101,30 +855,32 @@
         }
     }
 
-    function updatePeriodLabels() {
-        if (periodLabel) {
-            periodLabel.textContent = formatPeriodLabel(currentPeriodStart, currentPeriodEnd, currentViewMode);
+    function syncSelectedMonthNavigation() {
+        const monthKey = formatMonthKey(currentPeriodStart);
+
+        if (monthFilter && monthFilter.value !== monthKey) {
+            monthFilter.value = monthKey;
         }
 
-        if (periodSubLabel) {
-            periodSubLabel.textContent = currentViewMode === 'month' ? 'Month view' : 'Week view';
+        if (window.history?.replaceState) {
+            const pageUrl = new URL(window.location.href);
+            pageUrl.searchParams.set('month', monthKey);
+            window.history.replaceState({}, '', pageUrl.toString());
+        }
+
+        if (backToEmployeeListLink) {
+            const backUrl = new URL(liquidationIndexRoute, window.location.origin);
+            backUrl.searchParams.set('month', monthKey);
+            backToEmployeeListLink.href = backUrl.toString();
         }
     }
 
     function renderLiquidationDashboard() {
         const visibleRecords = getVisibleRecords();
         updatePeriodToggles();
-        updatePeriodLabels();
+        syncSelectedMonthNavigation();
         renderLiquidationQueue();
-        renderSummaryCards(visibleRecords);
         renderWeekBreakdown(visibleRecords);
-
-        // update previous month balances display for current period month
-        try {
-            updatePrevBalanceDisplay(formatMonthKey(currentPeriodStart));
-        } catch (e) {
-            // ignore if elements not present
-        }
 
         if (isDetailView) {
             renderRecordRows(visibleRecords);
@@ -1156,6 +912,15 @@
 
     if (monthToggleBtn) {
         monthToggleBtn.addEventListener('click', () => setMonthView(currentPeriodStart));
+    }
+
+    if (monthFilter) {
+        monthFilter.addEventListener('change', () => {
+            const selectedMonth = monthKeyToDate(monthFilter.value);
+            if (selectedMonth) {
+                setMonthView(selectedMonth);
+            }
+        });
     }
 
     if (liquidationQueueBtn && liquidationQueuePanel) {
@@ -1237,7 +1002,7 @@
         }
     });
 
-    setMonthView(new Date());
+    setMonthView(monthKeyToDate(monthFilter?.value || initialMonthKey) || new Date());
     fetchSubmittedLiquidationQueue();
     liquidationQueuePollingInterval = setInterval(fetchSubmittedLiquidationQueue, 5000);
     window.addEventListener('beforeunload', () => {

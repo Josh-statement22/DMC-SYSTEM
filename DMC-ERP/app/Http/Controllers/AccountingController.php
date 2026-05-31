@@ -18,23 +18,19 @@ class AccountingController extends Controller
     {
         $this->authorizeAccounting();
 
-        $year = (int) $request->query('year', now()->year);
+        $year = 2026;
         $month = (int) $request->query('month', now()->month);
 
-        if ($year < 2000 || $year > 2100) {
-            $year = (int) now()->year;
-        }
-
         if ($month < 1 || $month > 12) {
-            $month = (int) now()->month;
+            $month = now()->year === 2026 ? (int) now()->month : 1;
         }
 
         $monthDate = Carbon::createFromDate($year, $month, 1)->startOfMonth();
         $balance = AccountingMonthlyBalance::forMonth($monthDate);
 
-        $months = collect(range(-12, 3))
-            ->map(function (int $offset) use ($monthDate) {
-                $date = $monthDate->copy()->addMonths($offset);
+        $months = collect(range(1, 12))
+            ->map(function (int $month) {
+                $date = Carbon::createFromDate(2026, $month, 1);
 
                 return [
                     'value' => $date->format('Y-m'),
@@ -102,6 +98,7 @@ class AccountingController extends Controller
 
         if ($request->input('record_source') === 'breakdown') {
             $validated = $request->validate([
+                'cash_advance_request_id' => 'required|integer|exists:cash_advance_requests,id',
                 'expense_date' => 'required|date',
                 'employee_id' => 'required|integer|exists:users,id',
                 'category_id' => 'required|integer|exists:categories,id',
@@ -112,6 +109,24 @@ class AccountingController extends Controller
 
             $expenseDate = Carbon::parse($validated['expense_date']);
             $cutoffPeriod = $expenseDate->format('F Y');
+            $transaction = DB::table('cash_advance_requests')
+                ->where('id', $validated['cash_advance_request_id'])
+                ->first();
+
+            abort_unless($transaction, 404);
+
+            $transactionAmount = round((float) ($transaction->approved_amount ?? $transaction->requested_amount ?? 0), 2);
+            $existingBreakdownAmount = (float) DB::table('liquidation_expenses')
+                ->where('cash_advance_request_id', $transaction->id)
+                ->sum('amount');
+            $newBreakdownTotal = round($existingBreakdownAmount + (float) $validated['amount'], 2);
+
+            if ($newBreakdownTotal > $transactionAmount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Breakdown total cannot exceed the parent transaction amount.',
+                ], 422);
+            }
 
             $liquidation = DB::table('liquidations')
                 ->where('user_id', $validated['employee_id'])
@@ -135,6 +150,7 @@ class AccountingController extends Controller
 
             $expenseId = DB::table('liquidation_expenses')->insertGetId([
                 'liquidation_id' => $liquidation->id,
+                'cash_advance_request_id' => $validated['cash_advance_request_id'],
                 'expense_date' => $validated['expense_date'],
                 'category_id' => $validated['category_id'],
                 'transaction_details' => $validated['transaction_details'] ?? null,
@@ -166,6 +182,11 @@ class AccountingController extends Controller
                 'success' => true,
                 'message' => 'Breakdown saved successfully.',
                 'expense' => $expense,
+                'allocation' => [
+                    'parent_amount' => $transactionAmount,
+                    'allocated_amount' => $newBreakdownTotal,
+                    'remaining_amount' => round($transactionAmount - $newBreakdownTotal, 2),
+                ],
             ], 201);
         }
 
@@ -374,21 +395,33 @@ class AccountingController extends Controller
         $normalize = function ($value): string {
             return strtolower(preg_replace('/\s+/', ' ', trim((string) $value)));
         };
+        $normalizeLookup = function ($value) use ($normalize): string {
+            return preg_replace('/[^a-z0-9]/', '', $normalize($value));
+        };
 
         $categories = DB::table('categories')
             ->select('id', 'particulars_category')
             ->get()
-            ->mapWithKeys(fn ($category) => [$normalize($category->particulars_category) => $category]);
+            ->flatMap(function ($category) use ($normalize, $normalizeLookup) {
+                return [
+                    $normalize($category->particulars_category) => $category,
+                    $normalizeLookup($category->particulars_category) => $category,
+                ];
+            });
 
         $employees = DB::table('users')
             ->where('role_id', 2)
             ->select('id', 'name', 'employee_id')
             ->get()
-            ->flatMap(function ($employee) use ($normalize) {
-                $keys = [$normalize($employee->name) => $employee];
+            ->flatMap(function ($employee) use ($normalize, $normalizeLookup) {
+                $keys = [
+                    $normalize($employee->name) => $employee,
+                    $normalizeLookup($employee->name) => $employee,
+                ];
 
                 if ($employee->employee_id) {
                     $keys[$normalize($employee->employee_id)] = $employee;
+                    $keys[$normalizeLookup($employee->employee_id)] = $employee;
                 }
 
                 return $keys;
@@ -425,31 +458,46 @@ class AccountingController extends Controller
                 $errors[] = 'Date is required or invalid.';
             }
 
-            $employeeKey = $normalize($row['employee'] ?? '');
-            $employee = $employeeKey !== '' ? ($employees[$employeeKey] ?? null) : null;
+            $employeeValue = $row['employee'] ?? '';
+            $employeeKey = $normalize($employeeValue);
+            $employeeLookupKey = $normalizeLookup($employeeValue);
+            $employee = $employeeKey !== ''
+                ? ($employees[$employeeKey] ?? $employees[$employeeLookupKey] ?? null)
+                : null;
             if (! $employee) {
                 $errors[] = 'Employee must match an existing employee name or employee ID.';
             }
 
             $typeValue = $normalize($row['type'] ?? '');
-            $transactionType = match ($typeValue) {
-                'debit', 'dr', 'cash advance', 'advance' => 'debit',
-                'credit', 'cr', 'return', 'refund', 'liquidation' => 'credit',
-                default => null,
-            };
+            $transactionType = null;
+            if (str_contains($typeValue, 'credit')
+                || str_contains($typeValue, 'cash in')
+                || str_contains($typeValue, 'received')
+                || str_contains($typeValue, 'return')
+                || str_contains($typeValue, 'refund')
+                || in_array($typeValue, ['cr', 'c'], true)) {
+                $transactionType = 'credit';
+            } elseif (str_contains($typeValue, 'debit')
+                || str_contains($typeValue, 'cash out')
+                || str_contains($typeValue, 'cash advance')
+                || str_contains($typeValue, 'advance')
+                || in_array($typeValue, ['dr', 'd'], true)) {
+                $transactionType = 'debit';
+            }
 
             if (! $transactionType) {
-                $errors[] = 'Type must be Debit or Credit.';
+                $errors[] = 'Type must be Debit/Cash Out or Credit/Cash In.';
             }
 
             $purpose = trim((string) ($row['purpose'] ?? ''));
-            if ($purpose === '') {
-                $errors[] = 'Purpose is required.';
-            }
 
-            $categoryKey = $normalize($row['category'] ?? '');
-            $category = $categoryKey !== '' ? ($categories[$categoryKey] ?? null) : null;
-            if (! $category) {
+            $categoryValue = $row['category'] ?? '';
+            $categoryKey = $normalize($categoryValue);
+            $categoryLookupKey = $normalizeLookup($categoryValue);
+            $category = $categoryKey !== ''
+                ? ($categories[$categoryKey] ?? $categories[$categoryLookupKey] ?? null)
+                : null;
+            if ($categoryKey !== '' && ! $category) {
                 $errors[] = 'Category must match an existing Breakdown Expenses category.';
             }
 
@@ -482,8 +530,8 @@ class AccountingController extends Controller
                     'requester_id' => $employee->id,
                     'requested_amount' => $amount,
                     'approved_amount' => $amount,
-                    'purpose' => $purpose,
-                    'category' => $category->particulars_category,
+                    'purpose' => $purpose !== '' ? $purpose : null,
+                    'category' => $category?->particulars_category,
                     'request_date' => $expenseDate->toDateString(),
                     'date_needed' => $expenseDate->toDateString(),
                     'status' => 'approved',
@@ -573,7 +621,13 @@ class AccountingController extends Controller
         if ($liquidation) {
             $breakdowns = DB::table('liquidation_expenses')
                 ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-                ->where('liquidation_expenses.liquidation_id', $liquidation->id)
+                ->where(function ($query) use ($debit, $liquidation) {
+                    $query->where('liquidation_expenses.cash_advance_request_id', $debit->id)
+                        ->orWhere(function ($fallbackQuery) use ($liquidation) {
+                            $fallbackQuery->whereNull('liquidation_expenses.cash_advance_request_id')
+                                ->where('liquidation_expenses.liquidation_id', $liquidation->id);
+                        });
+                })
                 ->select(
                     'liquidation_expenses.id',
                     'liquidation_expenses.expense_date',

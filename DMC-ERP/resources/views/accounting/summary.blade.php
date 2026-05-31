@@ -31,15 +31,11 @@
 					<div class="w-full sm:max-w-xs">
 						<label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
 						<select id="summaryMonthFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-							@php
-								for ($i = 0; $i < 12; $i++) {
-									$date = now()->subMonths($i);
-									$value = $date->format('Y-m');
-									$display = $date->format('F Y');
-									$selected = $i === 0 ? ' selected' : '';
-									echo "<option value=\"$value\"$selected>$display</option>";
-								}
-							@endphp
+							@foreach($summaryMonths ?? [] as $summaryMonth)
+								<option value="{{ $summaryMonth['value'] }}" {{ $summaryMonth['value'] === ($defaultSummaryMonth ?? '2026-01') ? 'selected' : '' }}>
+									{{ $summaryMonth['label'] }}
+								</option>
+							@endforeach
 						</select>
 					</div>
 
@@ -155,7 +151,7 @@
 						<p id="summaryPeriodLabel" class="text-xs text-emerald-100 mt-2">Current Period</p>
 					</div>
 
-					<div class="space-y-4">
+					<div id="periodSummaryCards" class="space-y-4">
 						<div class="rounded-2xl bg-emerald-500/15 border border-emerald-300/30 p-4">
 							<p class="text-xs text-emerald-200 uppercase tracking-wide font-semibold">Opening Balance</p>
 							<p id="displayOpeningBalance" class="text-2xl font-bold text-emerald-100 mt-2">PHP 0.00</p>
@@ -174,6 +170,18 @@
 						<div class="rounded-2xl bg-rose-500/15 border border-rose-300/30 p-4">
 							<p class="text-xs text-rose-200 uppercase tracking-wide font-semibold">Total Credits</p>
 							<p id="summaryTotalCredits" class="text-2xl font-bold text-rose-100 mt-2">PHP 0.00</p>
+						</div>
+					</div>
+
+					<div id="categorySummaryCards" class="hidden space-y-4">
+						<div class="rounded-2xl bg-cyan-500/15 border border-cyan-300/30 p-4">
+							<p class="text-xs text-cyan-200 uppercase tracking-wide font-semibold">Category</p>
+							<p id="summarySelectedCategory" class="text-xl font-bold text-cyan-100 mt-2 break-words">All Categories</p>
+						</div>
+
+						<div class="rounded-2xl bg-emerald-500/15 border border-emerald-300/30 p-4">
+							<p class="text-xs text-emerald-200 uppercase tracking-wide font-semibold">Total Category Amount</p>
+							<p id="summaryTotalCategoryAmount" class="text-2xl font-bold text-emerald-100 mt-2">PHP 0.00</p>
 						</div>
 					</div>
 				</div>
@@ -199,6 +207,12 @@
 
 	function formatCurrencyValue(amount) {
 		return 'PHP ' + Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+
+	function getSelectedCategoryLabel() {
+		const select = document.getElementById('summaryCategoryFilter');
+
+		return select?.selectedOptions[0]?.textContent || 'All Categories';
 	}
 
 	function getAppliedFilters() {
@@ -333,9 +347,11 @@
 			.replace(/'/g, '&#39;');
 	}
 
-	function buildPrintHtml(expenses, summary) {
+	function buildPrintHtml(expenses, summary, balance) {
 		const periodLabel = document.getElementById('summaryPeriodLabel').textContent || 'Current Period';
-		const categoryLabel = document.getElementById('summaryCategoryFilter').selectedOptions[0]?.textContent || 'All Categories';
+		const categoryActive = Boolean(appliedCategoryId);
+		const categoryLabel = getSelectedCategoryLabel();
+		const totalCategoryAmount = Number(summary.total_category_amount ?? 0);
 		const printedAt = new Date().toLocaleString();
 		const rows = expenses.length
 			? expenses.map(expense => `
@@ -344,12 +360,23 @@
 					<td>${escapeHtml(expense.employee_name || '-')}</td>
 					<td>${escapeHtml(expense.category_name || '-')}</td>
 					<td>${escapeHtml(expense.particular_name || '-')}</td>
-					<td>${escapeHtml(formatTransactionType(expense.transaction_type) || '-')}</td>
 					<td class="text-right">${Number(expense.credit || 0) > 0 ? escapeHtml(formatCurrencyValue(expense.credit)) : '-'}</td>
 					<td class="text-right">${Number(expense.debit || 0) > 0 ? escapeHtml(formatCurrencyValue(expense.debit)) : '-'}</td>
 				</tr>
 			`).join('')
-			: '<tr><td colspan="7" class="empty-state">No data available</td></tr>';
+			: '<tr><td colspan="6" class="empty-state">No data available</td></tr>';
+		const summaryRows = categoryActive
+			? `
+				<div class="summary-item">Selected Category: <span class="summary-value">${escapeHtml(categoryLabel)}</span></div>
+				<div class="summary-item">Total Category Amount: <span class="summary-value">${formatCurrencyValue(totalCategoryAmount)}</span></div>
+			`
+			: `
+				<div class="summary-item">Total Records: <span class="summary-value">${summary.total_count ?? 0}</span></div>
+				<div class="summary-item">Opening Balance: <span class="summary-value">${formatCurrencyValue(balance?.opening_balance ?? 0)}</span></div>
+				<div class="summary-item">Ending Balance: <span class="summary-value">${formatCurrencyValue(balance?.remaining_balance ?? balance?.ending_balance ?? 0)}</span></div>
+				<div class="summary-item">Total Credits: <span class="summary-value">${formatCurrencyValue(summary.total_credits ?? 0)}</span></div>
+				<div class="summary-item">Total Debits: <span class="summary-value">${formatCurrencyValue(summary.total_debits ?? 0)}</span></div>
+			`;
 
 		return `<!DOCTYPE html>
 <html>
@@ -365,10 +392,15 @@
 		table { width: 100%; border-collapse: collapse; }
 		th, td { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 12px; vertical-align: top; }
 		th { background: #f3f4f6; color: #1f2937; font-weight: 700; text-align: left; }
+		.col-date { width: 12%; }
+		.col-employee { width: 20%; }
+		.col-category { width: 18%; }
+		.col-particulars { width: 26%; }
+		.col-amount { width: 12%; }
 		.text-right { text-align: right; }
 		.empty-state { text-align: center; padding: 16px 10px; color: #6b7280; }
-		.summary { margin-top: 18px; padding-top: 14px; border-top: 2px solid #d1d5db; display: flex; justify-content: space-between; gap: 28px; font-size: 14px; color: #111827; }
-		.summary-item { flex: 1; font-weight: 700; white-space: nowrap; }
+		.summary { margin-top: 18px; padding-top: 14px; border-top: 2px solid #d1d5db; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px 28px; font-size: 14px; color: #111827; }
+		.summary-item { min-width: 190px; flex: 1; font-weight: 700; white-space: nowrap; }
 		.summary-value { font-weight: 800; }
 	</style>
 </head>
@@ -387,22 +419,17 @@
 	<table>
 		<thead>
 			<tr>
-				<th>Date</th>
-				<th>Employee</th>
-				<th>Category</th>
-				<th>Particulars</th>
-				<th>Type</th>
-				<th class="text-right">Credit</th>
-				<th class="text-right">Debit</th>
+				<th class="col-date">Date</th>
+				<th class="col-employee">Employee</th>
+				<th class="col-category">Category</th>
+				<th class="col-particulars">Particulars</th>
+				<th class="col-amount text-right">Credit</th>
+				<th class="col-amount text-right">Debit</th>
 			</tr>
 		</thead>
 		<tbody>${rows}</tbody>
 	</table>
-	<div class="summary">
-		<div class="summary-item">Total Records: <span class="summary-value">${summary.total_count ?? 0}</span></div>
-		<div class="summary-item">Total Credits: <span class="summary-value">${formatCurrencyValue(summary.total_credits ?? 0)}</span></div>
-		<div class="summary-item">Total Debits: <span class="summary-value">${formatCurrencyValue(summary.total_debits ?? 0)}</span></div>
-	</div>
+	<div class="summary">${summaryRows}</div>
 </body>
 </html>`;
 	}
@@ -420,7 +447,7 @@
 		try {
 			const data = await fetchAllExpenses();
 			printWindow.document.open();
-			printWindow.document.write(buildPrintHtml(data.expenses || [], data.summary || {}));
+			printWindow.document.write(buildPrintHtml(data.expenses || [], data.summary || {}, data.balance || {}));
 			printWindow.document.close();
 			setTimeout(() => {
 				printWindow.focus();
@@ -443,25 +470,38 @@
 
 		tbody.innerHTML = expenses.map(expense => `
 			<tr class="border-b border-gray-100 hover:bg-gray-50 transition">
-				<td class="py-4 px-4 text-sm text-gray-700">${formatDate(expense.expense_date)}</td>
-				<td class="py-4 px-4 text-sm text-gray-700">${expense.employee_name}</td>
-				<td class="py-4 px-4 text-sm text-gray-700">${expense.category_name || '-'}</td>
-				<td class="py-4 px-4 text-sm text-gray-700">${expense.particular_name || '-'}</td>
+				<td class="py-4 px-4 text-sm text-gray-700">${escapeHtml(formatDate(expense.expense_date))}</td>
+				<td class="py-4 px-4 text-sm text-gray-700">${escapeHtml(expense.employee_name || '-')}</td>
+				<td class="py-4 px-4 text-sm text-gray-700">${escapeHtml(expense.category_name || '-')}</td>
+				<td class="py-4 px-4 text-sm text-gray-700">${escapeHtml(expense.particular_name || '-')}</td>
 				<td class="py-4 px-4">
 					<span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${getTransactionTypeBadgeClass(expense.transaction_type)}">
-						${formatTransactionType(expense.transaction_type)}
+						${escapeHtml(formatTransactionType(expense.transaction_type))}
 					</span>
 				</td>
-				<td class="py-4 px-4 text-sm font-semibold text-right text-rose-600">${expense.credit > 0 ? 'PHP ' + parseFloat(expense.credit).toFixed(2) : '-'}</td>
-				<td class="py-4 px-4 text-sm font-semibold text-right text-emerald-600">${expense.debit > 0 ? 'PHP ' + parseFloat(expense.debit).toFixed(2) : '-'}</td>
+				<td class="py-4 px-4 text-sm font-semibold text-right text-rose-600">${Number(expense.credit || 0) > 0 ? formatCurrencyValue(expense.credit) : '-'}</td>
+				<td class="py-4 px-4 text-sm font-semibold text-right text-emerald-600">${Number(expense.debit || 0) > 0 ? formatCurrencyValue(expense.debit) : '-'}</td>
 			</tr>
 		`).join('');
 	}
 
 	function updateSummaryCards(data) {
+		const categoryActive = Boolean(appliedCategoryId);
+		const totalCategoryAmount = Number(data.summary.total_category_amount ?? 0);
+
 		document.getElementById('summaryExpenseCount').textContent = data.summary.total_count;
-		document.getElementById('summaryTotalDebits').textContent = 'PHP ' + parseFloat(data.summary.total_debits).toFixed(2);
-		document.getElementById('summaryTotalCredits').textContent = 'PHP ' + parseFloat(data.summary.total_credits).toFixed(2);
+		document.getElementById('summaryTotalDebits').textContent = formatCurrencyValue(data.summary.total_debits);
+		document.getElementById('summaryTotalCredits').textContent = formatCurrencyValue(data.summary.total_credits);
+		document.getElementById('summarySelectedCategory').textContent = data.summary.selected_category_name || getSelectedCategoryLabel();
+		document.getElementById('summaryTotalCategoryAmount').textContent = formatCurrencyValue(totalCategoryAmount);
+		document.getElementById('periodSummaryCards').classList.toggle('hidden', categoryActive);
+		document.getElementById('categorySummaryCards').classList.toggle('hidden', !categoryActive);
+
+		if (data.balance) {
+			openingBalance = Number(data.balance.opening_balance || 0);
+			endingBalance = Number(data.balance.remaining_balance ?? data.balance.ending_balance ?? 0);
+			updateBalanceDisplay();
+		}
 	}
 
 	function updatePagination(pagination) {

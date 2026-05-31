@@ -34,7 +34,7 @@
 
             <div class="w-full md:w-auto">
                 <input id="liquidateExcelInput" type="file" class="hidden" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-                <button id="liquidateImportExcelBtn" type="button" class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 md:w-auto">
+                <button id="liquidateImportExcelBtn" type="button" class="inline-flex w-full min-w-[170px] items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 md:w-[170px]">
                     <i data-feather="upload" class="w-4 h-4"></i>
                     <span>Import Excel</span>
                 </button>
@@ -47,15 +47,14 @@
             <p class="text-sm font-semibold text-emerald-700">Opening Balance</p>
             <p class="mt-2 text-3xl font-bold text-emerald-900" id="openingBalance">PHP {{ number_format($monthlyBalance->opening_balance ?? 0, 2) }}</p>
         </div>
-        @if(($monthlyBalance->opening_balance ?? 0) == 0)
         <button 
             type="button"
             id="setOpeningBalanceBtn"
-            class="px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition"
+            class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition"
         >
-            Set Opening Balance
+            <i data-feather="edit-3" class="w-4 h-4"></i>
+            {{ ($monthlyBalance->opening_balance ?? 0) == 0 ? 'Set Opening Balance' : 'Edit Opening Balance' }}
         </button>
-        @endif
     </div>
 
     <!-- Debit and Credit -->
@@ -196,7 +195,7 @@
             <div class="bg-gradient-to-r from-emerald-600 to-teal-600 p-5">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h3 class="text-xl font-bold text-white">Set Opening Balance</h3>
+                        <h3 class="text-xl font-bold text-white">Opening Balance</h3>
                         <p id="openingBalanceModalMonth" class="text-emerald-100 text-sm mt-1"></p>
                     </div>
                     <button id="closeOpeningBalanceBtn" type="button" class="text-white hover:text-emerald-100 transition">
@@ -440,6 +439,7 @@
             <form id="breakdownForm" class="p-6 space-y-6">
                 @csrf
                 <input type="hidden" id="breakdownRecordSource" name="record_source" value="breakdown">
+                <input type="hidden" id="breakdownCashAdvanceRequestId" name="cash_advance_request_id">
                 <input type="hidden" id="breakdownEmployeeId" name="employee_id">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -580,6 +580,7 @@
     const deleteExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const updateExpenseCategoryBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const viewBreakdownBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    let openingBalanceValue = @json((float) ($monthlyBalance->opening_balance ?? 0));
     // No external cash-advance selection — form records manual liquidation entries
     const breakdownModal = document.getElementById('breakdownModal');
     const closeBreakdownBtn = document.getElementById('closeBreakdownBtn');
@@ -641,6 +642,13 @@
             clearTimeout(successModalTimer);
             successModalTimer = null;
         }
+    }
+
+    function formatCurrencyValue(amount) {
+        return 'PHP ' + Number(amount || 0).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
     }
 
     function escapeHtml(value) {
@@ -741,6 +749,28 @@
         return Number.isNaN(parsedDate.getTime()) ? raw : formatDateValue(parsedDate);
     }
 
+    function formatImportAmount(value) {
+        if (typeof value === 'number') {
+            return String(value);
+        }
+
+        const raw = String(value ?? '').trim();
+        if (!raw) {
+            return '';
+        }
+
+        const isParenthesizedNegative = /^\(.*\)$/.test(raw);
+        const normalized = raw
+            .replace(/[(),]/g, '')
+            .replace(/[^\d.-]/g, '');
+
+        if (!normalized) {
+            return raw;
+        }
+
+        return isParenthesizedNegative ? `-${normalized}` : normalized;
+    }
+
     function parseExcelRows(workbook) {
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
@@ -762,7 +792,7 @@
         };
 
         const missingColumns = Object.entries(columns)
-            .filter(([key, index]) => key !== 'remarks' && typeof index === 'undefined')
+            .filter(([key, index]) => !['remarks', 'category'].includes(key) && typeof index === 'undefined')
             .map(([key]) => key.charAt(0).toUpperCase() + key.slice(1));
 
         if (missingColumns.length > 0) {
@@ -776,9 +806,9 @@
                 employee: String(row[columns.employee] ?? '').trim(),
                 type: String(row[columns.type] ?? '').trim(),
                 purpose: String(row[columns.purpose] ?? '').trim(),
-                category: String(row[columns.category] ?? '').trim(),
+                category: typeof columns.category === 'undefined' ? '' : String(row[columns.category] ?? '').trim(),
                 remarks: typeof columns.remarks === 'undefined' ? '' : String(row[columns.remarks] ?? '').trim(),
-                amount: String(row[columns.amount] ?? '').trim(),
+                amount: formatImportAmount(row[columns.amount]),
             }))
             .filter(row => ['date', 'employee', 'type', 'purpose', 'category', 'remarks', 'amount']
                 .some(key => String(row[key] ?? '').trim() !== ''));
@@ -897,10 +927,14 @@
             document.getElementById('liquidateImportFailedCount').textContent = data.failed_rows || 0;
 
             if ((data.imported_rows || 0) > 0) {
-                setImportStatus('Import completed. Refreshing transactions...', (data.failed_rows || 0) > 0 ? 'amber' : 'emerald');
-                setTimeout(() => {
-                    location.reload();
-                }, 2500);
+                if ((data.failed_rows || 0) > 0) {
+                    setImportStatus('Import completed with failed rows. Review the rows marked Failed before refreshing.', 'amber');
+                } else {
+                    setImportStatus('Import completed. Refreshing transactions...', 'emerald');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2500);
+                }
             } else {
                 setImportStatus(data.message || 'No rows were imported.', 'rose');
             }
@@ -1159,6 +1193,7 @@
         button.addEventListener('click', function() {
             document.getElementById('breakdownName').value = this.dataset.name || '';
             document.getElementById('breakdownDate').value = this.dataset.date || '';
+            document.getElementById('breakdownCashAdvanceRequestId').value = this.dataset.id || '';
             document.getElementById('breakdownEmployeeId').value = this.dataset.employeeId || '';
             document.getElementById('breakdownAmount').value = '';
             document.getElementById('breakdownDetails').value = '';
@@ -1238,7 +1273,7 @@
                                'July', 'August', 'September', 'October', 'November', 'December'];
             const period = monthNames[currentMonth - 1] + ' ' + currentYear;
             document.getElementById('openingBalanceModalMonth').textContent = period;
-            document.getElementById('openingBalanceInput').value = '';
+            document.getElementById('openingBalanceInput').value = Number(openingBalanceValue || 0).toFixed(2);
             openingBalanceModal.classList.remove('hidden');
             openingBalanceModal.style.display = 'flex';
         });
@@ -1283,13 +1318,15 @@
                 alert('Opening balance saved successfully!');
                 openingBalanceModal.classList.add('hidden');
                 openingBalanceModal.style.display = 'none';
-                document.getElementById('openingBalance').textContent = 'PHP ' + openingBalance.toFixed(2);
-                
-                // Hide the button after saving
+                openingBalanceValue = openingBalance;
+                document.getElementById('openingBalance').textContent = formatCurrencyValue(openingBalance);
                 if (setOpeningBalanceBtn) {
-                    setOpeningBalanceBtn.style.display = 'none';
+                    setOpeningBalanceBtn.innerHTML = '<i data-feather="edit-3" class="w-4 h-4"></i> Edit Opening Balance';
+                    if (window.feather) {
+                        feather.replace();
+                    }
                 }
-                
+
                 updateBalances();
             } else {
                 alert('Error: ' + data.message);

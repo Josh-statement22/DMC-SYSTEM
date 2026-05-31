@@ -14,6 +14,7 @@ class LiquidationExpense extends Model
 
     protected $fillable = [
         'liquidation_id',
+        'cash_advance_request_id',
         'expense_date',
         'category_id',
         'transaction_details',
