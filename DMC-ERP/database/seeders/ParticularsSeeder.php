@@ -11,6 +11,7 @@ class ParticularsSeeder extends Seeder
     {
         $particulars = [
             'Accommodation',
+            'Adjustment',
             'Bank Charges',
             'Bid Docs Fee and other Documents',
             'Building Expense',
@@ -37,12 +38,16 @@ class ParticularsSeeder extends Seeder
             'Visa',
         ];
 
-        $rows = array_map(fn($name) => [
-            'particulars_category' => $name,
-            'created_at'           => now(),
-            'updated_at'           => now(),
-        ], $particulars);
+        foreach ($particulars as $name) {
+            if (DB::table('categories')->where('particulars_category', $name)->exists()) {
+                continue;
+            }
 
-        DB::table('categories')->insert($rows);
+            DB::table('categories')->insert([
+                'particulars_category' => $name,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 }

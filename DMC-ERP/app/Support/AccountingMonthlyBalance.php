@@ -134,4 +134,5 @@ class AccountingMonthlyBalance
             ])
             ->sum(DB::raw('COALESCE(approved_amount, requested_amount, 0)'));
     }
+
 }

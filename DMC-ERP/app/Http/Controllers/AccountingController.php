@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CashAdvanceMonthlyBalance;
+use App\Services\AccountingBudgetService;
 use App\Support\AccountingMonthlyBalance;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -10,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AccountingController extends Controller
@@ -102,69 +104,72 @@ class AccountingController extends Controller
                 'expense_date' => 'required|date',
                 'employee_id' => 'required|integer|exists:users,id',
                 'category_id' => 'required|integer|exists:categories,id',
-                'amount' => 'required|numeric|min:0.01',
+                'amount' => 'required|numeric',
                 'transaction_details' => 'nullable|string|max:255',
                 'description' => 'nullable|string',
             ]);
 
             $expenseDate = Carbon::parse($validated['expense_date']);
             $cutoffPeriod = $expenseDate->format('F Y');
-            $transaction = DB::table('cash_advance_requests')
-                ->where('id', $validated['cash_advance_request_id'])
-                ->first();
-
-            abort_unless($transaction, 404);
-
-            $transactionAmount = round((float) ($transaction->approved_amount ?? $transaction->requested_amount ?? 0), 2);
-            $existingBreakdownAmount = (float) DB::table('liquidation_expenses')
-                ->where('cash_advance_request_id', $transaction->id)
-                ->sum('amount');
-            $newBreakdownTotal = round($existingBreakdownAmount + (float) $validated['amount'], 2);
-
-            if ($newBreakdownTotal > $transactionAmount) {
+            $breakdownAmount = round((float) $validated['amount'], 2);
+            if ($breakdownAmount <= 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Breakdown total cannot exceed the parent transaction amount.',
+                    'message' => 'Breakdown amount must be greater than zero.',
                 ], 422);
             }
 
-            $liquidation = DB::table('liquidations')
-                ->where('user_id', $validated['employee_id'])
-                ->where('cutoff_period', $cutoffPeriod)
-                ->where('status', 'pending')
-                ->orderByDesc('id')
-                ->first();
+            $result = DB::transaction(function () use ($validated, $cutoffPeriod, $breakdownAmount, $expenseDate) {
+                $transaction = DB::table('cash_advance_requests')
+                    ->where('id', $validated['cash_advance_request_id'])
+                    ->lockForUpdate()
+                    ->first();
 
-            if (! $liquidation) {
-                $liquidationId = DB::table('liquidations')->insertGetId([
-                    'user_id' => $validated['employee_id'],
-                    'cutoff_period' => $cutoffPeriod,
-                    'amount' => 0,
-                    'status' => 'pending',
+                abort_unless($transaction, 404);
+
+                $liquidation = DB::table('liquidations')
+                    ->where('user_id', $validated['employee_id'])
+                    ->where('cutoff_period', $cutoffPeriod)
+                    ->where('status', 'pending')
+                    ->orderByDesc('id')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $liquidation) {
+                    $liquidationId = DB::table('liquidations')->insertGetId([
+                        'user_id' => $validated['employee_id'],
+                        'cutoff_period' => $cutoffPeriod,
+                        'amount' => 0,
+                        'status' => 'pending',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
+                }
+
+                $expenseId = DB::table('liquidation_expenses')->insertGetId([
+                    'liquidation_id' => $liquidation->id,
+                    'cash_advance_request_id' => $validated['cash_advance_request_id'],
+                    'expense_date' => $validated['expense_date'],
+                    'category_id' => $validated['category_id'],
+                    'transaction_details' => $validated['transaction_details'] ?? null,
+                    'description' => $validated['description'] ?? null,
+                    'amount' => $breakdownAmount,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
 
-                $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
-            }
+                $allocation = app(AccountingBudgetService::class)->recordUsage((int) $transaction->id);
 
-            $expenseId = DB::table('liquidation_expenses')->insertGetId([
-                'liquidation_id' => $liquidation->id,
-                'cash_advance_request_id' => $validated['cash_advance_request_id'],
-                'expense_date' => $validated['expense_date'],
-                'category_id' => $validated['category_id'],
-                'transaction_details' => $validated['transaction_details'] ?? null,
-                'description' => $validated['description'] ?? null,
-                'amount' => round((float) $validated['amount'], 2),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+                return compact('expenseId', 'allocation');
+            });
 
             $expense = DB::table('liquidation_expenses')
                 ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
                 ->leftJoin('users', 'liquidations.user_id', '=', 'users.id')
                 ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-                ->where('liquidation_expenses.id', $expenseId)
+                ->where('liquidation_expenses.id', $result['expenseId'])
                 ->select(
                     'liquidation_expenses.id',
                     'liquidation_expenses.expense_date',
@@ -180,13 +185,11 @@ class AccountingController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Breakdown saved successfully.',
+                'message' => ($result['allocation']['overspent_amount'] ?? 0) > 0
+                    ? 'Breakdown saved. Parent Budget is overspent; actual cash was not deducted again.'
+                    : 'Breakdown saved successfully.',
                 'expense' => $expense,
-                'allocation' => [
-                    'parent_amount' => $transactionAmount,
-                    'allocated_amount' => $newBreakdownTotal,
-                    'remaining_amount' => round($transactionAmount - $newBreakdownTotal, 2),
-                ],
+                'allocation' => $result['allocation'],
             ], 201);
         }
 
@@ -602,12 +605,15 @@ class AccountingController extends Controller
                 'cash_advance_requests.id',
                 'cash_advance_requests.requester_id as employee_id',
                 'cash_advance_requests.request_date as expense_date',
+                'cash_advance_requests.approved_amount',
+                'cash_advance_requests.requested_amount',
                 'users.name as employee_name'
             )
             ->first();
 
         abort_unless($debit, 404);
 
+        $transactionAmount = round((float) ($debit->approved_amount ?? $debit->requested_amount ?? 0), 2);
         $cutoffPeriod = Carbon::parse($debit->expense_date)->format('F Y');
 
         $liquidation = DB::table('liquidations')
@@ -641,12 +647,15 @@ class AccountingController extends Controller
                 ->get();
         }
 
+        $allocation = $this->breakdownAllocationForRequest((int) $debit->id);
+
         return response()->json([
             'success' => true,
             'debit' => [
                 'id' => $debit->id,
                 'employee_name' => $debit->employee_name,
                 'expense_date' => Carbon::parse($debit->expense_date)->format('Y-m-d'),
+                'parent_amount' => $transactionAmount,
             ],
             'breakdowns' => $breakdowns->map(function ($row) {
                 return [
@@ -658,7 +667,140 @@ class AccountingController extends Controller
                     'amount' => (float) $row->amount,
                 ];
             })->values(),
+            'allocation' => $allocation,
         ]);
+    }
+
+    public function updateBreakdown(Request $request, int $id): JsonResponse
+    {
+        $this->authorizeAccounting();
+
+        $validated = $request->validate([
+            'expense_date' => 'sometimes|required|date',
+            'category_id' => 'sometimes|required|integer|exists:categories,id',
+            'amount' => 'sometimes|required|numeric',
+            'transaction_details' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+        ]);
+
+        $updatedExpense = DB::transaction(function () use ($id, $validated) {
+            $expense = DB::table('liquidation_expenses')
+                ->where('id', $id)
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless($expense, 404);
+            abort_unless($expense->cash_advance_request_id, 422, 'Only breakdown rows linked to a parent transaction can be adjusted.');
+
+            $newCategoryId = (int) ($validated['category_id'] ?? $expense->category_id);
+
+            $oldAmount = round((float) $expense->amount, 2);
+            $newAmount = array_key_exists('amount', $validated)
+                ? round((float) $validated['amount'], 2)
+                : $oldAmount;
+
+            if ($newAmount <= 0) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Breakdown amount must be greater than zero.',
+                ]);
+            }
+
+            app(AccountingBudgetService::class)->replaceUsage(
+                (int) $expense->cash_advance_request_id,
+                (int) $expense->id,
+                $oldAmount,
+                $newAmount
+            );
+
+            DB::table('liquidation_expenses')
+                ->where('id', $id)
+                ->update([
+                    'expense_date' => $validated['expense_date'] ?? $expense->expense_date,
+                    'category_id' => $newCategoryId,
+                    'transaction_details' => $validated['transaction_details'] ?? $expense->transaction_details,
+                    'description' => $validated['description'] ?? $expense->description,
+                    'amount' => $newAmount,
+                    'updated_at' => now(),
+                ]);
+
+            $updatedExpense = DB::table('liquidation_expenses')
+                ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+                ->where('liquidation_expenses.id', $id)
+                ->select(
+                    'liquidation_expenses.id',
+                    'liquidation_expenses.cash_advance_request_id',
+                    'liquidation_expenses.expense_date',
+                    'liquidation_expenses.transaction_details',
+                    'liquidation_expenses.description',
+                    'liquidation_expenses.amount',
+                    DB::raw('categories.particulars_category as category_name')
+                )
+                ->first();
+
+            $allocation = app(AccountingBudgetService::class)
+                ->allocationForRequest((int) $expense->cash_advance_request_id);
+
+            return compact('updatedExpense', 'allocation');
+        });
+
+        AccountingMonthlyBalance::syncStoredMonth($updatedExpense['updatedExpense']->expense_date);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Breakdown updated successfully.',
+            'expense' => $updatedExpense['updatedExpense'],
+            'allocation' => $updatedExpense['allocation'],
+        ]);
+    }
+
+    public function deleteBreakdown(int $id): JsonResponse
+    {
+        $this->authorizeAccounting();
+
+        $deleted = DB::transaction(function () use ($id) {
+            $expense = DB::table('liquidation_expenses')
+                ->where('liquidation_expenses.id', $id)
+                ->select(
+                    'liquidation_expenses.id',
+                    'liquidation_expenses.cash_advance_request_id',
+                    'liquidation_expenses.expense_date',
+                    'liquidation_expenses.amount'
+                )
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless($expense, 404);
+
+            $allocation = $expense->cash_advance_request_id
+                ? app(AccountingBudgetService::class)->removeUsage(
+                    (int) $expense->cash_advance_request_id,
+                    (int) $expense->id,
+                    (float) $expense->amount
+                )
+                : null;
+
+            DB::table('liquidation_expenses')->where('id', $id)->delete();
+
+            if ($expense->cash_advance_request_id) {
+                $allocation = app(AccountingBudgetService::class)
+                    ->allocationForRequest((int) $expense->cash_advance_request_id);
+            }
+
+            return compact('expense', 'allocation');
+        });
+
+        AccountingMonthlyBalance::syncStoredMonth($deleted['expense']->expense_date);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Breakdown deleted successfully.',
+            'allocation' => $deleted['allocation'],
+        ]);
+    }
+
+    private function breakdownAllocationForRequest(int $cashAdvanceRequestId): array
+    {
+        return app(AccountingBudgetService::class)->allocationForRequest($cashAdvanceRequestId);
     }
 
     private function authorizeAccounting(): void

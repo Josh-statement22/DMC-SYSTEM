@@ -29,7 +29,7 @@
                        text-white font-semibold rounded-xl
                        hover:shadow-xl hover:scale-[1.02]
                        transition-all duration-300">
-            <i data-feather="wallet" class="w-5 h-5"></i>
+            <i data-feather="credit-card" class="w-5 h-5"></i>
             <span>Request Cash Advance</span>
         </button>
     </div>
@@ -40,7 +40,7 @@
         <div class="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-5 text-white shadow-2xl md:p-6">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex flex-wrap items-center gap-3">
-                    <button id="prevPeriodBtn" type="button" onclick="prevPeriod()" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
+                    <button id="prevPeriodBtn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
                         <i data-feather="arrow-left" class="w-4 h-4"></i>
                     </button>
 
@@ -50,7 +50,7 @@
                         <p id="liquidationPeriodSubLabel" class="mt-1 text-sm text-blue-100">Month view</p>
                     </div>
 
-                    <button id="nextPeriodBtn" type="button" onclick="nextPeriod()" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
+                    <button id="nextPeriodBtn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
                         <i data-feather="arrow-right" class="w-4 h-4"></i>
                     </button>
                 </div>
@@ -328,7 +328,7 @@
                             <a href="{{ asset('storage/' . $expense->receipt_path) }}"
                                target="_blank"
                                class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                                <i data-feather="image" class="w-3.5 h-3.5"></i>
+                                <i data-feather="paperclip" class="w-3.5 h-3.5"></i>
                                 View
                             </a>
                             @else
@@ -378,110 +378,112 @@
 </div>
 
 <!-- REQUEST CASH ADVANCE MODAL -->
-<div id="requestAdvanceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 transform transition-all">
-
-        <!-- Modal Header -->
-        <div class="bg-gradient-to-r from-amber-500 to-orange-600 p-6 rounded-t-3xl">
-            <div class="flex items-center justify-between">
-                <h3 class="text-xl font-bold text-white">Request Cash Advance</h3>
-                <button onclick="closeRequestAdvanceModal()" class="text-white hover:text-gray-200 transition">
-                    <i data-feather="x" class="w-6 h-6"></i>
-                </button>
+<div id="requestAdvanceModal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-5">
+    <div class="flex max-h-[94vh] w-full max-w-[1100px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-center justify-between gap-4 border-b border-orange-100 bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4 sm:px-6">
+            <div>
+                <h3 class="text-lg font-bold text-white sm:text-xl">Request Cash Advance</h3>
+                <p class="mt-1 text-sm text-orange-50">Submit a cash request with optional supporting files.</p>
             </div>
+            <button type="button" onclick="closeRequestAdvanceModal()" class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25" aria-label="Close request cash advance modal">
+                <i data-feather="x" class="h-5 w-5"></i>
+            </button>
         </div>
 
-        <!-- Modal Body -->
-        <form id="requestAdvanceForm" class="p-6 space-y-6">
+        <form id="requestAdvanceForm" class="flex min-h-0 flex-1 flex-col" novalidate>
             @csrf
+            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+                <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+                    <div class="space-y-5">
+                        <div>
+                            <label for="requestDate" class="mb-2 block text-sm font-semibold text-gray-700">Date of Request</label>
+                            <input type="date"
+                                   id="requestDate"
+                                   class="w-full rounded-xl border border-gray-300 bg-gray-100 px-4 py-3 text-gray-700 transition focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                                   readonly>
+                            <p id="requestDateError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
 
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Date of Request
-                </label>
-                <input type="date"
-                       id="requestDate"
-                       class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                              bg-gray-100 text-gray-700
-                              focus:ring-2 focus:ring-amber-500 focus:border-transparent
-                              transition-all duration-200"
-                       readonly>
-            </div>
+                        <div>
+                            <label for="employeeName" class="mb-2 block text-sm font-semibold text-gray-700">Employee Name</label>
+                            <input type="text"
+                                   id="employeeName"
+                                   value="{{ auth()->user()->name ?? '' }}"
+                                   class="w-full rounded-xl border border-gray-300 bg-gray-100 px-4 py-3 text-gray-700 transition focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                                   placeholder="Employee name"
+                                   readonly>
+                        </div>
 
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Employee Name
-                </label>
-                <input type="text"
-                       id="employeeName"
-                       value="{{ auth()->user()->name ?? '' }}"
-                       class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                              bg-gray-100 text-gray-700
-                              focus:ring-2 focus:ring-amber-500 focus:border-transparent
-                              transition-all duration-200"
-                       placeholder="Employee name"
-                       readonly>
-            </div>
+                        <div>
+                            <label for="requestPurpose" class="mb-2 block text-sm font-semibold text-gray-700">Purpose <span class="text-red-500">*</span></label>
+                            <textarea id="requestPurpose"
+                                      rows="8"
+                                      class="w-full rounded-xl border border-gray-300 px-4 py-3 transition focus:border-transparent focus:ring-2 focus:ring-amber-500 lg:min-h-[220px]"
+                                      placeholder="State the purpose of your cash advance request"
+                                      required></textarea>
+                            <p id="requestPurposeError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+                    </div>
 
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Purpose <span class="text-red-500">*</span>
-                </label>
-                <textarea id="requestPurpose"
-                          rows="3"
-                          class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                                 focus:ring-2 focus:ring-amber-500 focus:border-transparent
-                                 transition-all duration-200 resize-none"
-                          placeholder="State the purpose of your cash advance request"
-                          required></textarea>
-            </div>
+                    <div class="space-y-5">
+                        <div>
+                            <label for="requestAmount" class="mb-2 block text-sm font-semibold text-gray-700">Amount Requested <span class="text-red-500">*</span></label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-gray-700">&#8369;</span>
+                                <input type="number"
+                                       id="requestAmount"
+                                       step="0.01"
+                                       min="0"
+                                       class="w-full rounded-xl border border-gray-300 py-3 pl-9 pr-4 transition focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                                       placeholder="0.00"
+                                       required>
+                            </div>
+                            <p id="requestAmountError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
 
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Amount Requested <span class="text-red-500">*</span>
-                </label>
-                <div class="relative">
-                    <span class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-700 font-semibold">₱</span>
-                    <input type="number"
-                           id="requestAmount"
-                           step="0.01"
-                           min="0"
-                           class="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-xl
-                                  focus:ring-2 focus:ring-amber-500 focus:border-transparent
-                                  transition-all duration-200"
-                           placeholder="0.00"
-                           required>
+                        <div>
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                                <label for="requestAttachments" class="block text-sm font-semibold text-gray-700">Supporting Attachments</label>
+                                <span class="text-xs font-medium text-gray-500">Images or PDF</span>
+                            </div>
+                            <input type="file" id="requestAttachments" class="sr-only" accept="image/*,application/pdf" multiple>
+                            <input type="file" id="requestAttachmentCamera" class="sr-only" accept="image/*" capture="environment">
+                            <div class="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row">
+                                    <button type="button" onclick="document.getElementById('requestAttachments').click()" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-amber-700 shadow-sm ring-1 ring-amber-200 transition hover:bg-amber-50">
+                                        <i data-feather="folder-plus" class="h-4 w-4"></i>
+                                        Upload File
+                                    </button>
+                                    <button type="button" onclick="openCameraCapture('requestAttachments', 'requestAttachmentCamera', true)" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-amber-700 shadow-sm ring-1 ring-amber-200 transition hover:bg-amber-50">
+                                        <i data-feather="camera" class="h-4 w-4"></i>
+                                        Take Photo
+                                    </button>
+                                </div>
+                                <p class="mt-3 text-xs text-gray-600">Optional receipts, quotations, references, or photos. Up to 5 files, 10MB each.</p>
+                            </div>
+                            <p id="requestAttachmentsError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+
+                        <div>
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                                <p class="text-sm font-semibold text-gray-700">Attachment Preview</p>
+                                <button type="button" id="requestAttachmentsClearBtn" class="hidden text-xs font-semibold text-red-600 hover:text-red-700">Remove all</button>
+                            </div>
+                            <div id="requestAttachmentsPreview" class="min-h-[170px] rounded-2xl border border-gray-200 bg-gray-50 p-3">
+                                <div class="flex h-full min-h-[145px] items-center justify-center text-center text-sm text-gray-500">No attachments selected.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Supporting Attachments
-                </label>
-                <input type="file"
-                       id="requestAttachments"
-                       multiple
-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl
-                              file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
-                              file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700
-                              hover:file:bg-amber-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent
-                              transition-all duration-200">
-                <p class="text-xs text-gray-500 mt-2">Optional: upload receipts, quotations, or references.</p>
-            </div>
-
-            <div class="flex items-center space-x-3 pt-2">
-                <button type="button"
-                        onclick="closeRequestAdvanceModal()"
-                        class="flex-1 px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl
-                               hover:bg-gray-300 transition-all duration-200">
+            <div class="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-gray-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+                <button type="button" onclick="closeRequestAdvanceModal()" class="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 transition hover:bg-gray-200">
                     Cancel
                 </button>
-                <button type="submit"
-                        class="flex-1 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600
-                               text-white font-semibold rounded-xl
-                               hover:shadow-xl hover:scale-[1.02]
-                               transition-all duration-300">
-                    Submit Request
+                <button type="submit" id="submitRequestAdvanceBtn" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 font-semibold text-white transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70">
+                    <i data-feather="send" class="h-4 w-4"></i>
+                    <span data-default-text="Submit Request" data-loading-text="Submitting...">Submit Request</span>
                 </button>
             </div>
         </form>
@@ -489,138 +491,164 @@
 </div>
 
 <!-- ADD EXPENSE MODAL -->
-<div id="addExpenseModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 transform transition-all">
-        
-        <!-- Modal Header -->
-        <div class="bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1] p-6 rounded-t-3xl">
-            <div class="flex items-center justify-between">
-                <h3 class="text-xl font-bold text-white">Add New Expense</h3>
-                <button onclick="closeAddExpenseModal()" class="text-white hover:text-gray-200 transition">
-                    <i data-feather="x" class="w-6 h-6"></i>
-                </button>
+<div id="addExpenseModal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-5">
+    <div class="flex max-h-[94vh] w-full max-w-[1100px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-center justify-between gap-4 border-b border-blue-100 bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1] px-5 py-4 sm:px-6">
+            <div>
+                <h3 class="text-lg font-bold text-white sm:text-xl">Add New Expense</h3>
+                <p class="mt-1 text-sm text-blue-50">Record liquidation expense details and attach proof.</p>
             </div>
+            <button type="button" onclick="closeAddExpenseModal()" class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25" aria-label="Close add new expense modal">
+                <i data-feather="x" class="h-5 w-5"></i>
+            </button>
         </div>
 
-        <!-- Modal Body -->
-        <form id="addExpenseForm" class="p-6 space-y-6">
+        <form id="addExpenseForm" class="flex min-h-0 flex-1 flex-col" novalidate>
             @csrf
-            
-            <!-- Date Field -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Date <span class="text-red-500">*</span>
-                </label>
-                <input type="date" 
-                       id="expenseDate"
-                       class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                              focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                              transition-all duration-200"
-                       required>
-            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+                <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+                    <div class="space-y-5">
+                        <div>
+                            <label for="expenseDate" class="mb-2 block text-sm font-semibold text-gray-700">Date <span class="text-red-500">*</span></label>
+                            <input type="date"
+                                   id="expenseDate"
+                                   class="w-full rounded-xl border border-gray-300 px-4 py-3 transition focus:border-transparent focus:ring-2 focus:ring-[#1C446D]"
+                                   required>
+                            <p id="expenseDateError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
 
-            <!-- Category Field -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Category <span class="text-red-500">*</span>
-                </label>
-                <div class="relative">
-                    <select id="expenseCategory"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                                   focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                                   transition-all duration-200 appearance-none bg-white"
-                            required>
-                        <option value="" disabled selected>Select a category</option>
-                        @foreach($categories as $id => $name)
-                        <option value="{{ $id }}">{{ $name }}</option>
-                        @endforeach
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-4 flex items-center">
-                        <i data-feather="chevron-down" class="w-4 h-4 text-gray-400"></i>
+                        <div>
+                            <label for="expenseCategory" class="mb-2 block text-sm font-semibold text-gray-700">Category <span class="text-red-500">*</span></label>
+                            <div class="relative">
+                                <select id="expenseCategory"
+                                        class="w-full appearance-none rounded-xl border border-gray-300 bg-white px-4 py-3 transition focus:border-transparent focus:ring-2 focus:ring-[#1C446D]"
+                                        required>
+                                    <option value="" disabled selected>Select a category</option>
+                                    @foreach($categories as $id => $name)
+                                    <option value="{{ $id }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-4 flex items-center">
+                                    <i data-feather="chevron-down" class="h-4 w-4 text-gray-400"></i>
+                                </div>
+                            </div>
+                            <p id="expenseCategoryError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+
+                        <div>
+                            <label for="expenseDetails" class="mb-2 block text-sm font-semibold text-gray-700">Particulars <span class="text-red-500">*</span></label>
+                            <textarea id="expenseDetails"
+                                      rows="7"
+                                      class="w-full rounded-xl border border-gray-300 px-4 py-3 transition focus:border-transparent focus:ring-2 focus:ring-[#1C446D] lg:min-h-[200px]"
+                                      placeholder="e.g., Hardware supplies - nails, screws, bolts"
+                                      required></textarea>
+                            <p id="expenseDetailsError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-5">
+                        <div>
+                            <label for="expenseDescription" class="mb-2 block text-sm font-semibold text-gray-700">Description</label>
+                            <textarea id="expenseDescription"
+                                      rows="4"
+                                      class="w-full rounded-xl border border-gray-300 px-4 py-3 transition focus:border-transparent focus:ring-2 focus:ring-[#1C446D]"
+                                      placeholder="Optional additional notes..."></textarea>
+                            <p id="expenseDescriptionError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+
+                        <div>
+                            <label for="expenseAmount" class="mb-2 block text-sm font-semibold text-gray-700">Amount <span class="text-red-500">*</span></label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-gray-700">&#8369;</span>
+                                <input type="number"
+                                       id="expenseAmount"
+                                       step="0.01"
+                                       min="0"
+                                       class="w-full rounded-xl border border-gray-300 py-3 pl-9 pr-4 transition focus:border-transparent focus:ring-2 focus:ring-[#1C446D]"
+                                       placeholder="0.00"
+                                       required>
+                            </div>
+                            <p id="expenseAmountError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+
+                        <div>
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                                <label for="expenseReceipt" class="block text-sm font-semibold text-gray-700">Receipt / Proof Image</label>
+                                <span class="text-xs font-medium text-gray-500">Image or PDF</span>
+                            </div>
+                            <input type="file" id="expenseReceipt" class="sr-only" accept="image/*,application/pdf">
+                            <input type="file" id="expenseReceiptCamera" class="sr-only" accept="image/*" capture="environment">
+                            <div class="rounded-2xl border border-dashed border-blue-300 bg-blue-50/70 p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row">
+                                    <button type="button" onclick="document.getElementById('expenseReceipt').click()" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-blue-700 shadow-sm ring-1 ring-blue-200 transition hover:bg-blue-50">
+                                        <i data-feather="folder-plus" class="h-4 w-4"></i>
+                                        Upload File
+                                    </button>
+                                    <button type="button" onclick="openCameraCapture('expenseReceipt', 'expenseReceiptCamera', false)" class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-blue-700 shadow-sm ring-1 ring-blue-200 transition hover:bg-blue-50">
+                                        <i data-feather="camera" class="h-4 w-4"></i>
+                                        Take Photo
+                                    </button>
+                                </div>
+                                <p class="mt-3 text-xs text-gray-600">Optional receipt, proof photo, screenshot, or PDF up to 5MB.</p>
+                            </div>
+                            <p id="expenseReceiptError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
+                        </div>
+
+                        <div>
+                            <p class="mb-2 text-sm font-semibold text-gray-700">Receipt Preview</p>
+                            <div id="expenseReceiptPreview" class="min-h-[170px] rounded-2xl border border-gray-200 bg-gray-50 p-3">
+                                <div class="flex h-full min-h-[145px] items-center justify-center text-center text-sm text-gray-500">No receipt selected.</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Transaction Details Field -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Particulars <span class="text-red-500">*</span>
-                </label>
-                <textarea id="expenseDetails"
-                          rows="2"
-                          class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                                 focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                                 transition-all duration-200 resize-none"
-                          placeholder="e.g., Hardware supplies - nails, screws, bolts"
-                          required></textarea>
-            </div>
-
-            <!-- Description Field -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Description
-                </label>
-                <textarea id="expenseDescription"
-                          rows="2"
-                          class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                                 focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                                 transition-all duration-200 resize-none"
-                          placeholder="Optional additional notes..."></textarea>
-            </div>
-
-            <!-- Amount Field -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Amount <span class="text-red-500">*</span>
-                </label>
-                <div class="relative">
-                    <span class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-700 font-semibold">₱</span>
-                    <input type="number" 
-                           id="expenseAmount"
-                           step="0.01"
-                           min="0"
-                           class="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-xl
-                                  focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                                  transition-all duration-200"
-                           placeholder="0.00"
-                           required>
-                </div>
-            </div>
-
-            <!-- Receipt Attachment Field -->
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    Receipt / Proof Image
-                </label>
-                <input type="file"
-                       id="expenseReceipt"
-                       accept="image/png,image/jpeg,image/webp"
-                       class="w-full px-4 py-3 border border-gray-300 rounded-xl
-                              file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
-                              file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700
-                              hover:file:bg-blue-100 focus:ring-2 focus:ring-[#1C446D] focus:border-transparent
-                              transition-all duration-200">
-                <p class="text-xs text-gray-500 mt-2">Optional screenshot/photo of the receipt. JPG, PNG, or WebP up to 5MB.</p>
-            </div>
-
-            <!-- Modal Footer -->
-            <div class="flex items-center space-x-3 pt-4">
-                <button type="button"
-                        onclick="closeAddExpenseModal()"
-                        class="flex-1 px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl
-                               hover:bg-gray-300 transition-all duration-200">
+            <div class="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-gray-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+                <button type="button" onclick="closeAddExpenseModal()" class="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 transition hover:bg-gray-200">
                     Cancel
                 </button>
-                <button type="submit"
-                        class="flex-1 px-6 py-3 bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1]
-                               text-white font-semibold rounded-xl
-                               hover:shadow-xl hover:scale-[1.02]
-                               transition-all duration-300">
-                    Add Expense
+                <button type="submit" id="submitAddExpenseBtn" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1] px-6 py-3 font-semibold text-white transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70">
+                    <i data-feather="plus" class="h-4 w-4"></i>
+                    <span data-default-text="Add Expense" data-loading-text="Saving...">Add Expense</span>
                 </button>
             </div>
-
         </form>
+    </div>
+</div>
+
+<!-- CAMERA CAPTURE MODAL -->
+<div id="cameraCaptureModal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/70 p-3 sm:p-5">
+    <div class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-center justify-between gap-4 border-b border-gray-200 px-5 py-4">
+            <div>
+                <h3 class="text-lg font-bold text-gray-900">Take Photo</h3>
+                <p id="cameraCaptureStatus" class="mt-1 text-sm text-gray-500">Allow camera access to capture a photo.</p>
+            </div>
+            <button type="button" onclick="closeCameraCapture()" class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition hover:bg-gray-200" aria-label="Close camera">
+                <i data-feather="x" class="h-5 w-5"></i>
+            </button>
+        </div>
+
+        <div class="bg-gray-950 p-3 sm:p-5">
+            <div class="relative overflow-hidden rounded-xl bg-black">
+                <video id="cameraCaptureVideo" class="aspect-video w-full bg-black object-cover" autoplay muted playsinline></video>
+                <canvas id="cameraCaptureCanvas" class="hidden"></canvas>
+            </div>
+        </div>
+
+        <div class="flex flex-col-reverse gap-3 border-t border-gray-200 px-5 py-4 sm:flex-row sm:justify-end">
+            <button type="button" onclick="closeCameraCapture()" class="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 transition hover:bg-gray-200">
+                Cancel
+            </button>
+            <button type="button" id="cameraCaptureFallbackBtn" class="hidden min-h-[44px] items-center justify-center rounded-xl bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-800">
+                Use Device Camera
+            </button>
+            <button type="button" id="cameraCaptureShootBtn" onclick="captureCameraPhoto()" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" disabled>
+                <i data-feather="camera" class="h-4 w-4"></i>
+                Capture Photo
+            </button>
+        </div>
     </div>
 </div>
 
@@ -644,6 +672,9 @@
     let currentPeriodStart = null;
     let currentPeriodEnd = null;
     let currentOpeningBalance = 0;
+    let cameraCaptureStream = null;
+    let cameraCaptureTarget = null;
+    const fieldErrorClass = 'border-red-400';
 
     const periodLabel = document.getElementById('liquidationPeriodLabel');
     const periodSubLabel = document.getElementById('liquidationPeriodSubLabel');
@@ -655,6 +686,289 @@
     const weekToggleBtn = document.getElementById('liquidationWeekToggle');
     const monthToggleBtn = document.getElementById('liquidationMonthToggle');
     const submitLiquidationReviewBtn = document.getElementById('submitLiquidationReviewBtn');
+
+    function setFieldError(fieldId, message) {
+        const field = document.getElementById(fieldId);
+        const error = document.getElementById(`${fieldId}Error`);
+
+        if (field) {
+            field.classList.toggle(fieldErrorClass, Boolean(message));
+        }
+
+        if (error) {
+            error.textContent = message || '';
+            error.classList.toggle('hidden', !message);
+        }
+    }
+
+    function clearFormErrors(formId) {
+        const form = document.getElementById(formId);
+        if (!form) return;
+
+        form.querySelectorAll('[id$="Error"]').forEach(error => {
+            error.textContent = '';
+            error.classList.add('hidden');
+        });
+
+        form.querySelectorAll('input, select, textarea').forEach(field => {
+            field.classList.remove(fieldErrorClass);
+        });
+    }
+
+    function setButtonLoading(button, isLoading) {
+        if (!button) return;
+
+        const label = button.querySelector('[data-default-text]');
+        button.disabled = isLoading;
+
+        if (label) {
+            label.textContent = isLoading
+                ? label.dataset.loadingText
+                : label.dataset.defaultText;
+        }
+    }
+
+    function applyServerErrors(errors, fieldMap) {
+        if (!errors || typeof errors !== 'object') return false;
+
+        let applied = false;
+        Object.entries(fieldMap).forEach(([serverField, fieldId]) => {
+            const messages = errors[serverField];
+            const message = Array.isArray(messages) ? messages[0] : messages;
+
+            if (message) {
+                setFieldError(fieldId, message);
+                applied = true;
+            }
+        });
+
+        return applied;
+    }
+
+    function setInputFiles(input, files) {
+        if (!input || typeof DataTransfer === 'undefined') return;
+
+        const transfer = new DataTransfer();
+        files.forEach(file => transfer.items.add(file));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function mergeFilesIntoInput(inputId, newFiles, multiple = true) {
+        const input = document.getElementById(inputId);
+        if (!input || typeof DataTransfer === 'undefined') return;
+
+        const files = multiple
+            ? [...Array.from(input.files || []), ...Array.from(newFiles || [])]
+            : Array.from(newFiles || []).slice(0, 1);
+
+        setInputFiles(input, files);
+    }
+
+    function removeSelectedFile(inputId, index) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+
+        const files = Array.from(input.files || []);
+        files.splice(index, 1);
+        setInputFiles(input, files);
+    }
+
+    function clearSelectedFiles(inputId) {
+        setInputFiles(document.getElementById(inputId), []);
+    }
+
+    function getFilePreviewMarkup(file, inputId, index) {
+        const isImage = file.type.startsWith('image/');
+        const isPdf = file.type === 'application/pdf';
+        const fileUrl = URL.createObjectURL(file);
+        const fileName = escapeHtml(file.name);
+        const fileSize = file.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : '';
+
+        return `
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div class="flex h-32 items-center justify-center bg-gray-100">
+                    ${isImage
+                        ? `<img src="${fileUrl}" alt="${fileName}" class="h-full w-full object-cover">`
+                        : `<div class="flex flex-col items-center justify-center gap-2 text-gray-500"><i data-feather="${isPdf ? 'file-text' : 'paperclip'}" class="h-8 w-8"></i><span class="text-xs font-semibold uppercase">${isPdf ? 'PDF' : 'File'}</span></div>`}
+                </div>
+                <div class="space-y-3 p-3">
+                    <div>
+                        <p class="truncate text-sm font-semibold text-gray-800" title="${fileName}">${fileName}</p>
+                        <p class="text-xs text-gray-500">${fileSize}</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="window.open('${fileUrl}', '_blank')" class="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200">
+                            <i data-feather="eye" class="h-3.5 w-3.5"></i> View
+                        </button>
+                        <button type="button" onclick="document.getElementById('${inputId}').click()" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                            <i data-feather="refresh-cw" class="h-3.5 w-3.5"></i> Replace
+                        </button>
+                        <button type="button" onclick="removeSelectedFile('${inputId}', ${index})" class="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                            <i data-feather="trash-2" class="h-3.5 w-3.5"></i> Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderFilePreviews(inputId, previewId, emptyText) {
+        const input = document.getElementById(inputId);
+        const preview = document.getElementById(previewId);
+        if (!input || !preview) return;
+
+        const files = Array.from(input.files || []);
+        if (inputId === 'requestAttachments') {
+            document.getElementById('requestAttachmentsClearBtn')?.classList.toggle('hidden', files.length === 0);
+        }
+
+        if (files.length === 0) {
+            preview.innerHTML = `<div class="flex h-full min-h-[145px] items-center justify-center text-center text-sm text-gray-500">${emptyText}</div>`;
+            return;
+        }
+
+        preview.innerHTML = `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${files.map((file, index) => getFilePreviewMarkup(file, inputId, index)).join('')}</div>`;
+
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    function resetUploadPreview(inputId, previewId, emptyText) {
+        const input = document.getElementById(inputId);
+        if (input) input.value = '';
+        renderFilePreviews(inputId, previewId, emptyText);
+    }
+
+    function stopCameraCaptureStream() {
+        if (cameraCaptureStream) {
+            cameraCaptureStream.getTracks().forEach(track => track.stop());
+            cameraCaptureStream = null;
+        }
+    }
+
+    async function openCameraCapture(targetInputId, fallbackInputId, multiple = false) {
+        const fallbackInput = document.getElementById(fallbackInputId);
+
+        cameraCaptureTarget = {
+            targetInputId,
+            fallbackInputId,
+            multiple,
+        };
+
+        const modal = document.getElementById('cameraCaptureModal');
+        const video = document.getElementById('cameraCaptureVideo');
+        const status = document.getElementById('cameraCaptureStatus');
+        const shootBtn = document.getElementById('cameraCaptureShootBtn');
+        const fallbackBtn = document.getElementById('cameraCaptureFallbackBtn');
+
+        if (!modal || !video || !status || !shootBtn || !fallbackBtn) {
+            fallbackInput?.click();
+            return;
+        }
+
+        stopCameraCaptureStream();
+        status.textContent = 'Starting camera...';
+        shootBtn.disabled = true;
+        fallbackBtn.classList.add('hidden');
+        fallbackBtn.classList.remove('inline-flex');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+            status.textContent = 'Camera preview is not available in this browser. Use the device camera picker instead.';
+            fallbackBtn.classList.remove('hidden');
+            fallbackBtn.classList.add('inline-flex');
+            fallbackBtn.onclick = () => fallbackInput?.click();
+            return;
+        }
+
+        try {
+            cameraCaptureStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                },
+                audio: false,
+            });
+
+            video.srcObject = cameraCaptureStream;
+            await video.play();
+            status.textContent = 'Camera is ready.';
+            shootBtn.disabled = false;
+        } catch (error) {
+            console.error('Camera access error:', error);
+            stopCameraCaptureStream();
+            status.textContent = 'Camera access was blocked or unavailable. Use the device camera picker instead.';
+            fallbackBtn.classList.remove('hidden');
+            fallbackBtn.classList.add('inline-flex');
+            fallbackBtn.onclick = () => fallbackInput?.click();
+            fallbackInput?.click();
+        }
+
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    function closeCameraCapture() {
+        stopCameraCaptureStream();
+
+        const modal = document.getElementById('cameraCaptureModal');
+        const video = document.getElementById('cameraCaptureVideo');
+        const shootBtn = document.getElementById('cameraCaptureShootBtn');
+
+        if (video) {
+            video.pause();
+            video.srcObject = null;
+        }
+
+        if (shootBtn) {
+            shootBtn.disabled = true;
+        }
+
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    function captureCameraPhoto() {
+        const video = document.getElementById('cameraCaptureVideo');
+        const canvas = document.getElementById('cameraCaptureCanvas');
+        const status = document.getElementById('cameraCaptureStatus');
+
+        if (!video || !canvas || !cameraCaptureTarget || !video.videoWidth || !video.videoHeight) {
+            if (status) {
+                status.textContent = 'Camera is not ready yet.';
+            }
+            return;
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(blob => {
+            if (!blob) {
+                if (status) {
+                    status.textContent = 'Could not capture the photo. Please try again.';
+                }
+                return;
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const photo = new File([blob], `camera-photo-${timestamp}.jpg`, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+            });
+
+            mergeFilesIntoInput(cameraCaptureTarget.targetInputId, [photo], cameraCaptureTarget.multiple);
+            closeCameraCapture();
+        }, 'image/jpeg', 0.92);
+    }
 
     async function fetchMyCashAdvanceRequests(startDate = null, endDate = null) {
         let url = CASH_ADVANCE_MY_REQUESTS_ROUTE;
@@ -830,6 +1144,70 @@
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         return `${year}-${month}`;
+    }
+
+    function getSubmissionMonthStart() {
+        return getMonthStart(currentPeriodStart || new Date());
+    }
+
+    function getExpenseRowsForMonth(monthDate) {
+        const monthStart = getMonthStart(monthDate);
+        const monthEnd = getMonthEnd(monthDate);
+
+        return getExpenseRows().filter(row => {
+            const expenseDate = getExpenseRowDate(row);
+            return expenseDate ? isWithinRange(expenseDate, monthStart, monthEnd) : false;
+        });
+    }
+
+    async function readJsonResponse(response) {
+        const responseText = await response.text();
+        if (!responseText) {
+            return {};
+        }
+
+        try {
+            return JSON.parse(responseText);
+        } catch (error) {
+            return {
+                message: response.ok
+                    ? ''
+                    : 'The server returned an unexpected response. Please refresh the page and try again.',
+            };
+        }
+    }
+
+    function responseErrorMessage(response, payload, fallbackMessage) {
+        if (payload?.message) {
+            return payload.message;
+        }
+
+        if (response.status === 401 || response.status === 419) {
+            return 'Your session expired. Please refresh the page and sign in again.';
+        }
+
+        if (response.status === 403) {
+            return 'You are not allowed to submit this liquidation.';
+        }
+
+        if (response.status >= 500) {
+            return 'The server could not submit the liquidation right now. Please try again.';
+        }
+
+        return fallbackMessage;
+    }
+
+    function setSubmitReviewButtonLoading(isLoading) {
+        const submitBtn = document.getElementById('submitLiquidationReviewBtn');
+        if (!submitBtn) {
+            return;
+        }
+
+        submitBtn.disabled = isLoading;
+        submitBtn.innerHTML = isLoading
+            ? '<i data-feather="loader" class="w-5 h-5"></i><span>Submitting...</span>'
+            : '<i data-feather="send" class="w-5 h-5"></i><span>Submit for Review</span>';
+        feather.replace();
     }
 
     function formatPeriodLabel(start, end, viewMode) {
@@ -1317,28 +1695,36 @@
         const modal = document.getElementById('requestAdvanceModal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        clearFormErrors('requestAdvanceForm');
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = formatDateKey(new Date());
         document.getElementById('requestDate').value = today;
 
         setTimeout(() => feather.replace(), 10);
     }
 
     function closeRequestAdvanceModal() {
+        closeCameraCapture();
         const modal = document.getElementById('requestAdvanceModal');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
 
         document.getElementById('requestAdvanceForm').reset();
+        resetUploadPreview('requestAttachments', 'requestAttachmentsPreview', 'No attachments selected.');
+        const cameraInput = document.getElementById('requestAttachmentCamera');
+        if (cameraInput) cameraInput.value = '';
+        clearFormErrors('requestAdvanceForm');
+        setButtonLoading(document.getElementById('submitRequestAdvanceBtn'), false);
     }
 
     function openAddExpenseModal() {
         const modal = document.getElementById('addExpenseModal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        clearFormErrors('addExpenseForm');
         
         // Set the first day of the selected period as default date (using local timezone)
-        const defaultDate = formatDateKey(currentPeriodStart);
+        const defaultDate = formatDateKey(currentPeriodStart || new Date());
         document.getElementById('expenseDate').value = defaultDate;
         
         // Reset category dropdown
@@ -1451,33 +1837,35 @@
     }
 
     function closeAddExpenseModal() {
+        closeCameraCapture();
         const modal = document.getElementById('addExpenseModal');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
         
         // Reset form
         document.getElementById('addExpenseForm').reset();
+        resetUploadPreview('expenseReceipt', 'expenseReceiptPreview', 'No receipt selected.');
+        const cameraInput = document.getElementById('expenseReceiptCamera');
+        if (cameraInput) cameraInput.value = '';
+        clearFormErrors('addExpenseForm');
+        setButtonLoading(document.getElementById('submitAddExpenseBtn'), false);
     }
 
     async function submitLiquidationForReview() {
         try {
-            // Get the current month and year
-            const today = new Date();
-            const monthKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+            const submissionMonth = getSubmissionMonthStart();
+            const monthKey = formatMonthKey(submissionMonth);
+            const monthLabel = formatMonthLabel(submissionMonth);
+            const monthExpenseRows = getExpenseRowsForMonth(submissionMonth);
 
-            // Check if there are expenses
-            if (getExpenseRows().length === 0) {
-                showLiquidationToast('Please add at least one expense before submitting.', 'error');
+            if (monthExpenseRows.length === 0) {
+                showLiquidationToast(`Add at least one expense for ${monthLabel} before submitting.`, 'error');
                 return;
             }
 
-            const submitBtn = document.getElementById('submitLiquidationReviewBtn');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.textContent = 'Submitting...';
-            }
+            setSubmitReviewButtonLoading(true);
 
-            const response = await fetch('{{ route('admin.liquidation.submit') }}', {
+            const response = await fetch(LIQUIDATION_SUBMIT_ROUTE, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -1490,14 +1878,18 @@
                 })
             });
 
-            const result = await response.json();
+            const result = await readJsonResponse(response);
 
             if (!response.ok) {
-                throw new Error(result?.message || 'Failed to submit liquidation for review.');
+                throw new Error(responseErrorMessage(
+                    response,
+                    result,
+                    `Failed to submit the ${monthLabel} liquidation for review.`
+                ));
             }
 
-            showLiquidationToast('Liquidation submitted for accounting review!', 'success');
-            clearExpenseTableAfterSubmit();
+            showLiquidationToast(result?.message || `${monthLabel} liquidation submitted for accounting review!`, 'success');
+            clearExpenseRowsAfterSubmit(submissionMonth);
             
             // Refresh the dashboard after submission
             setTimeout(() => {
@@ -1508,43 +1900,106 @@
             console.error('Error submitting liquidation:', error);
             showLiquidationToast(error.message || 'Failed to submit liquidation. Please try again.', 'error');
         } finally {
-            const submitBtn = document.getElementById('submitLiquidationReviewBtn');
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit for Review';
-            }
+            setSubmitReviewButtonLoading(false);
         }
     }
 
-    function clearExpenseTableAfterSubmit() {
+    function clearExpenseRowsAfterSubmit(monthDate) {
         const tbody = document.getElementById('expensesTableBody');
         if (!tbody) return;
 
-        tbody.innerHTML = `
-            <tr id="emptyExpenseRow" class="border-b border-gray-100">
-                <td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">
-                    No expense entries yet. Add expense records once funds are released.
-                </td>
-            </tr>
-        `;
+        document.getElementById('filteredExpenseEmptyRow')?.remove();
+
+        getExpenseRowsForMonth(monthDate).forEach(row => row.remove());
+
+        if (getExpenseRows().length === 0) {
+            tbody.innerHTML = `
+                <tr id="emptyExpenseRow" class="border-b border-gray-100">
+                    <td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">
+                        No expense entries yet. Add expense records once funds are released.
+                    </td>
+                </tr>
+            `;
+        }
 
         renderExpenseSummary();
         renderWeekBreakdown();
         feather.replace();
     }
 
+    document.getElementById('requestAttachments')?.addEventListener('change', () => {
+        renderFilePreviews('requestAttachments', 'requestAttachmentsPreview', 'No attachments selected.');
+        setFieldError('requestAttachments', '');
+    });
+
+    document.getElementById('requestAttachmentCamera')?.addEventListener('change', function() {
+        mergeFilesIntoInput('requestAttachments', this.files, true);
+        this.value = '';
+        closeCameraCapture();
+    });
+
+    document.getElementById('requestAttachmentsClearBtn')?.addEventListener('click', () => {
+        clearSelectedFiles('requestAttachments');
+    });
+
+    document.getElementById('expenseReceipt')?.addEventListener('change', () => {
+        renderFilePreviews('expenseReceipt', 'expenseReceiptPreview', 'No receipt selected.');
+        setFieldError('expenseReceipt', '');
+    });
+
+    document.getElementById('expenseReceiptCamera')?.addEventListener('change', function() {
+        mergeFilesIntoInput('expenseReceipt', this.files, false);
+        this.value = '';
+        closeCameraCapture();
+    });
+
     // Handle form submission
     document.getElementById('addExpenseForm').addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+        clearFormErrors('addExpenseForm');
+
         const date        = document.getElementById('expenseDate').value;
         const categorySelect = document.getElementById('expenseCategory');
         const categoryId  = categorySelect.value;
         const categoryName = categorySelect.options[categorySelect.selectedIndex]?.text || '';
-        const details     = document.getElementById('expenseDetails').value;
-        const description = document.getElementById('expenseDescription').value;
+        const details     = document.getElementById('expenseDetails').value.trim();
+        const description = document.getElementById('expenseDescription').value.trim();
         const amount      = parseFloat(document.getElementById('expenseAmount').value);
         const receiptFile = document.getElementById('expenseReceipt')?.files?.[0] || null;
+        const submitBtn = document.getElementById('submitAddExpenseBtn');
+        let hasErrors = false;
+
+        if (!date) {
+            setFieldError('expenseDate', 'Please select an expense date.');
+            hasErrors = true;
+        }
+
+        if (!categoryId) {
+            setFieldError('expenseCategory', 'Please select a category.');
+            hasErrors = true;
+        }
+
+        if (!details) {
+            setFieldError('expenseDetails', 'Please enter the particulars.');
+            hasErrors = true;
+        }
+
+        if (!amount || amount <= 0) {
+            setFieldError('expenseAmount', 'Please enter a valid amount.');
+            hasErrors = true;
+        }
+
+        if (receiptFile && receiptFile.size > 5 * 1024 * 1024) {
+            setFieldError('expenseReceipt', 'Receipt files must be 5MB or smaller.');
+            hasErrors = true;
+        }
+
+        if (hasErrors) {
+            showLiquidationToast('Please review the highlighted fields.', 'error');
+            return;
+        }
+
+        setButtonLoading(submitBtn, true);
 
         const formData = new FormData();
         formData.append('_token', document.querySelector('#addExpenseForm input[name="_token"]').value);
@@ -1568,9 +2023,17 @@
                 body: formData
             });
 
-            const result = await response.json();
+            const result = await response.json().catch(() => ({}));
             if (!response.ok) {
                 const errorMessage = result?.message || 'Failed to save expense.';
+                applyServerErrors(result?.errors, {
+                    expense_date: 'expenseDate',
+                    category_id: 'expenseCategory',
+                    transaction_details: 'expenseDetails',
+                    description: 'expenseDescription',
+                    amount: 'expenseAmount',
+                    receipt_image: 'expenseReceipt',
+                });
                 showLiquidationToast(errorMessage, 'error');
                 return;
             }
@@ -1579,6 +2042,8 @@
         } catch (error) {
             showLiquidationToast('Failed to save expense. Please try again.', 'error');
             return;
+        } finally {
+            setButtonLoading(submitBtn, false);
         }
         
         // Format date
@@ -1611,7 +2076,7 @@
         const displayDetails = escapeHtml(savedExpense?.transaction_details || details);
         const displayDescription = savedExpense?.description || description;
         const receiptCell = savedExpense?.receipt_url
-            ? `<a href="${savedExpense.receipt_url}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"><i data-feather="image" class="w-3.5 h-3.5"></i>View</a>`
+            ? `<a href="${savedExpense.receipt_url}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"><i data-feather="paperclip" class="w-3.5 h-3.5"></i>View</a>`
             : '<span class="text-xs text-gray-400">None</span>';
         newRow.innerHTML = `
             <td class="py-4 px-4 text-sm text-gray-700">${formattedDate}</td>
@@ -1640,50 +2105,66 @@
 
     document.getElementById('requestAdvanceForm').addEventListener('submit', async function(e) {
         e.preventDefault();
+        clearFormErrors('requestAdvanceForm');
 
-        const submitBtn = this.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
+        const submitBtn = document.getElementById('submitRequestAdvanceBtn');
+        setButtonLoading(submitBtn, true);
 
         const purpose = document.getElementById('requestPurpose').value.trim();
         const amount = parseFloat(document.getElementById('requestAmount').value);
         const dateNeeded = document.getElementById('requestDate').value;
+        const attachmentFiles = Array.from(document.getElementById('requestAttachments')?.files || []);
+        let hasErrors = false;
 
         if (!purpose) {
-            showLiquidationToast('Please enter a purpose for your request.', 'error');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Request';
-            return;
+            setFieldError('requestPurpose', 'Please enter a purpose for your request.');
+            hasErrors = true;
         }
 
         if (!amount || amount <= 0) {
-            showLiquidationToast('Please enter a valid requested amount.', 'error');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Request';
+            setFieldError('requestAmount', 'Please enter a valid requested amount.');
+            hasErrors = true;
+        }
+
+        if (attachmentFiles.some(file => file.size > 10 * 1024 * 1024)) {
+            setFieldError('requestAttachments', 'Attachments must be 10MB or smaller.');
+            hasErrors = true;
+        }
+
+        if (hasErrors) {
+            showLiquidationToast('Please review the highlighted fields.', 'error');
+            setButtonLoading(submitBtn, false);
             return;
         }
+
+        const formData = new FormData();
+        formData.append('_token', document.querySelector('#requestAdvanceForm input[name="_token"]').value);
+        formData.append('purpose', purpose);
+        formData.append('requested_amount', amount);
+        formData.append('date_needed', dateNeeded);
+        attachmentFiles.forEach(file => formData.append('attachments[]', file));
 
         try {
             const response = await fetch(CASH_ADVANCE_STORE_ROUTE, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': CASH_ADVANCE_CSRF,
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                body: JSON.stringify({
-                    purpose,
-                    requested_amount: amount,
-                    date_needed: dateNeeded,
-                })
+                body: formData
             });
 
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
+                applyServerErrors(payload?.errors, {
+                    purpose: 'requestPurpose',
+                    requested_amount: 'requestAmount',
+                    date_needed: 'requestDate',
+                    attachments: 'requestAttachments',
+                    'attachments.0': 'requestAttachments',
+                });
                 showLiquidationToast(payload?.message || 'Failed to submit request.', 'error');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Request';
                 return;
             }
 
@@ -1694,8 +2175,8 @@
         } catch (error) {
             console.error('Request error:', error);
             showLiquidationToast('Failed to submit request. Please try again.', 'error');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Request';
+        } finally {
+            setButtonLoading(submitBtn, false);
         }
     });
 

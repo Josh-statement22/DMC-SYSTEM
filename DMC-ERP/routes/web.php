@@ -1007,6 +1007,8 @@ Route::get('/accounting/liquidate-expenses', [\App\Http\Controllers\AccountingCo
 Route::post('/accounting/liquidate-expenses/expense', [\App\Http\Controllers\AccountingController::class, 'storeExpense'])->middleware('auth')->name('accounting.store-expense');
 Route::post('/accounting/liquidate-expenses/import', [\App\Http\Controllers\AccountingController::class, 'importExpenses'])->middleware('auth')->name('accounting.import-expenses');
 Route::get('/accounting/liquidate-expenses/expense/{id}/breakdown', [\App\Http\Controllers\AccountingController::class, 'showExpenseBreakdown'])->middleware('auth')->name('accounting.show-expense-breakdown');
+Route::patch('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'updateBreakdown'])->middleware('auth')->name('accounting.update-breakdown');
+Route::delete('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteBreakdown'])->middleware('auth')->name('accounting.delete-breakdown');
 Route::patch('/accounting/liquidate-expenses/expense/{id}/category', [\App\Http\Controllers\AccountingController::class, 'updateExpenseCategory'])->middleware('auth')->name('accounting.update-expense-category');
 Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
 Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
@@ -1322,6 +1324,8 @@ Route::post('/cash-advance/requests', function (Request $request) {
         'purpose' => 'required|string|max:2000',
         'requested_amount' => 'required|numeric|min:0.01',
         'date_needed' => 'nullable|date',
+        'attachments' => 'nullable|array|max:5',
+        'attachments.*' => 'file|mimes:jpg,jpeg,png,webp,heic,heif,pdf|max:10240',
     ]);
 
     $requestDate = now();
@@ -1355,6 +1359,21 @@ Route::post('/cash-advance/requests', function (Request $request) {
         'created_at' => now(),
         'updated_at' => now(),
     ]);
+
+    foreach ($request->file('attachments', []) as $attachment) {
+        $path = $attachment->store('cash-advance-attachments', 'public');
+
+        DB::table('cash_advance_request_attachments')->insert([
+            'cash_advance_request_id' => $requestId,
+            'original_name' => $attachment->getClientOriginalName(),
+            'file_path' => $path,
+            'mime_type' => $attachment->getClientMimeType(),
+            'file_size' => $attachment->getSize(),
+            'uploaded_by' => Auth::id(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
 
     // Get the full request data to broadcast
     $newRequest = DB::table('cash_advance_requests')
@@ -1923,7 +1942,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'transaction_details' => 'required|string|max:255',
         'description' => 'nullable|string|max:1000',
         'amount' => 'required|numeric|min:0.01',
-        'receipt_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+        'receipt_image' => 'nullable|file|mimes:jpg,jpeg,png,webp,heic,heif,pdf|max:5120',
     ]);
 
     $user = Auth::user();
@@ -2016,8 +2035,20 @@ Route::post('/admin/liquidation/submit', function (Request $request) {
         ->first();
 
     if (! $liquidation) {
+        $existingLiquidation = DB::table('liquidations')
+            ->where('user_id', $user->id)
+            ->where('cutoff_period', $cutoffPeriod)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($existingLiquidation) {
+            return response()->json([
+                'message' => "The {$cutoffPeriod} liquidation is already {$existingLiquidation->status} and cannot be submitted again.",
+            ], 409);
+        }
+
         return response()->json([
-            'message' => 'No liquidation record found for the selected month.',
+            'message' => "No pending liquidation record found for {$cutoffPeriod}. Add an expense for that month before submitting.",
         ], 404);
     }
 
@@ -2027,7 +2058,7 @@ Route::post('/admin/liquidation/submit', function (Request $request) {
 
     if ($expenseCount === 0) {
         return response()->json([
-            'message' => 'Add at least one expense before submitting this liquidation.',
+            'message' => "Add at least one expense for {$cutoffPeriod} before submitting this liquidation.",
         ], 422);
     }
 

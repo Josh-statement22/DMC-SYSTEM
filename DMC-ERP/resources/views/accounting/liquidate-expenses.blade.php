@@ -371,6 +371,7 @@
                                         data-employee-id="{{ $expense->employee_id ?? '' }}"
                                         data-name="{{ $expense->employee_name ?? 'Unassigned' }}"
                                         data-date="{{ $expense->expense_date->format('Y-m-d') }}"
+                                        data-amount="{{ number_format((float) $expense->amount, 2, '.', '') }}"
                                     >
                                         <i data-feather="edit-3" class="w-4 h-4"></i>
                                         <span class="sr-only">Breakdown</span>
@@ -441,6 +442,27 @@
                 <input type="hidden" id="breakdownRecordSource" name="record_source" value="breakdown">
                 <input type="hidden" id="breakdownCashAdvanceRequestId" name="cash_advance_request_id">
                 <input type="hidden" id="breakdownEmployeeId" name="employee_id">
+                <div class="grid grid-cols-1 gap-3 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm md:grid-cols-4">
+                    <div>
+                        <p class="font-semibold text-cyan-700">Parent Budget</p>
+                        <p id="breakdownParentTotal" class="mt-1 text-lg font-bold text-cyan-950">PHP 0.00</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-cyan-700">Budget Used</p>
+                        <p id="breakdownAllocatedTotal" class="mt-1 text-lg font-bold text-cyan-950">PHP 0.00</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-cyan-700">Budget Remaining</p>
+                        <p id="breakdownRemainingTotal" class="mt-1 text-lg font-bold text-cyan-950">PHP 0.00</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-cyan-700">Overspent Amount</p>
+                        <p id="breakdownOverspentTotal" class="mt-1 text-lg font-bold text-cyan-950">PHP 0.00</p>
+                    </div>
+                </div>
+                <p id="breakdownBudgetStatus" class="rounded-xl bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
+                    Budget status: Available
+                </p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Name</label>
@@ -455,7 +477,7 @@
                         <select id="breakdownCategory" name="category_id" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900" required>
                             <option value="">Select Category</option>
                             @forelse($categories ?? [] as $category)
-                                <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+                                <option value="{{ $category->id }}" data-category-name="{{ $category->particulars_category }}">{{ $category->particulars_category }}</option>
                             @empty
                             @endforelse
                         </select>
@@ -586,6 +608,13 @@
     const closeBreakdownBtn = document.getElementById('closeBreakdownBtn');
     const closeBreakdownFooterBtn = document.getElementById('closeBreakdownFooterBtn');
     const breakdownForm = document.getElementById('breakdownForm');
+    const breakdownCategory = document.getElementById('breakdownCategory');
+    const breakdownAmount = document.getElementById('breakdownAmount');
+    const breakdownParentTotal = document.getElementById('breakdownParentTotal');
+    const breakdownAllocatedTotal = document.getElementById('breakdownAllocatedTotal');
+    const breakdownRemainingTotal = document.getElementById('breakdownRemainingTotal');
+    const breakdownOverspentTotal = document.getElementById('breakdownOverspentTotal');
+    const breakdownBudgetStatus = document.getElementById('breakdownBudgetStatus');
     const viewBreakdownModal = document.getElementById('viewBreakdownModal');
     const closeViewBreakdownBtn = document.getElementById('closeViewBreakdownBtn');
     const closeViewBreakdownFooterBtn = document.getElementById('closeViewBreakdownFooterBtn');
@@ -607,6 +636,13 @@
     let successModalTimer = null;
     let importPreviewRows = [];
     let importResultByRow = new Map();
+    let currentBreakdownAllocation = {
+        parentAmount: 0,
+        allocatedAmount: 0,
+        overspentAmount: 0,
+        status: 'AVAILABLE',
+        remainingAmount: 0,
+    };
 
     function showSuccessModal(message) {
         if (!successModal || !successModalMessage) {
@@ -649,6 +685,72 @@
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+    }
+
+    function setBreakdownAllocation(allocation = {}) {
+        currentBreakdownAllocation = {
+            parentAmount: Number(allocation.parent_amount || allocation.parentAmount || 0),
+            allocatedAmount: Number(allocation.allocated_amount || allocation.allocatedAmount || 0),
+            overspentAmount: Number(allocation.overspent_amount || allocation.overspentAmount || 0),
+            status: String(allocation.status || 'AVAILABLE'),
+            remainingAmount: Number(allocation.remaining_amount || allocation.remainingAmount || 0),
+        };
+
+        if (breakdownParentTotal) {
+            breakdownParentTotal.textContent = formatCurrencyValue(currentBreakdownAllocation.parentAmount);
+        }
+
+        if (breakdownAllocatedTotal) {
+            breakdownAllocatedTotal.textContent = formatCurrencyValue(currentBreakdownAllocation.allocatedAmount);
+        }
+
+        if (breakdownRemainingTotal) {
+            breakdownRemainingTotal.textContent = formatCurrencyValue(currentBreakdownAllocation.remainingAmount);
+            breakdownRemainingTotal.classList.toggle('text-emerald-700', currentBreakdownAllocation.remainingAmount === 0);
+            breakdownRemainingTotal.classList.toggle('text-red-700', currentBreakdownAllocation.remainingAmount < 0);
+            breakdownRemainingTotal.classList.toggle('text-cyan-950', currentBreakdownAllocation.remainingAmount > 0);
+        }
+
+        if (breakdownOverspentTotal) {
+            breakdownOverspentTotal.textContent = formatCurrencyValue(currentBreakdownAllocation.overspentAmount);
+            breakdownOverspentTotal.classList.toggle('text-red-700', currentBreakdownAllocation.overspentAmount > 0);
+            breakdownOverspentTotal.classList.toggle('text-cyan-950', currentBreakdownAllocation.overspentAmount <= 0);
+        }
+
+        if (breakdownBudgetStatus) {
+            const isOverspent = currentBreakdownAllocation.status === 'OVERSPENT';
+            breakdownBudgetStatus.textContent = isOverspent
+                ? `Budget status: Overspent by ${formatCurrencyValue(currentBreakdownAllocation.overspentAmount)}. No additional cash deduction was recorded.`
+                : currentBreakdownAllocation.status === 'FULLY_USED'
+                    ? 'Budget status: Fully used'
+                    : 'Budget status: Available';
+            breakdownBudgetStatus.classList.toggle('bg-red-50', isOverspent);
+            breakdownBudgetStatus.classList.toggle('text-red-700', isOverspent);
+            breakdownBudgetStatus.classList.toggle('bg-gray-50', !isOverspent);
+            breakdownBudgetStatus.classList.toggle('text-gray-700', !isOverspent);
+        }
+    }
+
+    async function loadBreakdownAllocation(transactionId) {
+        if (!transactionId) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${viewBreakdownBaseUrl}/${transactionId}/breakdown`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                }
+            });
+            const data = await response.json();
+
+            if (response.ok && data.success && data.allocation) {
+                setBreakdownAllocation(data.allocation);
+            }
+        } catch (error) {
+            console.error('Error loading breakdown allocation:', error);
+        }
     }
 
     function escapeHtml(value) {
@@ -1191,6 +1293,8 @@
     // Breakdown modal layout
     document.querySelectorAll('.breakdownBtn').forEach(button => {
         button.addEventListener('click', function() {
+            const parentAmount = Number(this.dataset.amount || 0);
+
             document.getElementById('breakdownName').value = this.dataset.name || '';
             document.getElementById('breakdownDate').value = this.dataset.date || '';
             document.getElementById('breakdownCashAdvanceRequestId').value = this.dataset.id || '';
@@ -1199,6 +1303,14 @@
             document.getElementById('breakdownDetails').value = '';
             document.getElementById('breakdownDescription').value = '';
             document.getElementById('breakdownCategory').value = '';
+            setBreakdownAllocation({
+                parentAmount,
+                allocatedAmount: 0,
+                overspentAmount: 0,
+                status: 'AVAILABLE',
+                remainingAmount: parentAmount,
+            });
+            loadBreakdownAllocation(this.dataset.id || '');
 
             breakdownModal.classList.remove('hidden');
             breakdownModal.style.display = 'flex';
@@ -1247,10 +1359,22 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showSuccessModal('Breakdown saved successfully!');
+                    if (data.allocation) {
+                        setBreakdownAllocation(data.allocation);
+                    }
+
+                    const remaining = Number(data.allocation?.remaining_amount ?? 0);
+                    const overspentAmount = Number(data.allocation?.overspent_amount ?? 0);
+                    const message = overspentAmount > 0
+                        ? `Breakdown saved. Budget is overspent by ${formatCurrencyValue(overspentAmount)}. Ending Balance was not deducted again.`
+                        : remaining > 0
+                            ? `Breakdown saved. Remaining balance: ${formatCurrencyValue(remaining)}.`
+                            : 'Breakdown saved successfully!';
+
+                    showSuccessModal(message);
                     closeBreakdownModal();
                 } else {
-                    alert('Error: ' + data.message);
+                    alert('Error: ' + (data.message || 'Unable to save breakdown.'));
                 }
             })
             .catch(error => {
