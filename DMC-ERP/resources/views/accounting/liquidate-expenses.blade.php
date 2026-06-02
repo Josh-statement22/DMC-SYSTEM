@@ -177,7 +177,15 @@
                     type="reset" 
                     class="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition"
                 >
-                    Clear
+                    Clear Form
+                </button>
+                <button 
+                    type="button" 
+                    id="clearMonthBtn"
+                    class="px-6 py-2.5 rounded-lg border border-red-300 text-red-700 font-semibold hover:bg-red-50 transition"
+                >
+                    <i data-feather="trash-2" class="w-4 h-4 inline mr-1"></i>
+                    Clear Month
                 </button>
                 <button 
                     type="submit" 
@@ -588,6 +596,46 @@
         </div>
     </div>
 
+    <!-- Warning Modal -->
+    <div id="warningModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-amber-600 to-orange-600 p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Warning</h3>
+                        <p class="text-amber-100 text-sm mt-1">Please review this carefully.</p>
+                    </div>
+                    <button id="closeWarningModalBtn" type="button" class="text-white hover:text-amber-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <p id="warningModalMessage" class="text-sm text-gray-700"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="errorModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-red-600 to-rose-600 p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Error</h3>
+                        <p class="text-red-100 text-sm mt-1">Something went wrong.</p>
+                    </div>
+                    <button id="closeErrorModalBtn" type="button" class="text-white hover:text-red-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <p id="errorModalMessage" class="text-sm text-gray-700"></p>
+            </div>
+        </div>
+    </div>
+
     <!-- End of Main Content -->
 </div>
 
@@ -631,9 +679,17 @@
     const successModal = document.getElementById('successModal');
     const closeSuccessModalBtn = document.getElementById('closeSuccessModalBtn');
     const successModalMessage = document.getElementById('successModalMessage');
+    const warningModal = document.getElementById('warningModal');
+    const closeWarningModalBtn = document.getElementById('closeWarningModalBtn');
+    const warningModalMessage = document.getElementById('warningModalMessage');
+    const errorModal = document.getElementById('errorModal');
+    const closeErrorModalBtn = document.getElementById('closeErrorModalBtn');
+    const errorModalMessage = document.getElementById('errorModalMessage');
     const transactionsPerPage = 15;
     let transactionsCurrentPage = 1;
     let successModalTimer = null;
+    let warningModalTimer = null;
+    let errorModalTimer = null;
     let importPreviewRows = [];
     let importResultByRow = new Map();
     let currentBreakdownAllocation = {
@@ -677,6 +733,78 @@
         if (successModalTimer) {
             clearTimeout(successModalTimer);
             successModalTimer = null;
+        }
+    }
+
+    function showWarningModal(message) {
+        if (!warningModal || !warningModalMessage) {
+            return;
+        }
+
+        warningModalMessage.textContent = message;
+        warningModal.classList.remove('hidden');
+        warningModal.style.display = 'flex';
+
+        if (window.feather) {
+            feather.replace();
+        }
+
+        if (warningModalTimer) {
+            clearTimeout(warningModalTimer);
+        }
+
+        warningModalTimer = setTimeout(() => {
+            closeWarningModal();
+        }, 5000);
+    }
+
+    function closeWarningModal() {
+        if (!warningModal) {
+            return;
+        }
+
+        warningModal.classList.add('hidden');
+        warningModal.style.display = 'none';
+
+        if (warningModalTimer) {
+            clearTimeout(warningModalTimer);
+            warningModalTimer = null;
+        }
+    }
+
+    function showErrorModal(message) {
+        if (!errorModal || !errorModalMessage) {
+            return;
+        }
+
+        errorModalMessage.textContent = message;
+        errorModal.classList.remove('hidden');
+        errorModal.style.display = 'flex';
+
+        if (window.feather) {
+            feather.replace();
+        }
+
+        if (errorModalTimer) {
+            clearTimeout(errorModalTimer);
+        }
+
+        errorModalTimer = setTimeout(() => {
+            closeErrorModal();
+        }, 5000);
+    }
+
+    function closeErrorModal() {
+        if (!errorModal) {
+            return;
+        }
+
+        errorModal.classList.add('hidden');
+        errorModal.style.display = 'none';
+
+        if (errorModalTimer) {
+            clearTimeout(errorModalTimer);
+            errorModalTimer = null;
         }
     }
 
@@ -852,22 +980,44 @@
     }
 
     function formatImportAmount(value) {
-        if (typeof value === 'number') {
-            return String(value);
+        if (value === null || value === undefined || value === '') {
+            return '';
         }
 
-        const raw = String(value ?? '').trim();
+        // If it's already a number, convert to string with proper precision
+        if (typeof value === 'number') {
+            return String(Number(value).toFixed(2));
+        }
+
+        const raw = String(value).trim();
         if (!raw) {
             return '';
         }
 
+        // Check if amount is in parentheses (negative format)
         const isParenthesizedNegative = /^\(.*\)$/.test(raw);
-        const normalized = raw
-            .replace(/[(),]/g, '')
-            .replace(/[^\d.-]/g, '');
+        
+        // Remove currency symbols, spaces, and parentheses
+        let normalized = raw
+            .replace(/[$€¥₱]/g, '')  // Remove currency symbols
+            .replace(/\s/g, '')      // Remove spaces
+            .replace(/[()]/g, '');   // Remove parentheses
 
-        if (!normalized) {
-            return raw;
+        // Remove commas (thousand separators)
+        normalized = normalized.replace(/,/g, '');
+
+        // Keep only valid number characters (digits, single dot, single minus)
+        // Remove multiple dots/minus signs
+        const parts = normalized.split('.');
+        if (parts.length > 2) {
+            normalized = parts[0] + '.' + parts.slice(1).join('');
+        }
+
+        // Keep only digits and one dot
+        normalized = normalized.replace(/[^\d.-]/g, '');
+
+        if (!normalized || normalized === '.' || normalized === '-' || normalized === '-.') {
+            return '';
         }
 
         return isParenthesizedNegative ? `-${normalized}` : normalized;
@@ -902,16 +1052,22 @@
         }
 
         return rows.slice(1)
-            .map((row, index) => ({
-                row_number: index + 2,
-                date: formatImportDate(row[columns.date]),
-                employee: String(row[columns.employee] ?? '').trim(),
-                type: String(row[columns.type] ?? '').trim(),
-                purpose: String(row[columns.purpose] ?? '').trim(),
-                category: typeof columns.category === 'undefined' ? '' : String(row[columns.category] ?? '').trim(),
-                remarks: typeof columns.remarks === 'undefined' ? '' : String(row[columns.remarks] ?? '').trim(),
-                amount: formatImportAmount(row[columns.amount]),
-            }))
+            .map((row, index) => {
+                const parsedAmount = formatImportAmount(row[columns.amount]);
+                // Log for debugging
+                console.log(`Row ${index + 2} - Raw amount: "${row[columns.amount]}", Parsed: "${parsedAmount}"`);
+                
+                return {
+                    row_number: index + 2,
+                    date: formatImportDate(row[columns.date]),
+                    employee: String(row[columns.employee] ?? '').trim(),
+                    type: String(row[columns.type] ?? '').trim(),
+                    purpose: String(row[columns.purpose] ?? '').trim(),
+                    category: typeof columns.category === 'undefined' ? '' : String(row[columns.category] ?? '').trim(),
+                    remarks: typeof columns.remarks === 'undefined' ? '' : String(row[columns.remarks] ?? '').trim(),
+                    amount: parsedAmount,
+                };
+            })
             .filter(row => ['date', 'employee', 'type', 'purpose', 'category', 'remarks', 'amount']
                 .some(key => String(row[key] ?? '').trim() !== ''));
     }
@@ -1001,9 +1157,20 @@
             return;
         }
 
+        // Validate that all rows have amounts
+        const rowsWithEmptyAmounts = importPreviewRows.filter(row => !row.amount || String(row.amount).trim() === '');
+        if (rowsWithEmptyAmounts.length > 0) {
+            showErrorModal(`${rowsWithEmptyAmounts.length} row(s) have empty amounts and cannot be imported.`);
+            return;
+        }
+
         try {
             setImportBusy(true);
             setImportStatus('Validating and saving rows...', 'amber');
+            
+            // Log all rows being sent for debugging
+            console.log('Rows being sent to backend:', importPreviewRows);
+            
             const response = await fetch(importExpensesRoute, {
                 method: 'POST',
                 headers: {
@@ -1248,7 +1415,7 @@
         .catch(error => {
             console.error('Error:', error);
             select.value = previousCategory;
-            alert('An error occurred while updating the category');
+            showErrorModal('An error occurred while updating the category');
         })
         .finally(() => {
             select.disabled = false;
@@ -1374,12 +1541,12 @@
                     showSuccessModal(message);
                     closeBreakdownModal();
                 } else {
-                    alert('Error: ' + (data.message || 'Unable to save breakdown.'));
+                    showErrorModal('Error: ' + (data.message || 'Unable to save breakdown.'));
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred while saving the breakdown');
+                showErrorModal('An error occurred while saving the breakdown');
             });
         });
     }
@@ -1419,7 +1586,7 @@
         const openingBalance = parseFloat(document.getElementById('openingBalanceInput').value);
         
         if (isNaN(openingBalance) || openingBalance < 0) {
-            alert('Please enter a valid opening balance');
+            showErrorModal('Please enter a valid opening balance');
             return;
         }
 
@@ -1439,7 +1606,7 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Opening balance saved successfully!');
+                showSuccessModal('Opening balance saved successfully!');
                 openingBalanceModal.classList.add('hidden');
                 openingBalanceModal.style.display = 'none';
                 openingBalanceValue = openingBalance;
@@ -1453,12 +1620,12 @@
 
                 updateBalances();
             } else {
-                alert('Error: ' + data.message);
+                showErrorModal('Error: ' + data.message);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('An error occurred while saving');
+            showErrorModal('An error occurred while saving');
         });
     });
 
@@ -1493,12 +1660,12 @@
                         location.reload();
                     }, 5000);
             } else {
-                alert('Error: ' + data.message);
+                showErrorModal('Error: ' + data.message);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('An error occurred while recording the expense');
+            showErrorModal('An error occurred while recording the expense');
         });
 
         this.reset();
@@ -1520,18 +1687,56 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Expense deleted successfully!');
-                        location.reload();
+                        showSuccessModal('Expense deleted successfully!');
+                        setTimeout(() => location.reload(), 5000);
                     } else {
-                        alert('Error: ' + data.message);
+                        showErrorModal('Error: ' + data.message);
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('An error occurred while deleting the expense');
+                    showErrorModal('An error occurred while deleting the expense');
                 });
             }
         });
+    });
+
+    // Clear all transactions for the month
+    document.getElementById('clearMonthBtn').addEventListener('click', function() {
+        const year = document.getElementById('year').value;
+        const month = document.getElementById('month').value;
+        const monthName = document.getElementById('monthSelector').options[document.getElementById('monthSelector').selectedIndex].text;
+        
+        const confirmMessage = `⚠️ WARNING!\n\nThis will DELETE ALL transactions for ${monthName}.\n\nAre you absolutely sure? This cannot be undone.`;
+        
+        if (confirm(confirmMessage)) {
+            const secondConfirm = confirm('This is your last chance to cancel. Click OK to permanently delete all transactions for this month.');
+            
+            if (secondConfirm) {
+                const clearMonthUrl = @json(url('/accounting/liquidate-expenses/month')) + '/' + year + '/' + month;
+                
+                fetch(clearMonthUrl, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccessModal(data.message);
+                        setTimeout(() => location.reload(), 5000);
+                    } else {
+                        showErrorModal('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showErrorModal('An error occurred while clearing the month');
+                });
+            }
+        }
     });
 
     document.querySelectorAll('.viewBreakdownBtn').forEach(button => {
@@ -1547,7 +1752,7 @@
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
-                    alert('Error: ' + data.message);
+                    showErrorModal('Error: ' + data.message);
                     return;
                 }
 
@@ -1583,7 +1788,7 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred while loading the breakdown');
+                showErrorModal('An error occurred while loading the breakdown');
             });
         });
     });
@@ -1609,6 +1814,30 @@
         successModal.addEventListener('click', function(e) {
             if (e.target === successModal) {
                 closeSuccessModal();
+            }
+        });
+    }
+
+    if (closeWarningModalBtn) {
+        closeWarningModalBtn.addEventListener('click', closeWarningModal);
+    }
+
+    if (warningModal) {
+        warningModal.addEventListener('click', function(e) {
+            if (e.target === warningModal) {
+                closeWarningModal();
+            }
+        });
+    }
+
+    if (closeErrorModalBtn) {
+        closeErrorModalBtn.addEventListener('click', closeErrorModal);
+    }
+
+    if (errorModal) {
+        errorModal.addEventListener('click', function(e) {
+            if (e.target === errorModal) {
+                closeErrorModal();
             }
         });
     }

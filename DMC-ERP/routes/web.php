@@ -1012,6 +1012,7 @@ Route::delete('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Contro
 Route::patch('/accounting/liquidate-expenses/expense/{id}/category', [\App\Http\Controllers\AccountingController::class, 'updateExpenseCategory'])->middleware('auth')->name('accounting.update-expense-category');
 Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
 Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
+Route::delete('/accounting/liquidate-expenses/month/{year}/{month}', [\App\Http\Controllers\AccountingController::class, 'clearMonth'])->middleware('auth')->name('accounting.clear-month');
 
 Route::get('/accounting/summary', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {

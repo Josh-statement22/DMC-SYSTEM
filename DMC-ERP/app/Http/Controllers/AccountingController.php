@@ -462,13 +462,25 @@ class AccountingController extends Controller
             }
 
             $employeeValue = $row['employee'] ?? '';
-            $employeeKey = $normalize($employeeValue);
-            $employeeLookupKey = $normalizeLookup($employeeValue);
-            $employee = $employeeKey !== ''
-                ? ($employees[$employeeKey] ?? $employees[$employeeLookupKey] ?? null)
-                : null;
+            
+            // If employee name is blank OR not found in system, automatically use the current logged-in user
+            if (trim($employeeValue) === '') {
+                $employee = Auth::user();
+            } else {
+                $employeeKey = $normalize($employeeValue);
+                $employeeLookupKey = $normalizeLookup($employeeValue);
+                $employee = $employeeKey !== ''
+                    ? ($employees[$employeeKey] ?? $employees[$employeeLookupKey] ?? null)
+                    : null;
+                
+                // If employee not found, use current user
+                if (!$employee) {
+                    $employee = Auth::user();
+                }
+            }
+            
             if (! $employee) {
-                $errors[] = 'Employee must match an existing employee name or employee ID.';
+                $errors[] = 'Unable to determine employee for this transaction.';
             }
 
             $typeValue = $normalize($row['type'] ?? '');
@@ -495,17 +507,70 @@ class AccountingController extends Controller
             $purpose = trim((string) ($row['purpose'] ?? ''));
 
             $categoryValue = $row['category'] ?? '';
-            $categoryKey = $normalize($categoryValue);
-            $categoryLookupKey = $normalizeLookup($categoryValue);
-            $category = $categoryKey !== ''
-                ? ($categories[$categoryKey] ?? $categories[$categoryLookupKey] ?? null)
-                : null;
-            if ($categoryKey !== '' && ! $category) {
-                $errors[] = 'Category must match an existing Breakdown Expenses category.';
+            $category = null;
+            
+            if ($categoryValue !== '') {
+                $categoryKey = $normalize($categoryValue);
+                $categoryLookupKey = $normalizeLookup($categoryValue);
+                $category = $categoryKey !== ''
+                    ? ($categories[$categoryKey] ?? $categories[$categoryLookupKey] ?? null)
+                    : null;
+                
+                // If category doesn't exist, create it automatically
+                if (!$category) {
+                    $categoryId = DB::table('categories')->insertGetId([
+                        'particulars_category' => trim($categoryValue),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    
+                    $category = (object) [
+                        'id' => $categoryId,
+                        'particulars_category' => trim($categoryValue),
+                    ];
+                    
+                    // Add to categories map for future lookups in this import
+                    $categories[$categoryKey] = $category;
+                    $categories[$categoryLookupKey] = $category;
+                }
             }
 
-            $amountValue = preg_replace('/[^\d.\-]/', '', (string) ($row['amount'] ?? ''));
-            $amount = is_numeric($amountValue) ? round((float) $amountValue, 2) : 0.0;
+            $amountValue = trim((string) ($row['amount'] ?? ''));
+            
+            // Handle empty amount
+            if ($amountValue === '') {
+                $amount = 0.0;
+            } else {
+                // Remove currency symbols and spaces
+                $amountValue = preg_replace('/[₱$€¥\s]/u', '', $amountValue);
+                
+                // Handle negative amounts in parentheses format: (1000) = -1000
+                $isNegative = preg_match('/^\([\d.,\s]+\)$/', $amountValue);
+                if ($isNegative) {
+                    $amountValue = '-' . preg_replace('/[()]/','', $amountValue);
+                }
+                
+                // Remove commas (thousand separators)
+                $amountValue = str_replace(',', '', $amountValue);
+                
+                // Remove any remaining non-numeric characters except dots and minus signs
+                $amountValue = preg_replace('/[^\d.\-]/','', $amountValue);
+                
+                // Ensure only one decimal point
+                $parts = explode('.', $amountValue);
+                if (count($parts) > 2) {
+                    $amountValue = $parts[0] . '.' . implode('', array_slice($parts, 1));
+                }
+                
+                // Convert to float - be strict about numeric validation
+                if (empty($amountValue) || $amountValue === '.' || $amountValue === '-' || $amountValue === '-.') {
+                    $amount = 0.0;
+                } else {
+                    $amount = (float) $amountValue;
+                    $amount = round($amount, 2);
+                }
+            }
+            
             if ($amount <= 0) {
                 $errors[] = 'Amount must be greater than zero.';
             }
@@ -591,6 +656,50 @@ class AccountingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Expense transaction deleted successfully.',
+        ]);
+    }
+
+    public function clearMonth(int $year, int $month): JsonResponse
+    {
+        $this->authorizeAccounting();
+
+        // Validate year and month
+        if ($month < 1 || $month > 12) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid month.',
+            ], 422);
+        }
+
+        // Get all expenses for the specified month
+        $startDate = Carbon::createFromDate($year, $month, 1)->startOfMonth();
+        $endDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
+
+        $expenses = DB::table('cash_advance_requests')
+            ->whereBetween('request_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->select('id', 'request_date')
+            ->get();
+
+        if ($expenses->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No transactions found for this month.',
+                'deleted_count' => 0,
+            ]);
+        }
+
+        // Delete all expenses for this month
+        DB::table('cash_advance_requests')
+            ->whereBetween('request_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->delete();
+
+        // Sync the monthly balance for this month
+        AccountingMonthlyBalance::syncStoredMonth($startDate->toDateString());
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf('Successfully deleted %d transaction(s) for %s %d.', $expenses->count(), $startDate->format('F'), $year),
+            'deleted_count' => $expenses->count(),
         ]);
     }
 
