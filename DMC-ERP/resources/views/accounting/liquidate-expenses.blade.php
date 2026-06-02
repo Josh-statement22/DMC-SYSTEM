@@ -77,21 +77,13 @@
 
     <!-- Expense Entry Form -->
     <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div class="flex items-center justify-between mb-6">
+        <div class="mb-6">
             <h3 class="text-lg font-semibold text-gray-900">Record Expense Transaction</h3>
-            <button
-                type="button"
-                id="toggleTransactionsBtn"
-                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition"
-            >
-                <i data-feather="eye" class="w-4 h-4"></i>
-                <span>Show Transactions</span>
-            </button>
         </div>
         
         <form id="expenseForm" class="space-y-6">
             @csrf
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- Date Input -->
                 <div>
                     <label for="expense_date" class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
@@ -136,6 +128,22 @@
                     </select>
                 </div>
 
+                <!-- Category -->
+                <div>
+                    <label for="category_id" class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <select
+                        id="category_id"
+                        name="category_id"
+                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                    >
+                        <option value="">Select Category</option>
+                        @forelse($categories ?? [] as $category)
+                            <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+                        @empty
+                        @endforelse
+                    </select>
+                </div>
+
                 <!-- Amount Input -->
                 <div>
                     <label for="amount" class="block text-sm font-semibold text-gray-700 mb-2">Amount (PHP)</label>
@@ -151,7 +159,6 @@
                 </div>
             </div>
 
-            <!-- Category (dropdown) -->
             <div id="purposeSection">
                 <label for="purpose" class="block text-sm font-semibold text-gray-700 mb-2">Purpose</label>
                 <input
@@ -299,141 +306,101 @@
         </div>
     </div>
 
-    <!-- Transactions Table (Hidden by default) -->
-    <div id="transactionsContainer" class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm" style="display: none;">
+    <!-- Transactions Table -->
+    <div id="transactionsContainer" class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
         <div class="p-6 border-b border-gray-200">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                     <h3 class="text-lg font-semibold text-gray-900">Recorded Transactions</h3>
-                    <p class="mt-1 text-sm text-gray-500"><span id="transactionsVisibleCount">{{ ($expenses ?? collect())->count() }}</span> transaction(s) shown</p>
+                    <p class="mt-1 text-sm text-gray-500"><span id="transactionsVisibleCount">{{ isset($expenses) && method_exists($expenses, 'total') ? $expenses->total() : ($expenses ?? collect())->count() }}</span> transaction(s) shown</p>
                 </div>
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                <form id="transactionFilterForm" method="GET" action="{{ route('accounting.liquidate-expenses') }}" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[150px_150px_150px_190px_220px_auto] xl:items-end">
+                    <input type="hidden" name="year" value="{{ $year }}">
+                    <input type="hidden" name="month" value="{{ $month }}">
                     <div>
-                        <label for="transactionDateFilter" class="block text-sm font-semibold text-gray-700 mb-2">Filter Date</label>
-                        <select id="transactionDateFilter" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
-                            <option value="">All dates</option>
+                        <label for="transactionTypeFilter" class="block text-sm font-semibold text-gray-700 mb-2">Transaction Type</label>
+                        <select id="transactionTypeFilter" name="type" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
+                            <option value="" {{ ($transactionFilters['type'] ?? '') === '' ? 'selected' : '' }}>All Types</option>
+                            <option value="credit" {{ ($transactionFilters['type'] ?? '') === 'credit' ? 'selected' : '' }}>Credit</option>
+                            <option value="debit" {{ ($transactionFilters['type'] ?? '') === 'debit' ? 'selected' : '' }}>Debit</option>
                         </select>
                     </div>
-                    <button
-                        type="button"
-                        id="resetTransactionDateFilter"
-                        class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-                    >
-                        <i data-feather="rotate-ccw" class="w-4 h-4"></i>
-                        Reset
-                    </button>
-                </div>
+                    <div>
+                        <label for="transactionStartDateFilter" class="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
+                        <input
+                            id="transactionStartDateFilter"
+                            name="start_date"
+                            type="date"
+                            value="{{ $transactionFilters['start_date'] ?? '' }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                        >
+                    </div>
+                    <div>
+                        <label for="transactionEndDateFilter" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                        <input
+                            id="transactionEndDateFilter"
+                            name="end_date"
+                            type="date"
+                            value="{{ $transactionFilters['end_date'] ?? '' }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                        >
+                    </div>
+                    <div>
+                        <label for="transactionCategoryFilter" class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                        <select id="transactionCategoryFilter" name="category" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
+                            <option value="" {{ ($transactionFilters['category'] ?? '') === '' ? 'selected' : '' }}>All categories</option>
+                            @forelse($categories ?? [] as $category)
+                                <option value="{{ $category->particulars_category }}" {{ ($transactionFilters['category'] ?? '') === $category->particulars_category ? 'selected' : '' }}>
+                                    {{ $category->particulars_category }}
+                                </option>
+                            @empty
+                            @endforelse
+                        </select>
+                    </div>
+                    <div>
+                        <label for="transactionSearchFilter" class="block text-sm font-semibold text-gray-700 mb-2">Search</label>
+                        <input
+                            id="transactionSearchFilter"
+                            name="search"
+                            type="search"
+                            value="{{ $transactionFilters['search'] ?? '' }}"
+                            placeholder="Employee, purpose, remarks"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                        >
+                    </div>
+                    <div class="flex flex-col gap-2 sm:flex-row xl:justify-end">
+                        <button
+                            type="submit"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700"
+                        >
+                            <i data-feather="filter" class="w-4 h-4"></i>
+                            Apply
+                        </button>
+                        <a
+                            id="resetTransactionFilters"
+                            href="{{ route('accounting.liquidate-expenses', ['year' => $year, 'month' => $month]) }}"
+                            class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                        >
+                            <i data-feather="rotate-ccw" class="w-4 h-4"></i>
+                            Reset
+                        </a>
+                    </div>
+                </form>
             </div>
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b border-gray-200 bg-gray-50">
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Employee</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Type</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Purpose</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Remarks</th>
-                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-700">Amount</th>
-                        <th class="px-6 py-3 text-center text-xs font-semibold text-gray-700">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="transactionsTableBody">
-                    @forelse($expenses ?? [] as $expense)
-                        <tr class="transaction-row border-b border-gray-200 hover:bg-gray-50" data-transaction-date="{{ $expense->expense_date->format('Y-m-d') }}">
-                            <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->expense_date->format('Y-m-d') }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->employee_name ?? 'Unassigned' }}</td>
-                            <td class="px-6 py-3 text-sm">
-                                <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 {{ $expense->transaction_type === 'debit' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700' }}">
-                                    {{ ucfirst($expense->transaction_type) }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->transaction_details ?? '-' }}</td>
-                            <td class="px-6 py-2 text-sm text-gray-900">
-                                <select
-                                    class="transactionCategorySelect w-44 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-700 transition focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:cursor-wait disabled:bg-gray-50"
-                                    data-id="{{ $expense->id }}"
-                                    data-original-category="{{ $expense->category ?? '' }}"
-                                    aria-label="Transaction category"
-                                >
-                                    <option value="">{{ ($expense->category ?? null) ? 'Uncategorized' : 'Select category' }}</option>
-                                    @forelse($categories ?? [] as $category)
-                                        <option value="{{ $category->particulars_category }}" {{ ($expense->category ?? '') === $category->particulars_category ? 'selected' : '' }}>
-                                            {{ $category->particulars_category }}
-                                        </option>
-                                    @empty
-                                    @endforelse
-                                </select>
-                            </td>
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ $expense->description ?? '-' }}</td>
-                            <td class="px-6 py-3 text-sm text-right font-semibold {{ $expense->transaction_type === 'debit' ? 'text-red-600' : 'text-green-600' }}">
-                                {{ $expense->transaction_type === 'debit' ? '-' : '+' }}PHP {{ number_format($expense->amount, 2) }}
-                            </td>
-                            <td class="px-6 py-3 text-center">
-                                <div class="inline-flex items-center gap-3">
-                                    <button
-                                        type="button"
-                                        class="text-teal-600 hover:text-teal-800 font-semibold breakdownBtn"
-                                        data-id="{{ $expense->id }}"
-                                        data-employee-id="{{ $expense->employee_id ?? '' }}"
-                                        data-name="{{ $expense->employee_name ?? 'Unassigned' }}"
-                                        data-date="{{ $expense->expense_date->format('Y-m-d') }}"
-                                        data-amount="{{ number_format((float) $expense->amount, 2, '.', '') }}"
-                                    >
-                                        <i data-feather="edit-3" class="w-4 h-4"></i>
-                                        <span class="sr-only">Breakdown</span>
-                                    </button>
-                                    <button type="button" class="text-cyan-600 hover:text-cyan-800 font-semibold viewBreakdownBtn" data-id="{{ $expense->id }}">
-                                        <i data-feather="eye" class="w-4 h-4"></i>
-                                        <span class="sr-only">View</span>
-                                    </button>
-                                    <button type="button" class="text-red-600 hover:text-red-800 font-semibold deleteBtn" data-id="{{ $expense->id }}">
-                                        <i data-feather="trash-2" class="w-4 h-4"></i>
-                                        <span class="sr-only">Delete</span>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr class="border-b border-gray-200">
-                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">No transactions recorded yet</td>
-                        </tr>
-                    @endforelse
-                    <tr id="transactionsFilterEmptyRow" class="hidden border-b border-gray-200">
-                        <td colspan="8" class="px-6 py-8 text-center text-gray-500">No transactions found for the selected date</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div id="transactionsPaginationContainer" class="hidden border-t border-gray-200 px-6 py-4">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-sm text-gray-600">Page <span id="transactionsCurrentPageLabel">1</span> of <span id="transactionsTotalPagesLabel">1</span></p>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        id="transactionsPrevPageBtn"
-                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        Previous
-                    </button>
-                    <div id="transactionsPageNumbers" class="flex flex-wrap items-center gap-2"></div>
-                    <button
-                        type="button"
-                        id="transactionsNextPageBtn"
-                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        Next
-                    </button>
-                </div>
-            </div>
+        <div id="transactions-table-container" class="relative">
+            @include('transactions.partials.table', [
+                'categories' => $categories,
+                'expenses' => $expenses,
+                'hasTransactionFilters' => $hasTransactionFilters,
+            ])
         </div>
     </div>
 
     <!-- Breakdown Modal -->
     <div id="breakdownModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-teal-600 to-cyan-600 p-5">
+        <div class="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div class="shrink-0 bg-gradient-to-r from-teal-600 to-cyan-600 p-5">
                 <div class="flex items-center justify-between gap-4">
                     <div>
                         <h3 class="text-xl font-bold text-white">Transaction Breakdown</h3>
@@ -445,7 +412,7 @@
                 </div>
             </div>
 
-            <form id="breakdownForm" class="p-6 space-y-6">
+            <form id="breakdownForm" class="flex-1 overflow-y-auto p-6 space-y-5">
                 @csrf
                 <input type="hidden" id="breakdownRecordSource" name="record_source" value="breakdown">
                 <input type="hidden" id="breakdownCashAdvanceRequestId" name="cash_advance_request_id">
@@ -471,7 +438,7 @@
                 <p id="breakdownBudgetStatus" class="rounded-xl bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
                     Budget status: Available
                 </p>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Name</label>
                         <input id="breakdownName" type="text" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-gray-50 text-gray-900" readonly>
@@ -496,14 +463,34 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 gap-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Transaction Details</label>
-                        <textarea id="breakdownDetails" name="transaction_details" rows="3" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900"></textarea>
+                <div class="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Transaction Details</label>
+                            <textarea id="breakdownDetails" name="transaction_details" rows="4" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                            <textarea id="breakdownDescription" name="description" rows="4" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900"></textarea>
+                        </div>
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                        <textarea id="breakdownDescription" name="description" rows="3" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900"></textarea>
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <label class="block text-sm font-semibold text-gray-700">Attachments <span id="breakdownAttachmentCounter">(0)</span></label>
+                            <p class="text-xs font-semibold text-gray-500">PDF, JPG, JPEG, PNG, DOCX, XLSX. Max 10 files, 10MB each.</p>
+                        </div>
+                        <div id="breakdownAttachmentDropzone" class="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center transition hover:border-teal-400 hover:bg-teal-50/40">
+                            <input id="breakdownAttachments" name="attachments[]" type="file" class="sr-only" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                            <p class="text-sm font-semibold text-gray-700">Drag & Drop Files Here</p>
+                            <p class="my-2 text-xs font-semibold uppercase tracking-wide text-gray-400">or</p>
+                            <button id="breakdownSelectFilesBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700">
+                                <i data-feather="upload" class="w-4 h-4"></i>
+                                Select Files
+                            </button>
+                        </div>
+                        <div id="breakdownAttachmentPreview" class="mt-3 rounded-2xl border border-gray-200 bg-white p-3">
+                            <p class="text-center text-sm text-gray-500">No files selected</p>
+                        </div>
                     </div>
                 </div>
 
@@ -530,9 +517,19 @@
                         <h3 class="text-xl font-bold text-white">Debit Breakdown View</h3>
                         <p id="viewBreakdownSubtitle" class="text-cyan-100 text-sm mt-1"></p>
                     </div>
-                    <button id="closeViewBreakdownBtn" type="button" class="text-white hover:text-cyan-100 transition">
-                        <i data-feather="x" class="w-6 h-6"></i>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="printViewBreakdownBtn" type="button" class="inline-flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/25">
+                            <i data-feather="printer" class="w-4 h-4"></i>
+                            Print
+                        </button>
+                        <button id="pdfViewBreakdownBtn" type="button" class="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-cyan-50">
+                            <i data-feather="download" class="w-4 h-4"></i>
+                            Export PDF
+                        </button>
+                        <button id="closeViewBreakdownBtn" type="button" class="text-white hover:text-cyan-100 transition">
+                            <i data-feather="x" class="w-6 h-6"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -564,7 +561,22 @@
                                 <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No breakdown loaded yet</td>
                             </tr>
                         </tbody>
+                        <tfoot class="border-t border-gray-200 bg-gray-50">
+                            <tr>
+                                <td colspan="4" class="px-4 py-3 text-right text-sm font-bold text-gray-900">TOTAL</td>
+                                <td id="viewBreakdownTotal" class="px-4 py-3 text-right text-sm font-bold text-teal-700">PHP 0.00</td>
+                            </tr>
+                        </tfoot>
                     </table>
+                </div>
+                <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                        <h4 id="viewBreakdownAttachmentCount" class="text-sm font-bold text-gray-800">Attachments (0)</h4>
+                        <p class="text-xs font-semibold text-gray-500">Supporting documents for this debit breakdown</p>
+                    </div>
+                    <div id="viewBreakdownAttachmentsList" class="space-y-2">
+                        <p class="text-sm text-gray-500">No attachments found.</p>
+                    </div>
                 </div>
 
                 <div class="flex justify-end pt-2">
@@ -636,10 +648,26 @@
         </div>
     </div>
 
+    <div id="attachmentImagePreviewModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[70] p-4">
+        <div class="w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div class="flex items-center justify-between gap-4 border-b border-gray-200 px-5 py-4">
+                <h3 id="attachmentImagePreviewTitle" class="text-lg font-bold text-gray-900">Attachment Preview</h3>
+                <button id="closeAttachmentImagePreviewBtn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600 transition hover:bg-gray-200">
+                    <i data-feather="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="max-h-[75vh] overflow-auto bg-gray-100 p-4">
+                <img id="attachmentImagePreviewImg" src="" alt="Attachment preview" class="mx-auto max-h-[70vh] max-w-full rounded-xl bg-white object-contain shadow">
+            </div>
+        </div>
+    </div>
+
     <!-- End of Main Content -->
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 <script>
     const currentYear = {{ $year }};
     const currentMonth = {{ $month }};
@@ -650,6 +678,10 @@
     const deleteExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const updateExpenseCategoryBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const viewBreakdownBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    const deleteBreakdownAttachmentBaseUrl = @json(url('/accounting/liquidate-expenses/breakdown-attachment'));
+    const reportCompanyName = 'DMC Enterprises';
+    const reportLogoUrl = @json(asset('images/logo.png'));
+    const reportGeneratedBy = @json(optional(Auth::user())->name ?? 'Accounting User');
     let openingBalanceValue = @json((float) ($monthlyBalance->opening_balance ?? 0));
     // No external cash-advance selection — form records manual liquidation entries
     const breakdownModal = document.getElementById('breakdownModal');
@@ -663,19 +695,19 @@
     const breakdownRemainingTotal = document.getElementById('breakdownRemainingTotal');
     const breakdownOverspentTotal = document.getElementById('breakdownOverspentTotal');
     const breakdownBudgetStatus = document.getElementById('breakdownBudgetStatus');
+    const breakdownAttachments = document.getElementById('breakdownAttachments');
+    const breakdownAttachmentDropzone = document.getElementById('breakdownAttachmentDropzone');
+    const breakdownSelectFilesBtn = document.getElementById('breakdownSelectFilesBtn');
+    const breakdownAttachmentPreview = document.getElementById('breakdownAttachmentPreview');
+    const breakdownAttachmentCounter = document.getElementById('breakdownAttachmentCounter');
     const viewBreakdownModal = document.getElementById('viewBreakdownModal');
     const closeViewBreakdownBtn = document.getElementById('closeViewBreakdownBtn');
     const closeViewBreakdownFooterBtn = document.getElementById('closeViewBreakdownFooterBtn');
-    const transactionDateFilter = document.getElementById('transactionDateFilter');
-    const resetTransactionDateFilter = document.getElementById('resetTransactionDateFilter');
+    const printViewBreakdownBtn = document.getElementById('printViewBreakdownBtn');
+    const pdfViewBreakdownBtn = document.getElementById('pdfViewBreakdownBtn');
+    const transactionFilterForm = document.getElementById('transactionFilterForm');
+    const transactionsTableContainer = document.getElementById('transactions-table-container');
     const transactionsVisibleCount = document.getElementById('transactionsVisibleCount');
-    const transactionsFilterEmptyRow = document.getElementById('transactionsFilterEmptyRow');
-    const transactionsPaginationContainer = document.getElementById('transactionsPaginationContainer');
-    const transactionsPrevPageBtn = document.getElementById('transactionsPrevPageBtn');
-    const transactionsNextPageBtn = document.getElementById('transactionsNextPageBtn');
-    const transactionsPageNumbers = document.getElementById('transactionsPageNumbers');
-    const transactionsCurrentPageLabel = document.getElementById('transactionsCurrentPageLabel');
-    const transactionsTotalPagesLabel = document.getElementById('transactionsTotalPagesLabel');
     const successModal = document.getElementById('successModal');
     const closeSuccessModalBtn = document.getElementById('closeSuccessModalBtn');
     const successModalMessage = document.getElementById('successModalMessage');
@@ -685,13 +717,20 @@
     const errorModal = document.getElementById('errorModal');
     const closeErrorModalBtn = document.getElementById('closeErrorModalBtn');
     const errorModalMessage = document.getElementById('errorModalMessage');
-    const transactionsPerPage = 15;
-    let transactionsCurrentPage = 1;
+    const attachmentImagePreviewModal = document.getElementById('attachmentImagePreviewModal');
+    const attachmentImagePreviewTitle = document.getElementById('attachmentImagePreviewTitle');
+    const attachmentImagePreviewImg = document.getElementById('attachmentImagePreviewImg');
+    const closeAttachmentImagePreviewBtn = document.getElementById('closeAttachmentImagePreviewBtn');
+    const allowedBreakdownAttachmentExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'xlsx'];
+    const maxBreakdownAttachmentFiles = 10;
+    const maxBreakdownAttachmentBytes = 10 * 1024 * 1024;
+    let selectedBreakdownAttachmentFiles = [];
     let successModalTimer = null;
     let warningModalTimer = null;
     let errorModalTimer = null;
     let importPreviewRows = [];
     let importResultByRow = new Map();
+    let currentViewBreakdownReport = null;
     let currentBreakdownAllocation = {
         parentAmount: 0,
         allocatedAmount: 0,
@@ -813,6 +852,741 @@
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+    }
+
+    function formatFileSize(bytes) {
+        const size = Number(bytes || 0);
+
+        if (size >= 1024 * 1024) {
+            return (size / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        if (size >= 1024) {
+            return (size / 1024).toFixed(2) + ' KB';
+        }
+
+        return size + ' B';
+    }
+
+    function getFileExtension(fileName) {
+        return String(fileName || '').split('.').pop().toLowerCase();
+    }
+
+    function isImageAttachment(fileName, fileType = '') {
+        const extension = getFileExtension(fileName);
+        return ['jpg', 'jpeg', 'png'].includes(extension) || String(fileType || '').startsWith('image/');
+    }
+
+    function getAttachmentIcon(fileName, fileType = '') {
+        const extension = getFileExtension(fileName);
+
+        if (isImageAttachment(fileName, fileType)) {
+            return '🖼';
+        }
+
+        if (extension === 'xlsx') {
+            return '📊';
+        }
+
+        return '📄';
+    }
+
+    function syncBreakdownAttachmentInput() {
+        if (!breakdownAttachments) {
+            return;
+        }
+
+        const dataTransfer = new DataTransfer();
+        selectedBreakdownAttachmentFiles.forEach(file => dataTransfer.items.add(file));
+        breakdownAttachments.files = dataTransfer.files;
+    }
+
+    function renderBreakdownAttachmentPreview() {
+        if (!breakdownAttachmentPreview || !breakdownAttachmentCounter) {
+            return;
+        }
+
+        breakdownAttachmentCounter.textContent = `(${selectedBreakdownAttachmentFiles.length})`;
+
+        if (!selectedBreakdownAttachmentFiles.length) {
+            breakdownAttachmentPreview.innerHTML = '<p class="text-center text-sm text-gray-500">No files selected</p>';
+            return;
+        }
+
+        breakdownAttachmentPreview.innerHTML = selectedBreakdownAttachmentFiles.map((file, index) => `
+            <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold text-gray-800">${getAttachmentIcon(file.name, file.type)} ${escapeHtml(file.name)}</p>
+                    <p class="text-xs text-gray-500">${escapeHtml(formatFileSize(file.size))}</p>
+                </div>
+                <button type="button" class="removeBreakdownAttachmentBtn rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50" data-index="${index}">Remove</button>
+            </div>
+        `).join('');
+    }
+
+    function addBreakdownAttachmentFiles(fileList) {
+        const files = Array.from(fileList || []);
+
+        if (!files.length) {
+            return;
+        }
+
+        const accepted = [...selectedBreakdownAttachmentFiles];
+        const errors = [];
+
+        files.forEach(file => {
+            const extension = getFileExtension(file.name);
+
+            if (!allowedBreakdownAttachmentExtensions.includes(extension)) {
+                errors.push(`${file.name} is not a supported file type.`);
+                return;
+            }
+
+            if (file.size > maxBreakdownAttachmentBytes) {
+                errors.push(`${file.name} is larger than 10MB.`);
+                return;
+            }
+
+            if (accepted.length >= maxBreakdownAttachmentFiles) {
+                errors.push('Maximum of 10 files per transaction reached.');
+                return;
+            }
+
+            accepted.push(file);
+        });
+
+        selectedBreakdownAttachmentFiles = accepted;
+        syncBreakdownAttachmentInput();
+        renderBreakdownAttachmentPreview();
+
+        if (errors.length) {
+            showWarningModal(errors.join(' '));
+        }
+    }
+
+    function resetBreakdownAttachments() {
+        selectedBreakdownAttachmentFiles = [];
+
+        if (breakdownAttachments) {
+            breakdownAttachments.value = '';
+        }
+
+        syncBreakdownAttachmentInput();
+        renderBreakdownAttachmentPreview();
+    }
+
+    if (breakdownSelectFilesBtn && breakdownAttachments) {
+        breakdownSelectFilesBtn.addEventListener('click', () => breakdownAttachments.click());
+    }
+
+    if (breakdownAttachments) {
+        breakdownAttachments.addEventListener('change', function() {
+            addBreakdownAttachmentFiles(this.files);
+        });
+    }
+
+    if (breakdownAttachmentDropzone) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            breakdownAttachmentDropzone.addEventListener(eventName, function(event) {
+                event.preventDefault();
+                breakdownAttachmentDropzone.classList.add('border-teal-500', 'bg-teal-50');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            breakdownAttachmentDropzone.addEventListener(eventName, function(event) {
+                event.preventDefault();
+                breakdownAttachmentDropzone.classList.remove('border-teal-500', 'bg-teal-50');
+            });
+        });
+
+        breakdownAttachmentDropzone.addEventListener('drop', function(event) {
+            addBreakdownAttachmentFiles(event.dataTransfer?.files || []);
+        });
+    }
+
+    if (breakdownAttachmentPreview) {
+        breakdownAttachmentPreview.addEventListener('click', function(event) {
+            const removeButton = event.target.closest('.removeBreakdownAttachmentBtn');
+
+            if (!removeButton) {
+                return;
+            }
+
+            selectedBreakdownAttachmentFiles.splice(Number(removeButton.dataset.index), 1);
+            syncBreakdownAttachmentInput();
+            renderBreakdownAttachmentPreview();
+        });
+    }
+
+    function parseLocalDate(value) {
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+            return value;
+        }
+
+        const raw = String(value ?? '').trim();
+        const matchedDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+        if (matchedDate) {
+            return new Date(Number(matchedDate[1]), Number(matchedDate[2]) - 1, Number(matchedDate[3]));
+        }
+
+        const parsedDate = new Date(raw);
+        return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+
+    function formatReportDate(value) {
+        const date = parseLocalDate(value);
+
+        if (!date) {
+            return value || '-';
+        }
+
+        return date.toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    }
+
+    function formatReportTimestamp(date = new Date()) {
+        return date.toLocaleString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    }
+
+    function absoluteReportUrl(url) {
+        if (!url) {
+            return '';
+        }
+
+        try {
+            return new URL(url, window.location.origin).href;
+        } catch (error) {
+            return url;
+        }
+    }
+
+    function getBreakdownAttachmentLinks(report) {
+        const requestAttachments = (report.attachments || [])
+            .filter(attachment => attachment?.url)
+            .map((attachment, index) => ({
+                name: attachment.name || `Attachment ${index + 1}`,
+                url: absoluteReportUrl(attachment.url),
+            }));
+
+        const receiptAttachments = (report.breakdowns || [])
+            .filter(row => row?.receipt_url)
+            .map((row, index) => ({
+                name: `${row.category_name || 'Receipt'} Receipt ${index + 1}`,
+                url: absoluteReportUrl(row.receipt_url),
+            }));
+
+        const transactionAttachments = (report.breakdowns || [])
+            .flatMap(row => Array.isArray(row.attachments) ? row.attachments : [])
+            .filter(attachment => attachment?.url)
+            .map((attachment, index) => ({
+                name: attachment.name || `Supporting Document ${index + 1}`,
+                url: absoluteReportUrl(attachment.url),
+            }));
+
+        return [...requestAttachments, ...receiptAttachments, ...transactionAttachments];
+    }
+
+    function normalizeBreakdownReport(data) {
+        const breakdowns = Array.isArray(data?.breakdowns) ? data.breakdowns : [];
+        const total = breakdowns.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+        return {
+            debit: data?.debit || {},
+            breakdowns,
+            attachments: Array.isArray(data?.attachments) ? data.attachments : [],
+            attachment_count: Number(data?.attachment_count || 0),
+            total,
+        };
+    }
+
+    function getReportAttachmentCount(report) {
+        return Number(report.attachment_count || 0);
+    }
+
+    function renderViewBreakdownAttachments(report) {
+        const list = document.getElementById('viewBreakdownAttachmentsList');
+        const counter = document.getElementById('viewBreakdownAttachmentCount');
+
+        if (!list || !counter) {
+            return;
+        }
+
+        const rowAttachments = (report.breakdowns || []).flatMap(row => {
+            const label = row.category_name || formatReportDate(row.expense_date) || 'Breakdown';
+
+            return (row.attachments || []).map(attachment => ({
+                ...attachment,
+                label,
+            }));
+        });
+
+        const requestAttachments = (report.attachments || []).map(attachment => ({
+            ...attachment,
+            label: 'Debit Request',
+            readonly: true,
+        }));
+
+        const receiptAttachments = (report.breakdowns || [])
+            .filter(row => row.receipt_url)
+            .map((row, index) => ({
+                id: `receipt-${row.id || index}`,
+                name: `${row.category_name || 'Receipt'} Receipt`,
+                url: row.receipt_url,
+                download_url: row.receipt_url,
+                size: 0,
+                type: '',
+                label: row.category_name || 'Breakdown',
+                readonly: true,
+            }));
+
+        const attachments = [...requestAttachments, ...receiptAttachments, ...rowAttachments];
+        counter.textContent = `Attachments (${attachments.length})`;
+
+        if (!attachments.length) {
+            list.innerHTML = '<p class="text-sm text-gray-500">No attachments found.</p>';
+            return;
+        }
+
+        list.innerHTML = attachments.map(attachment => {
+            const canPreviewImage = isImageAttachment(attachment.name, attachment.type);
+            const viewLabel = canPreviewImage ? 'View' : 'Open';
+            const deleteButton = attachment.readonly ? '' : `
+                <button type="button" class="deleteBreakdownAttachmentBtn rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50" data-id="${escapeHtml(attachment.id)}">Delete</button>
+            `;
+
+            return `
+                <div class="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold text-gray-800">${getAttachmentIcon(attachment.name, attachment.type)} ${escapeHtml(attachment.name || 'Attachment')}</p>
+                        <p class="text-xs text-gray-500">${escapeHtml(attachment.label || 'Breakdown')}${attachment.size ? ' • ' + escapeHtml(formatFileSize(attachment.size)) : ''}</p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <button type="button" class="viewBreakdownAttachmentBtn rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-50" data-url="${escapeHtml(attachment.url || '')}" data-name="${escapeHtml(attachment.name || 'Attachment')}" data-type="${escapeHtml(attachment.type || '')}">${viewLabel}</button>
+                        <a href="${escapeHtml(attachment.download_url || attachment.url || '#')}" download class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50">Download</a>
+                        ${deleteButton}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function openAttachmentImagePreview(url, name) {
+        if (!attachmentImagePreviewModal || !attachmentImagePreviewImg) {
+            window.open(url, '_blank', 'noopener');
+            return;
+        }
+
+        attachmentImagePreviewImg.onerror = function () {
+            attachmentImagePreviewImg.onerror = null;
+            closeAttachmentImagePreview();
+            showWarningModal('Unable to load the image preview. Opening the file in a new tab instead.');
+            window.open(url, '_blank', 'noopener');
+        };
+        attachmentImagePreviewImg.src = url;
+
+        if (attachmentImagePreviewTitle) {
+            attachmentImagePreviewTitle.textContent = name || 'Attachment Preview';
+        }
+
+        attachmentImagePreviewModal.classList.remove('hidden');
+        attachmentImagePreviewModal.style.display = 'flex';
+
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    function closeAttachmentImagePreview() {
+        if (!attachmentImagePreviewModal || !attachmentImagePreviewImg) {
+            return;
+        }
+
+        attachmentImagePreviewModal.classList.add('hidden');
+        attachmentImagePreviewModal.style.display = 'none';
+        attachmentImagePreviewImg.onerror = null;
+        attachmentImagePreviewImg.src = '';
+    }
+
+    function removeAttachmentFromCurrentReport(attachmentId) {
+        if (!currentViewBreakdownReport) {
+            return;
+        }
+
+        currentViewBreakdownReport.breakdowns = (currentViewBreakdownReport.breakdowns || []).map(row => ({
+            ...row,
+            attachments: (row.attachments || []).filter(attachment => String(attachment.id) !== String(attachmentId)),
+        }));
+        currentViewBreakdownReport.attachment_count = Math.max(0, getReportAttachmentCount(currentViewBreakdownReport) - 1);
+        renderViewBreakdownAttachments(currentViewBreakdownReport);
+    }
+
+    document.getElementById('viewBreakdownAttachmentsList')?.addEventListener('click', function(event) {
+        const viewButton = event.target.closest('.viewBreakdownAttachmentBtn');
+        const deleteButton = event.target.closest('.deleteBreakdownAttachmentBtn');
+
+        if (viewButton) {
+            const url = viewButton.dataset.url;
+            const name = viewButton.dataset.name || 'Attachment';
+            const type = viewButton.dataset.type || '';
+
+            if (!url) {
+                return;
+            }
+
+            if (isImageAttachment(name, type)) {
+                openAttachmentImagePreview(url, name);
+            } else {
+                window.open(url, '_blank', 'noopener');
+            }
+
+            return;
+        }
+
+        if (!deleteButton) {
+            return;
+        }
+
+        const attachmentId = deleteButton.dataset.id;
+
+        if (!attachmentId || !confirm('Delete this attachment?')) {
+            return;
+        }
+
+        deleteButton.disabled = true;
+        deleteButton.classList.add('opacity-60');
+
+        fetch(`${deleteBreakdownAttachmentBaseUrl}/${attachmentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                showErrorModal(data.message || 'Unable to delete attachment.');
+                return;
+            }
+
+            removeAttachmentFromCurrentReport(attachmentId);
+            showSuccessModal(data.message || 'Attachment deleted successfully.');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorModal('An error occurred while deleting the attachment.');
+        })
+        .finally(() => {
+            deleteButton.disabled = false;
+            deleteButton.classList.remove('opacity-60');
+        });
+    });
+
+    if (closeAttachmentImagePreviewBtn) {
+        closeAttachmentImagePreviewBtn.addEventListener('click', closeAttachmentImagePreview);
+    }
+
+    if (attachmentImagePreviewModal) {
+        attachmentImagePreviewModal.addEventListener('click', function(event) {
+            if (event.target === attachmentImagePreviewModal) {
+                closeAttachmentImagePreview();
+            }
+        });
+    }
+
+    function getCurrentBreakdownReport() {
+        if (!currentViewBreakdownReport) {
+            showWarningModal('Please open a debit breakdown first.');
+            return null;
+        }
+
+        return currentViewBreakdownReport;
+    }
+
+    function buildBreakdownReportRows(report, html = true) {
+        const rows = report.breakdowns || [];
+
+        if (!rows.length) {
+            return html
+                ? '<tr><td colspan="5" class="empty">No breakdown entries found</td></tr>'
+                : [];
+        }
+
+        if (!html) {
+            return rows.map(row => [
+                formatReportDate(row.expense_date),
+                row.category_name || '-',
+                row.transaction_details || '-',
+                row.description || '-',
+                formatCurrencyValue(row.amount),
+            ]);
+        }
+
+        return rows.map(row => `
+            <tr>
+                <td>${escapeHtml(formatReportDate(row.expense_date))}</td>
+                <td>${escapeHtml(row.category_name || '-')}</td>
+                <td>${escapeHtml(row.transaction_details || '-')}</td>
+                <td>${escapeHtml(row.description || '-')}</td>
+                <td class="amount">${escapeHtml(formatCurrencyValue(row.amount))}</td>
+            </tr>
+        `).join('');
+    }
+
+    function buildBreakdownPrintHtml(report) {
+        const printedAt = formatReportTimestamp();
+        const attachmentLinks = getBreakdownAttachmentLinks(report);
+
+        return `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Debit Breakdown ${escapeHtml(report.debit.id || '')}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { color: #111827; font-family: Arial, sans-serif; margin: 0; padding: 32px; }
+        .company { font-size: 18px; font-weight: 800; margin: 0 0 4px; text-align: center; }
+        h1 { font-size: 24px; margin: 0 0 22px; text-align: center; }
+        .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; margin-bottom: 22px; }
+        .meta div, .footer div { font-size: 13px; }
+        .label { color: #4b5563; font-weight: 700; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #d1d5db; font-size: 12px; padding: 9px 10px; text-align: left; vertical-align: top; }
+        th { background: #f3f4f6; color: #374151; font-weight: 800; }
+        .amount { text-align: right; white-space: nowrap; }
+        tfoot td { border-top: 2px solid #111827; font-weight: 800; }
+        .empty { color: #6b7280; padding: 24px; text-align: center; }
+        .footer { border-top: 1px solid #d1d5db; display: grid; gap: 7px; margin-top: 24px; padding-top: 14px; }
+        .attachments { margin-top: 18px; }
+        .attachments h2 { font-size: 13px; margin: 0 0 8px; }
+        .attachments a { color: #0f766e; display: block; font-size: 12px; margin-bottom: 5px; overflow-wrap: anywhere; }
+        @media print {
+            body { padding: 20mm 14mm; }
+        }
+    </style>
+</head>
+<body>
+    <p class="company">${escapeHtml(reportCompanyName)}</p>
+    <h1>Debit Breakdown Report</h1>
+    <section class="meta">
+        <div><span class="label">Debit ID:</span> ${escapeHtml(report.debit.id || '-')}</div>
+        <div><span class="label">Employee Name:</span> ${escapeHtml(report.debit.employee_name || '-')}</div>
+        <div><span class="label">Date:</span> ${escapeHtml(formatReportDate(report.debit.expense_date))}</div>
+        <div><span class="label">Attachment Count:</span> ${escapeHtml(report.attachment_count || 0)}</div>
+    </section>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Category</th>
+                <th>Transaction Details</th>
+                <th>Description</th>
+                <th class="amount">Amount</th>
+            </tr>
+        </thead>
+        <tbody>${buildBreakdownReportRows(report)}</tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" class="amount">TOTAL</td>
+                <td class="amount">${escapeHtml(formatCurrencyValue(report.total))}</td>
+            </tr>
+        </tfoot>
+    </table>
+    ${attachmentLinks.length ? `
+        <section class="attachments">
+            <h2>Supporting Documents:</h2>
+            ${attachmentLinks.map(link => `<a href="${escapeHtml(link.url)}">${escapeHtml(link.name)}</a>`).join('')}
+        </section>
+    ` : ''}
+    <section class="footer">
+        <div><span class="label">Total Amount:</span> ${escapeHtml(formatCurrencyValue(report.total))}</div>
+        <div><span class="label">Attachment Count:</span> ${escapeHtml(attachmentLinks.length)}</div>
+        <div><span class="label">Printed By:</span> ${escapeHtml(reportGeneratedBy)}</div>
+        <div><span class="label">Print Date & Time:</span> ${escapeHtml(printedAt)}</div>
+    </section>
+</body>
+</html>`;
+    }
+
+    function printCurrentBreakdownReport() {
+        const report = getCurrentBreakdownReport();
+
+        if (!report) {
+            return;
+        }
+
+        const printWindow = window.open('', '_blank', 'width=1100,height=850');
+
+        if (!printWindow) {
+            showWarningModal('Popup blocked. Please allow popups to print the debit breakdown.');
+            return;
+        }
+
+        printWindow.document.write(buildBreakdownPrintHtml(report));
+        printWindow.document.close();
+        setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+        }, 250);
+    }
+
+    function sanitizePdfFilenamePart(value) {
+        return String(value || 'Report').replace(/[^a-zA-Z0-9_-]/g, '');
+    }
+
+    function loadImageDataUrl(url) {
+        return new Promise(resolve => {
+            if (!url) {
+                resolve(null);
+                return;
+            }
+
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+            image.onload = function () {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.naturalWidth;
+                    canvas.height = image.naturalHeight;
+                    const context = canvas.getContext('2d');
+                    context.drawImage(image, 0, 0);
+                    resolve(canvas.toDataURL('image/png'));
+                } catch (error) {
+                    resolve(null);
+                }
+            };
+            image.onerror = function () {
+                resolve(null);
+            };
+            image.src = url;
+        });
+    }
+
+    async function exportCurrentBreakdownPdf() {
+        const report = getCurrentBreakdownReport();
+
+        if (!report) {
+            return;
+        }
+
+        if (!window.jspdf?.jsPDF || typeof window.jspdf.jsPDF.API.autoTable !== 'function') {
+            showWarningModal('PDF export is still loading. Please try again in a moment.');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const marginX = 40;
+        let cursorY = 42;
+        const generatedAt = formatReportTimestamp();
+        const logoDataUrl = await loadImageDataUrl(reportLogoUrl);
+
+        if (logoDataUrl) {
+            doc.addImage(logoDataUrl, 'PNG', marginX, cursorY - 8, 42, 42);
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(15);
+        doc.text(reportCompanyName, logoDataUrl ? marginX + 54 : marginX, cursorY + 5);
+        doc.setFontSize(18);
+        doc.text('Debit Breakdown Report', marginX, cursorY + 58);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Debit ID: ${report.debit.id || '-'}`, marginX, cursorY + 82);
+        doc.text(`Employee Name: ${report.debit.employee_name || '-'}`, marginX, cursorY + 98);
+        doc.text(`Date: ${formatReportDate(report.debit.expense_date)}`, marginX, cursorY + 114);
+        doc.text(`Attachment Count: ${report.attachment_count || 0}`, marginX, cursorY + 130);
+        doc.text(`Generated: ${generatedAt}`, pageWidth - marginX, cursorY + 82, { align: 'right' });
+
+        doc.autoTable({
+            startY: cursorY + 154,
+            head: [['Date', 'Category', 'Transaction Details', 'Description', 'Amount']],
+            body: buildBreakdownReportRows(report, false),
+            foot: [['', '', '', 'TOTAL', formatCurrencyValue(report.total)]],
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: 8,
+                cellPadding: 5,
+                valign: 'top',
+            },
+            headStyles: {
+                fillColor: [15, 118, 110],
+                textColor: 255,
+                fontStyle: 'bold',
+            },
+            footStyles: {
+                fillColor: [241, 245, 249],
+                textColor: [17, 24, 39],
+                fontStyle: 'bold',
+            },
+            columnStyles: {
+                0: { cellWidth: 72 },
+                1: { cellWidth: 88 },
+                2: { cellWidth: 130 },
+                3: { cellWidth: 140 },
+                4: { halign: 'right', cellWidth: 88 },
+            },
+        });
+
+        cursorY = doc.lastAutoTable.finalY + 24;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`Grand Total: ${formatCurrencyValue(report.total)}`, pageWidth - marginX, cursorY, { align: 'right' });
+
+        const attachmentLinks = getBreakdownAttachmentLinks(report);
+
+        if (attachmentLinks.length) {
+            cursorY += 28;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.text('Supporting Documents:', marginX, cursorY);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+
+            attachmentLinks.forEach((link, index) => {
+                cursorY += 14;
+
+                if (cursorY > doc.internal.pageSize.getHeight() - 40) {
+                    doc.addPage();
+                    cursorY = 42;
+                }
+
+                const label = `${index + 1}. ${link.name}`;
+                doc.setTextColor(15, 118, 110);
+                doc.textWithLink(label, marginX, cursorY, { url: link.url });
+                doc.setTextColor(17, 24, 39);
+            });
+        }
+
+        const pageCount = doc.internal.getNumberOfPages();
+
+        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+            doc.setPage(pageNumber);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(107, 114, 128);
+            doc.text(`Generated by ${reportGeneratedBy} on ${generatedAt} | Attachments: ${attachmentLinks.length}`, marginX, doc.internal.pageSize.getHeight() - 24);
+            doc.text(`Page ${pageNumber} of ${pageCount}`, pageWidth - marginX, doc.internal.pageSize.getHeight() - 24, { align: 'right' });
+            doc.setTextColor(17, 24, 39);
+        }
+
+        doc.save(`DebitBreakdown_${sanitizePdfFilenamePart(report.debit.id)}.pdf`);
     }
 
     function setBreakdownAllocation(allocation = {}) {
@@ -1219,7 +1993,14 @@
     // Month selector change
     document.getElementById('monthSelector').addEventListener('change', function() {
         const [year, month] = this.value.split('-');
-        window.location.href = `{{ route('accounting.liquidate-expenses') }}?year=${year}&month=${month}`;
+        const url = new URL(@json(route('accounting.liquidate-expenses')), window.location.origin);
+        const params = new URLSearchParams(window.location.search);
+
+        params.set('year', year);
+        params.set('month', month);
+        params.delete('page');
+        url.search = params.toString();
+        window.location.href = url.toString();
     });
 
     document.getElementById('liquidateImportExcelBtn').addEventListener('click', () => {
@@ -1246,147 +2027,156 @@
 
     // Purpose is always visible and required for manual entries.
 
-    function getMonthDateValue(day) {
-        return `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    }
-
-    function formatTransactionFilterDate(dateValue) {
-        return new Date(`${dateValue}T00:00:00`).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-        });
-    }
-
-    function populateTransactionDateFilter() {
-        if (!transactionDateFilter) {
+    function setTransactionsLoading(isLoading) {
+        if (!transactionsTableContainer) {
             return;
         }
 
-        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-        let options = '<option value="">All dates</option>';
+        const controls = [
+            ...Array.from(transactionFilterForm?.querySelectorAll('input, select, button') || []),
+            ...Array.from(transactionsTableContainer.querySelectorAll('.pagination a, nav a, button, select'))
+        ];
 
-        for (let day = 1; day <= daysInMonth; day += 1) {
-            const dateValue = getMonthDateValue(day);
-            options += `<option value="${dateValue}">${formatTransactionFilterDate(dateValue)}</option>`;
+        controls.forEach(control => {
+            control.disabled = isLoading;
+            control.classList.toggle('pointer-events-none', isLoading);
+            control.classList.toggle('opacity-60', isLoading);
+        });
+
+        let overlay = document.getElementById('transactionsLoadingOverlay');
+        if (isLoading && !overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'transactionsLoadingOverlay';
+            overlay.className = 'absolute inset-0 z-10 flex items-center justify-center bg-white/70';
+            overlay.innerHTML = '<div class="h-10 w-10 animate-spin rounded-full border-4 border-teal-100 border-t-teal-600"></div>';
+            transactionsTableContainer.appendChild(overlay);
         }
 
-        transactionDateFilter.innerHTML = options;
+        if (!isLoading) {
+            document.querySelectorAll('#transactionsLoadingOverlay').forEach(staleOverlay => staleOverlay.remove());
+        }
     }
 
-    function renderTransactionsPagination(totalRows) {
-        if (!transactionsPaginationContainer || !transactionsPageNumbers) {
+    function syncTransactionFiltersFromUrl(url) {
+        if (!transactionFilterForm) {
             return;
         }
 
-        const totalPages = Math.max(1, Math.ceil(totalRows / transactionsPerPage));
-        transactionsPaginationContainer.classList.toggle('hidden', totalRows <= transactionsPerPage);
-
-        if (transactionsCurrentPage > totalPages) {
-            transactionsCurrentPage = totalPages;
-        }
-
-        if (transactionsCurrentPageLabel) {
-            transactionsCurrentPageLabel.textContent = transactionsCurrentPage;
-        }
-
-        if (transactionsTotalPagesLabel) {
-            transactionsTotalPagesLabel.textContent = totalPages;
-        }
-
-        if (transactionsPrevPageBtn) {
-            transactionsPrevPageBtn.disabled = transactionsCurrentPage <= 1;
-        }
-
-        if (transactionsNextPageBtn) {
-            transactionsNextPageBtn.disabled = transactionsCurrentPage >= totalPages;
-        }
-
-        transactionsPageNumbers.innerHTML = '';
-
-        for (let page = 1; page <= totalPages; page += 1) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = page;
-            button.className = page === transactionsCurrentPage
-                ? 'inline-flex h-10 min-w-10 items-center justify-center rounded-lg bg-teal-600 px-3 text-sm font-bold text-white shadow-sm'
-                : 'inline-flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50';
-            button.addEventListener('click', () => {
-                transactionsCurrentPage = page;
-                applyTransactionDateFilter();
-            });
-            transactionsPageNumbers.appendChild(button);
-        }
-    }
-
-    function applyTransactionDateFilter(options = {}) {
-        if (options.resetPage) {
-            transactionsCurrentPage = 1;
-        }
-
-        const selectedDate = transactionDateFilter?.value || '';
-        const rows = Array.from(document.querySelectorAll('.transaction-row'));
-        const filteredRows = rows.filter(row => !selectedDate || row.dataset.transactionDate === selectedDate);
-        const totalPages = Math.max(1, Math.ceil(filteredRows.length / transactionsPerPage));
-
-        if (transactionsCurrentPage > totalPages) {
-            transactionsCurrentPage = totalPages;
-        }
-
-        const pageStart = (transactionsCurrentPage - 1) * transactionsPerPage;
-        const pageRows = filteredRows.slice(pageStart, pageStart + transactionsPerPage);
-
-        rows.forEach(row => {
-            row.classList.add('hidden');
-        });
-
-        pageRows.forEach(row => {
-            row.classList.remove('hidden');
-        });
-
-        if (transactionsVisibleCount) {
-            transactionsVisibleCount.textContent = filteredRows.length;
-        }
-
-        if (transactionsFilterEmptyRow) {
-            transactionsFilterEmptyRow.classList.toggle('hidden', filteredRows.length > 0 || rows.length === 0);
-        }
-
-        renderTransactionsPagination(filteredRows.length);
-    }
-
-    if (transactionDateFilter) {
-        transactionDateFilter.addEventListener('change', () => applyTransactionDateFilter({ resetPage: true }));
-    }
-
-    if (resetTransactionDateFilter) {
-        resetTransactionDateFilter.addEventListener('click', function() {
-            transactionDateFilter.value = '';
-            applyTransactionDateFilter({ resetPage: true });
-        });
-    }
-
-    if (transactionsPrevPageBtn) {
-        transactionsPrevPageBtn.addEventListener('click', function() {
-            if (transactionsCurrentPage > 1) {
-                transactionsCurrentPage -= 1;
-                applyTransactionDateFilter();
+        const params = new URL(url, window.location.origin).searchParams;
+        ['type', 'start_date', 'end_date', 'category', 'search'].forEach(name => {
+            const input = transactionFilterForm.querySelector(`[name="${name}"]`);
+            if (input) {
+                input.value = params.get(name) || '';
             }
         });
     }
 
-    if (transactionsNextPageBtn) {
-        transactionsNextPageBtn.addEventListener('click', function() {
-            transactionsCurrentPage += 1;
-            applyTransactionDateFilter();
+    function updateTransactionsCount() {
+        const meta = document.getElementById('transactionsTableMeta');
+        if (meta && transactionsVisibleCount) {
+            transactionsVisibleCount.textContent = meta.dataset.total || '0';
+        }
+    }
+
+    async function loadTransactionsTable(url, options = {}) {
+        if (!transactionsTableContainer) {
+            window.location.href = url;
+            return;
+        }
+
+        setTransactionsLoading(true);
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Unable to load transactions.');
+            }
+
+            transactionsTableContainer.innerHTML = await response.text();
+            updateTransactionsCount();
+
+            if (options.pushState !== false) {
+                window.history.pushState({}, '', url);
+            }
+
+            if (options.syncFilters) {
+                syncTransactionFiltersFromUrl(url);
+            }
+
+            if (window.feather) {
+                feather.replace();
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            window.location.href = url;
+        } finally {
+            setTransactionsLoading(false);
+        }
+    }
+
+    function buildTransactionFilterUrl() {
+        const formData = new FormData(transactionFilterForm);
+        const url = new URL(transactionFilterForm.action, window.location.origin);
+
+        formData.forEach((value, key) => {
+            if (value) {
+                url.searchParams.set(key, value);
+            }
+        });
+        url.searchParams.delete('page');
+
+        return url.toString();
+    }
+
+    if (transactionFilterForm) {
+        transactionFilterForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            loadTransactionsTable(buildTransactionFilterUrl());
         });
     }
 
+    document.addEventListener('click', function(event) {
+        const paginationLink = event.target.closest('#transactions-table-container .pagination a, #transactions-table-container nav a');
+        if (paginationLink) {
+            event.preventDefault();
+            loadTransactionsTable(paginationLink.href);
+            return;
+        }
+
+        const resetLink = event.target.closest('#resetTransactionFilters');
+        if (resetLink) {
+            event.preventDefault();
+            if (transactionFilterForm) {
+                transactionFilterForm.reset();
+                ['type', 'start_date', 'end_date', 'category', 'search'].forEach(name => {
+                    const input = transactionFilterForm.querySelector(`[name="${name}"]`);
+                    if (input) {
+                        input.value = '';
+                    }
+                });
+            }
+            loadTransactionsTable(resetLink.href, { syncFilters: true });
+        }
+    });
+
+    window.addEventListener('popstate', function() {
+        loadTransactionsTable(window.location.href, {
+            pushState: false,
+            syncFilters: true
+        });
+    });
+
     function updateTransactionCategory(select) {
         const transactionId = select.dataset.id;
-        const previousCategory = select.dataset.originalCategory || '';
+        const previousCategoryId = select.dataset.originalCategoryId || '';
 
-        if (!transactionId || select.value === previousCategory) {
+        if (!transactionId || select.value === previousCategoryId) {
             return;
         }
 
@@ -1401,7 +2191,7 @@
                 'X-CSRF-TOKEN': csrfToken
             },
             body: JSON.stringify({
-                category: select.value || null
+                category_id: select.value || null
             })
         })
         .then(response => response.json().then(data => ({ ok: response.ok, data })))
@@ -1410,11 +2200,11 @@
                 throw new Error(data.message || 'Unable to update category');
             }
 
-            select.dataset.originalCategory = data.transaction?.category || '';
+            select.dataset.originalCategoryId = data.transaction?.category_id || '';
         })
         .catch(error => {
             console.error('Error:', error);
-            select.value = previousCategory;
+            select.value = previousCategoryId;
             showErrorModal('An error occurred while updating the category');
         })
         .finally(() => {
@@ -1423,70 +2213,45 @@
         });
     }
 
-    document.querySelectorAll('.transactionCategorySelect').forEach(select => {
-        select.addEventListener('change', function() {
-            updateTransactionCategory(this);
-        });
-    });
+    document.addEventListener('change', function(event) {
+        const select = event.target.closest('.transactionCategorySelect');
 
-    // Toggle transactions visibility
-    let transactionsVisible = false;
-    document.getElementById('toggleTransactionsBtn').addEventListener('click', function() {
-        const container = document.getElementById('transactionsContainer');
-        const btn = this;
-        const icon = btn.querySelector('i');
-        const text = btn.querySelector('span');
-
-        transactionsVisible = !transactionsVisible;
-
-        if (transactionsVisible) {
-            container.style.display = 'block';
-            text.textContent = 'Hide Transactions';
-            // Update icon to eye-off
-            icon.setAttribute('data-feather', 'eye-off');
-        } else {
-            container.style.display = 'none';
-            text.textContent = 'Show Transactions';
-            // Update icon to eye
-            icon.setAttribute('data-feather', 'eye');
+        if (!select) {
+            return;
         }
 
-        // Reinitialize feather icons
-        if (window.feather) {
-            feather.replace();
-        }
+        updateTransactionCategory(select);
     });
 
     // Breakdown modal layout
-    document.querySelectorAll('.breakdownBtn').forEach(button => {
-        button.addEventListener('click', function() {
-            const parentAmount = Number(this.dataset.amount || 0);
+    function openBreakdownModalFromButton(button) {
+        const parentAmount = Number(button.dataset.amount || 0);
 
-            document.getElementById('breakdownName').value = this.dataset.name || '';
-            document.getElementById('breakdownDate').value = this.dataset.date || '';
-            document.getElementById('breakdownCashAdvanceRequestId').value = this.dataset.id || '';
-            document.getElementById('breakdownEmployeeId').value = this.dataset.employeeId || '';
-            document.getElementById('breakdownAmount').value = '';
-            document.getElementById('breakdownDetails').value = '';
-            document.getElementById('breakdownDescription').value = '';
-            document.getElementById('breakdownCategory').value = '';
-            setBreakdownAllocation({
-                parentAmount,
-                allocatedAmount: 0,
-                overspentAmount: 0,
-                status: 'AVAILABLE',
-                remainingAmount: parentAmount,
-            });
-            loadBreakdownAllocation(this.dataset.id || '');
-
-            breakdownModal.classList.remove('hidden');
-            breakdownModal.style.display = 'flex';
-
-            if (window.feather) {
-                feather.replace();
-            }
+        document.getElementById('breakdownName').value = button.dataset.name || '';
+        document.getElementById('breakdownDate').value = button.dataset.date || '';
+        document.getElementById('breakdownCashAdvanceRequestId').value = button.dataset.id || '';
+        document.getElementById('breakdownEmployeeId').value = button.dataset.employeeId || '';
+        document.getElementById('breakdownAmount').value = '';
+        document.getElementById('breakdownDetails').value = '';
+        document.getElementById('breakdownDescription').value = '';
+        document.getElementById('breakdownCategory').value = '';
+        resetBreakdownAttachments();
+        setBreakdownAllocation({
+            parentAmount,
+            allocatedAmount: 0,
+            overspentAmount: 0,
+            status: 'AVAILABLE',
+            remainingAmount: parentAmount,
         });
-    });
+        loadBreakdownAllocation(button.dataset.id || '');
+
+        breakdownModal.classList.remove('hidden');
+        breakdownModal.style.display = 'flex';
+
+        if (window.feather) {
+            feather.replace();
+        }
+    }
 
     function closeBreakdownModal() {
         breakdownModal.classList.add('hidden');
@@ -1523,8 +2288,14 @@
                 },
                 body: formData
             })
-            .then(response => response.json())
-            .then(data => {
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    const errors = data.errors ? Object.values(data.errors).flat().join(' ') : '';
+                    showErrorModal(errors || data.message || 'Unable to save breakdown.');
+                    return;
+                }
+
                 if (data.success) {
                     if (data.allocation) {
                         setBreakdownAllocation(data.allocation);
@@ -1539,6 +2310,7 @@
                             : 'Breakdown saved successfully!';
 
                     showSuccessModal(message);
+                    resetBreakdownAttachments();
                     closeBreakdownModal();
                 } else {
                     showErrorModal('Error: ' + (data.message || 'Unable to save breakdown.'));
@@ -1638,8 +2410,33 @@
     });
 
     // Handle form submission
-    document.getElementById('expenseForm').addEventListener('submit', function(e) {
+    const expenseForm = document.getElementById('expenseForm');
+    const transactionTypeInput = document.getElementById('transaction_type');
+    const categoryInput = document.getElementById('category_id');
+
+    function syncCategoryRequirement() {
+        if (!categoryInput || !transactionTypeInput) {
+            return;
+        }
+
+        categoryInput.required = transactionTypeInput.value === 'debit';
+    }
+
+    if (transactionTypeInput) {
+        transactionTypeInput.addEventListener('change', syncCategoryRequirement);
+    }
+
+    syncCategoryRequirement();
+
+    expenseForm.addEventListener('submit', function(e) {
         e.preventDefault();
+
+        syncCategoryRequirement();
+        if (transactionTypeInput?.value === 'debit' && !categoryInput?.value) {
+            showErrorModal('Category is required for Debit transactions.');
+            categoryInput?.focus();
+            return;
+        }
 
         const formData = new FormData(this);
         
@@ -1669,37 +2466,48 @@
         });
 
         this.reset();
+        syncCategoryRequirement();
     });
 
-    // Delete transaction
-    document.querySelectorAll('.deleteBtn').forEach(button => {
-        button.addEventListener('click', function() {
-            const expenseId = this.getAttribute('data-id');
-            
-            if (confirm('Are you sure you want to delete this transaction?')) {
-                fetch(`${deleteExpenseBaseUrl}/${expenseId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrfToken
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showSuccessModal('Expense deleted successfully!');
-                        setTimeout(() => location.reload(), 5000);
-                    } else {
-                        showErrorModal('Error: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showErrorModal('An error occurred while deleting the expense');
-                });
+    function deleteTransactionFromButton(button) {
+        const expenseId = button.dataset.id;
+
+        if (!expenseId || !confirm('Are you sure you want to delete this transaction?')) {
+            return;
+        }
+
+        button.disabled = true;
+        button.classList.add('pointer-events-none', 'opacity-60');
+
+        fetch(`${deleteExpenseBaseUrl}/${expenseId}`, {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
             }
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                showErrorModal('Error: ' + (data.message || 'Unable to delete the expense.'));
+                return;
+            }
+
+            showSuccessModal('Expense deleted successfully!');
+            loadTransactionsTable(window.location.href, {
+                pushState: false,
+                syncFilters: true,
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorModal('An error occurred while deleting the expense');
+        })
+        .finally(() => {
+            button.disabled = false;
+            button.classList.remove('pointer-events-none', 'opacity-60');
         });
-    });
+    }
 
     // Clear all transactions for the month
     document.getElementById('clearMonthBtn').addEventListener('click', function() {
@@ -1739,58 +2547,94 @@
         }
     });
 
-    document.querySelectorAll('.viewBreakdownBtn').forEach(button => {
-        button.addEventListener('click', function() {
-            const expenseId = this.getAttribute('data-id');
+    function viewBreakdownFromButton(button) {
+        const expenseId = button.dataset.id;
 
-            fetch(`${viewBreakdownBaseUrl}/${expenseId}/breakdown`, {
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    showErrorModal('Error: ' + data.message);
-                    return;
-                }
+        if (!expenseId) {
+            return;
+        }
 
-                document.getElementById('viewBreakdownName').value = data.debit.employee_name || '';
-                document.getElementById('viewBreakdownDate').value = data.debit.expense_date || '';
-                document.getElementById('viewBreakdownSubtitle').textContent = `Debit ID: ${data.debit.id}`;
+        button.disabled = true;
+        button.classList.add('pointer-events-none', 'opacity-60');
 
-                const tbody = document.getElementById('viewBreakdownTableBody');
-                tbody.innerHTML = '';
+        fetch(`${viewBreakdownBaseUrl}/${expenseId}/breakdown`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            }
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                showErrorModal('Error: ' + (data.message || 'Unable to load the breakdown.'));
+                return;
+            }
 
-                if (!data.breakdowns.length) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No breakdown entries found</td></tr>';
-                } else {
-                    data.breakdowns.forEach(row => {
-                        tbody.insertAdjacentHTML('beforeend', `
-                            <tr class="border-b border-gray-200 last:border-b-0">
-                                <td class="px-4 py-3 text-sm text-gray-900">${row.expense_date ?? '-'}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900">${row.category_name ?? '-'}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900">${row.transaction_details ?? '-'}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600">${row.description ?? '-'}</td>
-                                <td class="px-4 py-3 text-sm text-right font-semibold text-teal-700">PHP ${Number(row.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            </tr>
-                        `);
-                    });
-                }
+            currentViewBreakdownReport = normalizeBreakdownReport(data);
+            document.getElementById('viewBreakdownName').value = currentViewBreakdownReport.debit.employee_name || '';
+            document.getElementById('viewBreakdownDate').value = formatReportDate(currentViewBreakdownReport.debit.expense_date);
+            document.getElementById('viewBreakdownSubtitle').textContent = `Debit ID: ${currentViewBreakdownReport.debit.id}`;
 
-                viewBreakdownModal.classList.remove('hidden');
-                viewBreakdownModal.style.display = 'flex';
+            const tbody = document.getElementById('viewBreakdownTableBody');
+            tbody.innerHTML = '';
 
-                if (window.feather) {
-                    feather.replace();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showErrorModal('An error occurred while loading the breakdown');
-            });
+            if (!currentViewBreakdownReport.breakdowns.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No breakdown entries found</td></tr>';
+            } else {
+                currentViewBreakdownReport.breakdowns.forEach(row => {
+                    tbody.insertAdjacentHTML('beforeend', `
+                        <tr class="border-b border-gray-200 last:border-b-0">
+                            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(formatReportDate(row.expense_date))}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(row.category_name ?? '-')}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(row.transaction_details ?? '-')}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(row.description ?? '-')}</td>
+                            <td class="px-4 py-3 text-sm text-right font-semibold text-teal-700">${escapeHtml(formatCurrencyValue(row.amount))}</td>
+                        </tr>
+                    `);
+                });
+            }
+
+            document.getElementById('viewBreakdownTotal').textContent = formatCurrencyValue(currentViewBreakdownReport.total);
+            renderViewBreakdownAttachments(currentViewBreakdownReport);
+
+            viewBreakdownModal.classList.remove('hidden');
+            viewBreakdownModal.style.display = 'flex';
+
+            if (window.feather) {
+                feather.replace();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorModal('An error occurred while loading the breakdown');
+        })
+        .finally(() => {
+            button.disabled = false;
+            button.classList.remove('pointer-events-none', 'opacity-60');
         });
+    }
+
+    // Native delegated equivalent of $(document).on('click', '.btn-*', ...)
+    document.addEventListener('click', function(event) {
+        const editButton = event.target.closest('.btn-edit, .breakdownBtn');
+        if (editButton && transactionsTableContainer?.contains(editButton)) {
+            event.preventDefault();
+            openBreakdownModalFromButton(editButton);
+            return;
+        }
+
+        const viewButton = event.target.closest('.btn-view, .viewBreakdownBtn');
+        if (viewButton && transactionsTableContainer?.contains(viewButton)) {
+            event.preventDefault();
+            viewBreakdownFromButton(viewButton);
+            return;
+        }
+
+        const deleteButton = event.target.closest('.btn-delete, .deleteBtn');
+        if (deleteButton && transactionsTableContainer?.contains(deleteButton)) {
+            event.preventDefault();
+            deleteTransactionFromButton(deleteButton);
+        }
     });
 
     function closeViewBreakdownModal() {
@@ -1804,6 +2648,14 @@
 
     if (closeViewBreakdownFooterBtn) {
         closeViewBreakdownFooterBtn.addEventListener('click', closeViewBreakdownModal);
+    }
+
+    if (printViewBreakdownBtn) {
+        printViewBreakdownBtn.addEventListener('click', printCurrentBreakdownReport);
+    }
+
+    if (pdfViewBreakdownBtn) {
+        pdfViewBreakdownBtn.addEventListener('click', exportCurrentBreakdownPdf);
     }
 
     if (closeSuccessModalBtn) {
@@ -1866,8 +2718,6 @@
 
     // Initialize
     updatePeriodDisplay();
-    populateTransactionDateFilter();
-    applyTransactionDateFilter();
     setDateToFirstOfMonth();
 
 </script>

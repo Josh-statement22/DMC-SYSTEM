@@ -157,6 +157,7 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
         $records = DB::table('cash_advance_requests')
             ->join('users', 'cash_advance_requests.requester_id', '=', 'users.id')
             ->leftJoin('roles', 'users.role_id', '=', 'roles.id')
+            ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
             ->leftJoinSub($liquidationTotalsSubquery, 'liquidation_totals', function ($join) {
                 $join->on('liquidation_totals.cash_advance_request_id', '=', 'cash_advance_requests.id');
             })
@@ -169,7 +170,7 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 'cash_advance_requests.reference_no',
                 'cash_advance_requests.request_date',
                 'cash_advance_requests.purpose',
-                'cash_advance_requests.category',
+                DB::raw('COALESCE(request_categories.particulars_category, cash_advance_requests.category) as category'),
                 'cash_advance_requests.accounting_remarks',
                 'cash_advance_requests.status',
                 'cash_advance_requests.submitted_at',
@@ -271,6 +272,168 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
                 )),
             ];
         })->values();
+    }
+}
+
+if (!function_exists('buildDashboardCategoryExpenseMatrix')) {
+    function buildDashboardCategoryExpenseMatrix(Request $request, \Carbon\Carbon $selectedMonth): array
+    {
+        $yearStart = \Carbon\Carbon::createFromDate(2026, 1, 1)->startOfDay();
+        $yearEnd = \Carbon\Carbon::createFromDate(2026, 12, 31)->endOfDay();
+        $period = (string) $request->query('matrix_period', 'last_6');
+        $period = in_array($period, ['last_3', 'last_6', 'last_12', 'custom'], true) ? $period : 'last_6';
+
+        $defaultMonths = match ($period) {
+            'last_3' => 3,
+            'last_12' => 12,
+            default => 6,
+        };
+
+        $startDateInput = (string) $request->query('matrix_start_date', '');
+        $endDateInput = (string) $request->query('matrix_end_date', '');
+        $startDate = null;
+        $endDate = null;
+
+        if ($period === 'custom') {
+            try {
+                $startDate = $startDateInput !== '' ? \Carbon\Carbon::parse($startDateInput)->startOfDay() : null;
+                $endDate = $endDateInput !== '' ? \Carbon\Carbon::parse($endDateInput)->endOfDay() : null;
+            } catch (\Throwable $exception) {
+                $startDate = null;
+                $endDate = null;
+            }
+        }
+
+        if (! $startDate || ! $endDate || $startDate->gt($endDate)) {
+            $period = $period === 'custom' ? 'last_6' : $period;
+            $startDate = $selectedMonth->copy()->subMonths($defaultMonths - 1)->startOfMonth();
+            $endDate = $selectedMonth->copy()->endOfMonth();
+        }
+
+        if ($startDate->lt($yearStart)) {
+            $startDate = $yearStart->copy();
+        }
+
+        if ($endDate->gt($yearEnd)) {
+            $endDate = $yearEnd->copy();
+        }
+
+        if ($startDate->gt($endDate)) {
+            $startDate = $selectedMonth->copy()->startOfMonth();
+            $endDate = $selectedMonth->copy()->endOfMonth();
+
+            if ($startDate->lt($yearStart)) {
+                $startDate = $yearStart->copy();
+            }
+
+            if ($endDate->gt($yearEnd)) {
+                $endDate = $yearEnd->copy();
+            }
+        }
+
+        $months = collect();
+        $cursor = $startDate->copy()->startOfMonth();
+        $lastMonth = $endDate->copy()->startOfMonth();
+
+        while ($cursor->lte($lastMonth)) {
+            $months->push([
+                'key' => $cursor->format('Y-m'),
+                'label' => $cursor->format('M Y'),
+            ]);
+            $cursor->addMonth();
+        }
+
+        $monthKeys = $months->pluck('key');
+        $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
+        $debitWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) NOT LIKE ?";
+        $allBreakdownsSubquery = DB::table('liquidation_expenses')
+            ->whereNotNull('cash_advance_request_id')
+            ->groupBy('cash_advance_request_id')
+            ->selectRaw('cash_advance_request_id, COUNT(*) as breakdown_count');
+
+        $breakdownCategoryQuery = DB::table('cash_advance_requests')
+            ->join('liquidation_expenses', 'liquidation_expenses.cash_advance_request_id', '=', 'cash_advance_requests.id')
+            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+            ->whereBetween('cash_advance_requests.request_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->whereRaw($debitWhereSql, ['%manual credit entry%'])
+            ->whereNotNull('categories.particulars_category')
+            ->groupBy('month_key', 'categories.particulars_category')
+            ->selectRaw("
+                DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
+                categories.particulars_category as category_name,
+                SUM(liquidation_expenses.amount) as total_amount
+            ");
+
+        $transactionCategoryQuery = DB::table('cash_advance_requests')
+            ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
+            ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
+                $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
+            })
+            ->whereBetween('cash_advance_requests.request_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->whereRaw($debitWhereSql, ['%manual credit entry%'])
+            ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
+            ->whereRaw("COALESCE(request_categories.particulars_category, cash_advance_requests.category, '') <> ''")
+            ->groupBy('month_key', 'category_name')
+            ->selectRaw("
+                DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
+                COALESCE(request_categories.particulars_category, cash_advance_requests.category) as category_name,
+                SUM({$transactionAmountSql}) as total_amount
+            ");
+
+        $aggregateRows = DB::query()
+            ->fromSub($breakdownCategoryQuery->unionAll($transactionCategoryQuery), 'matrix_allocations')
+            ->selectRaw('month_key, category_name, SUM(total_amount) as total_amount')
+            ->groupBy('month_key', 'category_name')
+            ->get();
+
+        $rows = $aggregateRows
+            ->groupBy('category_name')
+            ->map(function ($categoryRows, string $categoryName) use ($monthKeys, $startDate, $endDate) {
+                $amounts = $monthKeys
+                    ->mapWithKeys(fn (string $monthKey) => [
+                        $monthKey => round((float) optional($categoryRows->firstWhere('month_key', $monthKey))->total_amount, 2),
+                    ]);
+
+                return [
+                    'category_name' => $categoryName,
+                    'amounts' => $amounts->all(),
+                    'total' => round((float) $amounts->sum(), 2),
+                    'transactions_url' => route('accounting.liquidate-expenses', [
+                        'type' => 'debit',
+                        'category' => $categoryName,
+                        'start_date' => $startDate->toDateString(),
+                        'end_date' => $endDate->toDateString(),
+                    ]),
+                ];
+            })
+            ->sortByDesc('total')
+            ->values();
+
+        $columnTotals = $monthKeys
+            ->mapWithKeys(fn (string $monthKey) => [
+                $monthKey => round((float) $rows->sum(fn (array $row) => $row['amounts'][$monthKey] ?? 0), 2),
+            ]);
+
+        $highestByMonth = $monthKeys
+            ->mapWithKeys(fn (string $monthKey) => [
+                $monthKey => round((float) $rows->max(fn (array $row) => $row['amounts'][$monthKey] ?? 0), 2),
+            ]);
+
+        return [
+            'months' => $months->all(),
+            'rows' => $rows->all(),
+            'column_totals' => $columnTotals->all(),
+            'grand_total' => round((float) $rows->sum('total'), 2),
+            'highest_by_month' => $highestByMonth->all(),
+            'has_data' => $rows->isNotEmpty(),
+            'filters' => [
+                'period' => $period,
+                'start_date' => $period === 'custom' ? $startDate->toDateString() : '',
+                'end_date' => $period === 'custom' ? $endDate->toDateString() : '',
+                'effective_start_date' => $startDate->toDateString(),
+                'effective_end_date' => $endDate->toDateString(),
+            ],
+        ];
     }
 }
 
@@ -515,16 +678,16 @@ Route::get('/admin/dashboard', function () {
         ->selectRaw("\n            categories.particulars_category as category_name,\n            SUM(liquidation_expenses.amount) as total_amount,\n            COUNT(DISTINCT cash_advance_requests.id) as transaction_count\n        ");
 
     $transactionCategoryQuery = DB::table('cash_advance_requests')
+        ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
         ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
             $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
         })
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('cash_advance_requests.request_date', [$monthStart, $monthEnd])
         ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
-        ->whereNotNull('cash_advance_requests.category')
-        ->where('cash_advance_requests.category', '<>', '')
-        ->groupBy('cash_advance_requests.category')
-        ->selectRaw("\n            cash_advance_requests.category as category_name,\n            SUM({$transactionAmountSql}) as total_amount,\n            COUNT(*) as transaction_count\n        ");
+        ->whereRaw("COALESCE(request_categories.particulars_category, cash_advance_requests.category, '') <> ''")
+        ->groupBy('category_name')
+        ->selectRaw("\n            COALESCE(request_categories.particulars_category, cash_advance_requests.category) as category_name,\n            SUM({$transactionAmountSql}) as total_amount,\n            COUNT(*) as transaction_count\n        ");
 
     $categorySummaries = DB::query()
         ->fromSub($breakdownCategoryQuery->unionAll($transactionCategoryQuery), 'category_allocations')
@@ -567,16 +730,16 @@ Route::get('/admin/dashboard', function () {
         ->selectRaw("\n            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,\n            categories.particulars_category as category_name,\n            SUM(liquidation_expenses.amount) as total_amount\n        ");
 
     $trendTransactionCategoryQuery = DB::table('cash_advance_requests')
+        ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
         ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
             $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
         })
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
         ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
-        ->whereNotNull('cash_advance_requests.category')
-        ->where('cash_advance_requests.category', '<>', '')
-        ->groupBy('month_key', 'cash_advance_requests.category')
-        ->selectRaw("\n            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,\n            cash_advance_requests.category as category_name,\n            SUM({$transactionAmountSql}) as total_amount\n        ");
+        ->whereRaw("COALESCE(request_categories.particulars_category, cash_advance_requests.category, '') <> ''")
+        ->groupBy('month_key', 'category_name')
+        ->selectRaw("\n            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,\n            COALESCE(request_categories.particulars_category, cash_advance_requests.category) as category_name,\n            SUM({$transactionAmountSql}) as total_amount\n        ");
 
     $trendRows = DB::query()
         ->fromSub($trendBreakdownQuery->unionAll($trendTransactionCategoryQuery), 'trend_allocations')
@@ -700,7 +863,7 @@ Route::get('/admin/dashboard/summary', function (Request $request) {
 |--------------------------------------------------------------------------
 */
 
-Route::get('/accounting/dashboard', function () {
+Route::get('/accounting/dashboard', function (Request $request) {
     if ($redirect = redirect_if_role_not_allowed([3])) {
         return $redirect;
     }
@@ -767,17 +930,17 @@ Route::get('/accounting/dashboard', function () {
         ");
 
     $transactionCategoryQuery = DB::table('cash_advance_requests')
+        ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
         ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
             $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
         })
         ->whereBetween('cash_advance_requests.request_date', [$monthStart, $monthEnd])
         ->whereRaw($debitWhereSql, ['%manual credit entry%'])
         ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
-        ->whereNotNull('cash_advance_requests.category')
-        ->where('cash_advance_requests.category', '<>', '')
-        ->groupBy('cash_advance_requests.category')
+        ->whereRaw("COALESCE(request_categories.particulars_category, cash_advance_requests.category, '') <> ''")
+        ->groupBy('category_name')
         ->selectRaw("
-            cash_advance_requests.category as category_name,
+            COALESCE(request_categories.particulars_category, cash_advance_requests.category) as category_name,
             SUM({$transactionAmountSql}) as total_amount,
             COUNT(*) as transaction_count
         ");
@@ -808,71 +971,13 @@ Route::get('/accounting/dashboard', function () {
         ]);
     }
 
-    $trendStart = $selectedMonth->copy()->subMonths(5)->startOfMonth();
-    $trendEnd = $selectedMonth->copy()->endOfMonth();
-
-    $trendBreakdownQuery = DB::table('cash_advance_requests')
-        ->join('liquidation_expenses', 'liquidation_expenses.cash_advance_request_id', '=', 'cash_advance_requests.id')
-        ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-        ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
-        ->whereRaw($debitWhereSql, ['%manual credit entry%'])
-        ->whereNotNull('categories.particulars_category')
-        ->groupBy('month_key', 'categories.particulars_category')
-        ->selectRaw("
-            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
-            categories.particulars_category as category_name,
-            SUM(liquidation_expenses.amount) as total_amount
-        ");
-
-    $trendTransactionCategoryQuery = DB::table('cash_advance_requests')
-        ->leftJoinSub($allBreakdownsSubquery, 'dashboard_breakdowns', function ($join) {
-            $join->on('dashboard_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
-        })
-        ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
-        ->whereRaw($debitWhereSql, ['%manual credit entry%'])
-        ->whereRaw('COALESCE(dashboard_breakdowns.breakdown_count, 0) = 0')
-        ->whereNotNull('cash_advance_requests.category')
-        ->where('cash_advance_requests.category', '<>', '')
-        ->groupBy('month_key', 'cash_advance_requests.category')
-        ->selectRaw("
-            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
-            cash_advance_requests.category as category_name,
-            SUM({$transactionAmountSql}) as total_amount
-        ");
-
-    $trendRows = DB::query()
-        ->fromSub($trendBreakdownQuery->unionAll($trendTransactionCategoryQuery), 'trend_allocations')
-        ->selectRaw('month_key, category_name, SUM(total_amount) as total_amount')
-        ->groupBy('month_key', 'category_name')
-        ->get();
-
-    $trendCategoryNames = $topCategories->pluck('category_name')->take(4)->values();
-    $monthlyTrend = collect(range(5, 0))->map(function (int $monthsAgo) use ($selectedMonth, $trendRows, $trendCategoryNames) {
-        $monthDate = $selectedMonth->copy()->subMonths($monthsAgo)->startOfMonth();
-        $monthKey = $monthDate->format('Y-m');
-        $monthRows = $trendRows->where('month_key', $monthKey);
-        $categoryRows = $trendCategoryNames->map(function (string $categoryName) use ($monthRows) {
-            return [
-                'category_name' => $categoryName,
-                'total_amount' => (float) optional($monthRows->firstWhere('category_name', $categoryName))->total_amount,
-            ];
-        });
-        $otherAmount = max(0, (float) $monthRows->sum('total_amount') - (float) $categoryRows->sum('total_amount'));
-
-        if ($otherAmount > 0) {
-            $categoryRows->push([
-                'category_name' => 'Others',
-                'total_amount' => $otherAmount,
-            ]);
-        }
-
-        return [
-            'month_key' => $monthKey,
-            'label' => $monthDate->format('M Y'),
-            'categories' => $categoryRows->values(),
-            'total_amount' => (float) $monthRows->sum('total_amount'),
-        ];
-    });
+    $categoryExpenseMatrix = buildDashboardCategoryExpenseMatrix($request, $selectedMonth);
+    $categoryMatrixExportQuery = array_filter([
+        'month' => $selectedMonthKey,
+        'matrix_period' => $categoryExpenseMatrix['filters']['period'],
+        'matrix_start_date' => $categoryExpenseMatrix['filters']['start_date'],
+        'matrix_end_date' => $categoryExpenseMatrix['filters']['end_date'],
+    ], fn ($value) => $value !== null && $value !== '');
 
     return view('accounting.dashboard', compact(
         'availableMonths',
@@ -884,9 +989,42 @@ Route::get('/accounting/dashboard', function () {
         'topCategories',
         'distribution',
         'totalCategoryAmount',
-        'monthlyTrend'
+        'categoryExpenseMatrix',
+        'categoryMatrixExportQuery'
     ));
 })->middleware('auth')->name('accounting.dashboard');
+
+Route::get('/accounting/dashboard/category-matrix/export/{format}', function (Request $request, string $format) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    abort_unless(in_array($format, ['excel', 'pdf'], true), 404);
+
+    $availableMonthKeys = collect(range(1, 12))
+        ->map(fn (int $month) => \Carbon\Carbon::createFromDate(2026, $month, 1)->format('Y-m'));
+    $currentMonthKey = now()->year === 2026 ? now()->format('Y-m') : '2026-12';
+    $requestedMonthKey = (string) $request->query('month', '');
+    $selectedMonthKey = $availableMonthKeys->contains($requestedMonthKey)
+        ? $requestedMonthKey
+        : ($availableMonthKeys->contains($currentMonthKey) ? $currentMonthKey : '2026-12');
+    $selectedMonth = \Carbon\Carbon::createFromFormat('Y-m', $selectedMonthKey)->startOfMonth();
+
+    $categoryExpenseMatrix = buildDashboardCategoryExpenseMatrix($request, $selectedMonth);
+    $html = view('accounting.exports.category-expense-matrix', [
+        'categoryExpenseMatrix' => $categoryExpenseMatrix,
+        'format' => $format,
+    ])->render();
+
+    if ($format === 'excel') {
+        return response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="category-expense-matrix-' . now()->format('Ymd-His') . '.xls"',
+        ]);
+    }
+
+    return response($html);
+})->where('format', 'excel|pdf')->middleware('auth')->name('accounting.category-expense-matrix.export');
 
 Route::get('/accounting/send-cash', function () {
     if ($redirect = redirect_if_role_not_allowed([3])) {
@@ -1009,6 +1147,7 @@ Route::post('/accounting/liquidate-expenses/import', [\App\Http\Controllers\Acco
 Route::get('/accounting/liquidate-expenses/expense/{id}/breakdown', [\App\Http\Controllers\AccountingController::class, 'showExpenseBreakdown'])->middleware('auth')->name('accounting.show-expense-breakdown');
 Route::patch('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'updateBreakdown'])->middleware('auth')->name('accounting.update-breakdown');
 Route::delete('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteBreakdown'])->middleware('auth')->name('accounting.delete-breakdown');
+Route::delete('/accounting/liquidate-expenses/breakdown-attachment/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteTransactionAttachment'])->middleware('auth')->name('accounting.delete-breakdown-attachment');
 Route::patch('/accounting/liquidate-expenses/expense/{id}/category', [\App\Http\Controllers\AccountingController::class, 'updateExpenseCategory'])->middleware('auth')->name('accounting.update-expense-category');
 Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
 Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
@@ -1085,7 +1224,8 @@ Route::get('/accounting/summary/data', function (Request $request) {
 
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
     $expenseQuery = DB::table('cash_advance_requests')
-        ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id');
+        ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+        ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id');
 
     // Apply filters
     if ($employeeId) {
@@ -1097,7 +1237,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $effectiveAmountSql = $transactionAmountSql;
     $categoryParticularSql = 'cash_advance_requests.purpose';
     $categoryDescriptionSql = 'cash_advance_requests.accounting_remarks';
-    $categoryNameSql = 'cash_advance_requests.category';
+    $categoryNameSql = 'COALESCE(request_categories.particulars_category, cash_advance_requests.category)';
 
     if ($categoryId) {
         if ($categoryName) {
@@ -1133,9 +1273,12 @@ Route::get('/accounting/summary/data', function (Request $request) {
                     $query->where(function ($breakdownQuery) {
                         $breakdownQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) > 0')
                             ->whereRaw('COALESCE(summary_category_breakdowns.matching_amount, 0) > 0');
-                    })->orWhere(function ($transactionQuery) use ($categoryName) {
+                    })->orWhere(function ($transactionQuery) use ($categoryId, $categoryName) {
                         $transactionQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) = 0')
-                            ->where('cash_advance_requests.category', $categoryName);
+                            ->where(function ($categoryQuery) use ($categoryId, $categoryName) {
+                                $categoryQuery->where('cash_advance_requests.category_id', $categoryId)
+                                    ->orWhere('cash_advance_requests.category', $categoryName);
+                            });
                     });
                 });
 

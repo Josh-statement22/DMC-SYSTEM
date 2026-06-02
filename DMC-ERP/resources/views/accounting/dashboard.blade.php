@@ -10,7 +10,6 @@
 	$totalTransactions = (int) ($monthlyTransactionSummary->transaction_count ?? 0);
 	$maxCategoryAmount = max(1, (float) ($categorySummaries->max('total_amount') ?? 0));
 	$distributionColors = ['#0f766e', '#0891b2', '#e11d48', '#7c3aed', '#64748b'];
-	$trendColors = ['#0f766e', '#0891b2', '#e11d48', '#7c3aed', '#64748b'];
 	$conicStart = 0;
 	$conicSegments = [];
 
@@ -23,7 +22,6 @@
 	$pieBackground = count($conicSegments) > 0
 		? 'conic-gradient(' . implode(', ', $conicSegments) . ')'
 		: 'conic-gradient(#e5e7eb 0% 100%)';
-	$maxTrendAmount = max(1, (float) collect($monthlyTrend)->max('total_amount'));
 	$categoryPrintRows = $categorySummaries->map(fn ($category) => [
 		'category_name' => $category->category_name,
 		'total_amount' => (float) $category->total_amount,
@@ -205,50 +203,105 @@
 		</div>
 
 		<div class="xl:col-span-2 rounded-2xl bg-white p-6 shadow-lg border border-gray-100">
-			<div class="mb-6">
-				<h3 class="text-xl font-bold text-gray-800">Monthly Category Trend</h3>
-				<p class="text-sm text-gray-500 mt-1">Stacked category expenses over the last six months</p>
-			</div>
-
-			<div class="space-y-5">
-				@foreach($monthlyTrend as $month)
-					@php
-						$totalAmount = (float) ($month['total_amount'] ?? 0);
-						$rowWidth = max(2, ($totalAmount / $maxTrendAmount) * 100);
-					@endphp
-					<div class="grid grid-cols-1 gap-2 md:grid-cols-[7rem_1fr_9rem] md:items-center">
-						<p class="text-sm font-semibold text-gray-700">{{ $month['label'] }}</p>
-						<div class="h-5 overflow-hidden rounded-full bg-gray-100" style="width: {{ $rowWidth }}%">
-							<div class="flex h-full w-full">
-								@foreach($month['categories'] as $categoryIndex => $category)
-									@php
-										$segmentWidth = $totalAmount > 0 ? (((float) $category['total_amount'] / $totalAmount) * 100) : 0;
-									@endphp
-									@if($segmentWidth > 0)
-										<div class="h-full" title="{{ $category['category_name'] }} - {{ $formatCurrency($category['total_amount']) }}" style="width: {{ $segmentWidth }}%; background: {{ $trendColors[$categoryIndex % count($trendColors)] }}"></div>
-									@endif
-								@endforeach
-							</div>
+			<div class="mb-6 flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
+				<div>
+					<h3 class="text-xl font-bold text-gray-800">Category Expense Matrix</h3>
+					<p class="text-sm text-gray-500 mt-1">
+						Debit spending from {{ \Carbon\Carbon::parse($categoryExpenseMatrix['filters']['effective_start_date'] ?? now())->format('M d, Y') }}
+						to {{ \Carbon\Carbon::parse($categoryExpenseMatrix['filters']['effective_end_date'] ?? now())->format('M d, Y') }}
+					</p>
+					<p class="mt-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">2026 months only</p>
+				</div>
+				<div class="flex w-full flex-col gap-3 2xl:w-auto 2xl:items-end">
+					<form method="GET" action="{{ route('accounting.dashboard') }}" class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end 2xl:justify-end">
+						<input type="hidden" name="month" value="{{ $selectedMonthKey }}">
+						<div class="w-full sm:w-44">
+							<label for="categoryMatrixPeriod" class="block text-sm font-semibold text-gray-700 mb-2">Period</label>
+							<select id="categoryMatrixPeriod" name="matrix_period" class="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+								<option value="last_3" {{ ($categoryExpenseMatrix['filters']['period'] ?? 'last_6') === 'last_3' ? 'selected' : '' }}>Last 3 Months</option>
+								<option value="last_6" {{ ($categoryExpenseMatrix['filters']['period'] ?? 'last_6') === 'last_6' ? 'selected' : '' }}>Last 6 Months</option>
+								<option value="last_12" {{ ($categoryExpenseMatrix['filters']['period'] ?? 'last_6') === 'last_12' ? 'selected' : '' }}>Last 12 Months</option>
+								<option value="custom" {{ ($categoryExpenseMatrix['filters']['period'] ?? 'last_6') === 'custom' ? 'selected' : '' }}>Custom Date Range</option>
+							</select>
 						</div>
-						<p class="text-sm font-bold text-gray-800 md:text-right">{{ $formatCurrency($totalAmount) }}</p>
+						<div class="categoryMatrixCustomField w-full sm:w-40">
+							<label for="categoryMatrixStartDate" class="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
+							<input id="categoryMatrixStartDate" name="matrix_start_date" type="date" min="2026-01-01" max="2026-12-31" value="{{ $categoryExpenseMatrix['filters']['start_date'] ?? '' }}" class="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+						</div>
+						<div class="categoryMatrixCustomField w-full sm:w-40">
+							<label for="categoryMatrixEndDate" class="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+							<input id="categoryMatrixEndDate" name="matrix_end_date" type="date" min="2026-01-01" max="2026-12-31" value="{{ $categoryExpenseMatrix['filters']['end_date'] ?? '' }}" class="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+						</div>
+						<button type="submit" class="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 sm:w-auto">
+							<i data-feather="filter" class="w-4 h-4"></i>
+							Apply
+						</button>
+					</form>
+					<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:justify-end">
+						<a href="{{ route('accounting.category-expense-matrix.export', array_merge(['format' => 'excel'], $categoryMatrixExportQuery ?? [])) }}" class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100">
+							<i data-feather="download" class="w-4 h-4"></i>
+							Export Excel
+						</a>
+						<a href="{{ route('accounting.category-expense-matrix.export', array_merge(['format' => 'pdf'], $categoryMatrixExportQuery ?? [])) }}" target="_blank" rel="noopener" class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">
+							<i data-feather="file-text" class="w-4 h-4"></i>
+							Export PDF
+						</a>
 					</div>
-				@endforeach
+				</div>
 			</div>
 
-			<div class="mt-6 flex flex-wrap gap-4 text-xs font-semibold text-gray-500">
-				@foreach($topCategories->take(4)->values() as $index => $category)
-					<span class="inline-flex items-center gap-2">
-						<span class="h-2.5 w-2.5 rounded-full" style="background: {{ $trendColors[$index % count($trendColors)] }}"></span>
-						{{ $category->category_name }}
-					</span>
-				@endforeach
-				@if($categorySummaries->count() > 4)
-					<span class="inline-flex items-center gap-2">
-						<span class="h-2.5 w-2.5 rounded-full" style="background: {{ $trendColors[4] }}"></span>
-						Others
-					</span>
-				@endif
-			</div>
+			@if(!($categoryExpenseMatrix['has_data'] ?? false))
+				<div class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm font-semibold text-gray-500">
+					No category spending data available.
+				</div>
+			@else
+				<div class="overflow-x-auto rounded-xl border border-gray-200">
+					<table class="w-full min-w-[820px] border-separate border-spacing-0 text-sm">
+						<thead>
+							<tr class="bg-gray-50 text-xs font-bold uppercase tracking-wide text-gray-500">
+								<th class="sticky left-0 z-20 border-b border-gray-200 bg-gray-50 px-4 py-3 text-left">Category</th>
+								@foreach($categoryExpenseMatrix['months'] ?? [] as $matrixMonth)
+									<th class="border-b border-gray-200 px-4 py-3 text-right">{{ $matrixMonth['label'] }}</th>
+								@endforeach
+								<th class="border-b border-gray-200 bg-slate-100 px-4 py-3 text-right text-slate-700">Total</th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach($categoryExpenseMatrix['rows'] ?? [] as $matrixRow)
+								<tr class="group hover:bg-emerald-50/40">
+									<th class="sticky left-0 z-10 border-b border-gray-100 bg-white px-4 py-3 text-left font-semibold text-gray-800 group-hover:bg-emerald-50">
+										<a href="{{ $matrixRow['transactions_url'] }}" class="inline-flex items-center gap-2 text-emerald-700 hover:text-emerald-900">
+											<span>{{ $matrixRow['category_name'] }}</span>
+											<i data-feather="arrow-up-right" class="w-3.5 h-3.5"></i>
+										</a>
+									</th>
+									@foreach($categoryExpenseMatrix['months'] ?? [] as $matrixMonth)
+										@php
+											$matrixAmount = (float) ($matrixRow['amounts'][$matrixMonth['key']] ?? 0);
+											$isHighest = $matrixAmount > 0 && round($matrixAmount, 2) === round((float) ($categoryExpenseMatrix['highest_by_month'][$matrixMonth['key']] ?? 0), 2);
+										@endphp
+										<td class="border-b border-gray-100 px-4 py-3 text-right font-medium {{ $isHighest ? 'bg-amber-50 text-amber-900' : 'text-gray-700' }}">
+											{{ $formatCurrency($matrixAmount) }}
+										</td>
+									@endforeach
+									<td class="border-b border-gray-100 bg-slate-50 px-4 py-3 text-right font-bold text-slate-900">
+										{{ $formatCurrency($matrixRow['total'] ?? 0) }}
+									</td>
+								</tr>
+							@endforeach
+						</tbody>
+						<tfoot>
+							<tr class="bg-slate-900 text-white">
+								<th class="sticky left-0 z-20 bg-slate-900 px-4 py-3 text-left font-bold">TOTAL</th>
+								@foreach($categoryExpenseMatrix['months'] ?? [] as $matrixMonth)
+									<td class="px-4 py-3 text-right font-bold">{{ $formatCurrency($categoryExpenseMatrix['column_totals'][$matrixMonth['key']] ?? 0) }}</td>
+								@endforeach
+								<td class="px-4 py-3 text-right font-bold">{{ $formatCurrency($categoryExpenseMatrix['grand_total'] ?? 0) }}</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			@endif
 		</div>
 	</div>
 </div>
@@ -260,6 +313,18 @@
 	const dashboardPeriodRange = @json($selectedMonth->format('F j, Y') . ' - ' . $selectedMonth->copy()->endOfMonth()->format('F j, Y'));
 	const dashboardPrintedByName = @json(Auth::user()->name ?? Auth::user()->email ?? 'Accounting');
 	const dashboardCompanyName = 'DMC ERP';
+	const categoryMatrixPeriod = document.getElementById('categoryMatrixPeriod');
+	const categoryMatrixCustomFields = document.querySelectorAll('.categoryMatrixCustomField');
+
+	function syncCategoryMatrixCustomFields() {
+		const showCustomFields = categoryMatrixPeriod?.value === 'custom';
+		categoryMatrixCustomFields.forEach(field => {
+			field.classList.toggle('hidden', !showCustomFields);
+		});
+	}
+
+	categoryMatrixPeriod?.addEventListener('change', syncCategoryMatrixCustomFields);
+	syncCategoryMatrixCustomFields();
 
 	function formatDashboardCurrency(amount) {
 		return 'PHP ' + Number(amount || 0).toLocaleString('en-US', {
@@ -303,7 +368,7 @@
 		@page { size: A4 landscape; margin: 14mm; }
 		* { box-sizing: border-box; }
 		body { font-family: Arial, sans-serif; color: #111827; margin: 0; }
-		.report-page { position: relative; min-height: 100vh; padding-bottom: 24px; }
+		.report-page { min-height: 100vh; padding-bottom: 24px; }
 		.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 18px; border-bottom: 2px solid #111827; padding-bottom: 14px; }
 		.company { font-size: 16px; font-weight: 800; color: #0f172a; margin: 0 0 8px; }
 		.title { font-size: 24px; font-weight: 800; letter-spacing: .04em; margin: 0; color: #0f172a; text-transform: uppercase; }
@@ -314,9 +379,15 @@
 		.amount-col { width: 32%; }
 		.text-right { text-align: right; }
 		.empty-state { text-align: center; color: #6b7280; padding: 18px 12px; }
-		tfoot td { font-size: 13px; font-weight: 800; background: #f9fafb; }
-		.footer { position: fixed; right: 14mm; bottom: 8mm; font-size: 10px; color: #6b7280; }
-		.footer::after { content: "Page " counter(page) " of " counter(pages); }
+		.grand-total td { border-top: 2px solid #111827; font-size: 13px; font-weight: 800; background: #f9fafb; }
+		@media print {
+			.grand-total {
+				position: static !important;
+				page-break-inside: avoid;
+				break-inside: avoid;
+				margin-top: 20px;
+			}
+		}
 	</style>
 </head>
 <body>
@@ -336,21 +407,18 @@
 			</div>
 		</div>
 		<table>
-			<thead>
-				<tr>
+			<tbody>
+				<tr class="table-heading">
 					<th>Category</th>
 					<th class="amount-col text-right">Total Amount</th>
 				</tr>
-			</thead>
-			<tbody>${rows}</tbody>
-			<tfoot>
-				<tr>
+				${rows}
+				<tr class="grand-total">
 					<td>Grand Total</td>
 					<td class="text-right">${formatDashboardCurrency(dashboardGrandTotal)}</td>
 				</tr>
-			</tfoot>
+			</tbody>
 		</table>
-		<div class="footer"></div>
 	</div>
 </body>
 </html>`;

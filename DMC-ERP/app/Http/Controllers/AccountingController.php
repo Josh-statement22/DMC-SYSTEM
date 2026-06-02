@@ -10,13 +10,14 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AccountingController extends Controller
 {
-    public function liquidateExpenses(Request $request): View
+    public function liquidateExpenses(Request $request): View|string
     {
         $this->authorizeAccounting();
 
@@ -54,9 +55,20 @@ class AccountingController extends Controller
             ->orderBy('particulars_category')
             ->get();
 
+        $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
+        $selectedType = strtolower((string) $request->query('type', ''));
+        $selectedType = in_array($selectedType, ['credit', 'debit'], true) ? $selectedType : '';
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+        $startDate = is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) ? $startDate : '';
+        $endDate = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) ? $endDate : '';
+        $selectedCategory = trim((string) $request->query('category', ''));
+        $search = trim((string) $request->query('search', ''));
+
         // Show recorded transactions coming from cash advance requests (backtracking)
-        $expenses = DB::table('cash_advance_requests')
+        $expensesQuery = DB::table('cash_advance_requests')
             ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+            ->leftJoin('categories as transaction_categories', 'cash_advance_requests.category_id', '=', 'transaction_categories.id')
             ->whereBetween('cash_advance_requests.request_date', [
                 $monthDate->toDateString(),
                 $monthDate->copy()->endOfMonth()->toDateString(),
@@ -65,21 +77,68 @@ class AccountingController extends Controller
                 'cash_advance_requests.id',
                 'cash_advance_requests.requester_id as employee_id',
                 'cash_advance_requests.request_date as expense_date',
-                DB::raw("CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END as transaction_type"),
+                DB::raw("{$transactionTypeSql} as transaction_type"),
                 'cash_advance_requests.purpose as transaction_details',
-                'cash_advance_requests.category',
+                'cash_advance_requests.category_id',
+                DB::raw('COALESCE(transaction_categories.particulars_category, cash_advance_requests.category) as category'),
                 'cash_advance_requests.accounting_remarks as description',
                 'cash_advance_requests.approved_amount as amount',
                 'users.name as employee_name'
-            )
+            );
+
+        if ($selectedType) {
+            $expensesQuery->whereRaw("{$transactionTypeSql} = ?", [$selectedType]);
+        }
+
+        if ($startDate) {
+            $expensesQuery->whereDate('cash_advance_requests.request_date', '>=', $startDate);
+        }
+
+        if ($endDate) {
+            $expensesQuery->whereDate('cash_advance_requests.request_date', '<=', $endDate);
+        }
+
+        if ($selectedCategory !== '') {
+            $expensesQuery->whereRaw('COALESCE(transaction_categories.particulars_category, cash_advance_requests.category) = ?', [$selectedCategory]);
+        }
+
+        if ($search !== '') {
+            $expensesQuery->where(function ($query) use ($search) {
+                $query->where('users.name', 'like', "%{$search}%")
+                    ->orWhere('cash_advance_requests.purpose', 'like', "%{$search}%")
+                    ->orWhereRaw('COALESCE(transaction_categories.particulars_category, cash_advance_requests.category) like ?', ["%{$search}%"])
+                    ->orWhere('cash_advance_requests.accounting_remarks', 'like', "%{$search}%");
+            });
+        }
+
+        $expenses = $expensesQuery
             ->orderByDesc('cash_advance_requests.request_date')
             ->orderByDesc('cash_advance_requests.id')
-            ->get()
-            ->map(function ($expense) {
-                $expense->expense_date = Carbon::parse($expense->expense_date);
+            ->paginate(15)
+            ->withQueryString();
 
-                return $expense;
-            });
+        $expenses->getCollection()->transform(function ($expense) {
+            $expense->expense_date = Carbon::parse($expense->expense_date);
+
+            return $expense;
+        });
+
+        $transactionFilters = [
+            'type' => $selectedType,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'category' => $selectedCategory,
+            'search' => $search,
+        ];
+        $hasTransactionFilters = (bool) ($selectedType || $startDate || $endDate || $selectedCategory || $search);
+
+        if ($request->ajax()) {
+            return view('transactions.partials.table', [
+                'categories' => $categories,
+                'expenses' => $expenses,
+                'hasTransactionFilters' => $hasTransactionFilters,
+            ])->render();
+        }
 
         return view('accounting.liquidate-expenses', [
             'employees' => $employees,
@@ -91,6 +150,8 @@ class AccountingController extends Controller
             'debitTotal' => $balance['debit_total'],
             'creditTotal' => $balance['credit_total'],
             'expenses' => $expenses,
+            'transactionFilters' => $transactionFilters,
+            'hasTransactionFilters' => $hasTransactionFilters,
         ]);
     }
 
@@ -107,6 +168,8 @@ class AccountingController extends Controller
                 'amount' => 'required|numeric',
                 'transaction_details' => 'nullable|string|max:255',
                 'description' => 'nullable|string',
+                'attachments' => 'nullable|array|max:10',
+                'attachments.*' => 'file|mimes:pdf,jpg,jpeg,png,docx,xlsx|max:10240',
             ]);
 
             $expenseDate = Carbon::parse($validated['expense_date']);
@@ -165,6 +228,8 @@ class AccountingController extends Controller
                 return compact('expenseId', 'allocation');
             });
 
+            $attachmentCount = $this->storeTransactionAttachments($request, (int) $result['expenseId']);
+
             $expense = DB::table('liquidation_expenses')
                 ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
                 ->leftJoin('users', 'liquidations.user_id', '=', 'users.id')
@@ -189,6 +254,7 @@ class AccountingController extends Controller
                     ? 'Breakdown saved. Parent Budget is overspent; actual cash was not deducted again.'
                     : 'Breakdown saved successfully.',
                 'expense' => $expense,
+                'attachment_count' => $attachmentCount,
                 'allocation' => $result['allocation'],
             ], 201);
         }
@@ -199,12 +265,23 @@ class AccountingController extends Controller
             'transaction_type' => 'required|in:debit,credit',
             'amount' => 'required|numeric|min:0.01',
             'purpose' => 'required|string|max:2000',
-            'category' => 'nullable|string|exists:categories,particulars_category',
+            'category_id' => 'nullable|integer|exists:categories,id',
         ]);
 
         $expenseDate = Carbon::parse($validated['expense_date']);
         $cutoffPeriod = $expenseDate->format('F Y');
         $transactionType = $validated['transaction_type'];
+        $categoryId = $validated['category_id'] ?? null;
+
+        if ($transactionType === 'debit' && ! $categoryId) {
+            throw ValidationException::withMessages([
+                'category_id' => 'Category is required for Debit transactions.',
+            ]);
+        }
+
+        $categoryName = $categoryId
+            ? DB::table('categories')->where('id', $categoryId)->value('particulars_category')
+            : null;
 
         $purpose = trim($validated['purpose']) ?: null;
 
@@ -248,7 +325,8 @@ class AccountingController extends Controller
             'requested_amount' => round((float) $validated['amount'], 2),
             'approved_amount' => round((float) $validated['amount'], 2),
             'purpose' => $purpose,
-            'category' => $validated['category'] ?? null,
+            'category_id' => $categoryId,
+            'category' => $categoryName,
             'request_date' => $validated['expense_date'],
             'date_needed' => $validated['expense_date'],
             'status' => 'approved',
@@ -265,13 +343,15 @@ class AccountingController extends Controller
 
         $expense = DB::table('cash_advance_requests')
             ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+            ->leftJoin('categories as transaction_categories', 'cash_advance_requests.category_id', '=', 'transaction_categories.id')
             ->where('cash_advance_requests.id', $requestId)
             ->select(
                 'cash_advance_requests.id',
                 'cash_advance_requests.request_date as expense_date',
                 DB::raw("CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END as transaction_type"),
                 'cash_advance_requests.purpose as transaction_details',
-                'cash_advance_requests.category',
+                'cash_advance_requests.category_id',
+                DB::raw('COALESCE(transaction_categories.particulars_category, cash_advance_requests.category) as category'),
                 'cash_advance_requests.accounting_remarks as description',
                 'cash_advance_requests.approved_amount as amount',
                 'users.name as employee_name'
@@ -294,7 +374,7 @@ class AccountingController extends Controller
         $this->authorizeAccounting();
 
         $validated = $request->validate([
-            'category' => 'nullable|string|exists:categories,particulars_category',
+            'category_id' => 'nullable|integer|exists:categories,id',
         ]);
 
         $expense = DB::table('cash_advance_requests')
@@ -303,12 +383,23 @@ class AccountingController extends Controller
 
         abort_unless($expense, 404);
 
-        $category = trim((string) ($validated['category'] ?? ''));
-        $category = $category === '' ? null : $category;
+        $isDebit = ! str_contains(strtolower((string) ($expense->accounting_remarks ?? '')), 'manual credit entry');
+        $categoryId = $validated['category_id'] ?? null;
+
+        if ($isDebit && ! $categoryId) {
+            throw ValidationException::withMessages([
+                'category_id' => 'Category is required for Debit transactions.',
+            ]);
+        }
+
+        $category = $categoryId
+            ? DB::table('categories')->where('id', $categoryId)->value('particulars_category')
+            : null;
 
         DB::table('cash_advance_requests')
             ->where('id', $id)
             ->update([
+                'category_id' => $categoryId,
                 'category' => $category,
                 'updated_at' => now(),
             ]);
@@ -318,6 +409,7 @@ class AccountingController extends Controller
             'message' => 'Transaction category updated successfully.',
             'transaction' => [
                 'id' => $id,
+                'category_id' => $categoryId,
                 'category' => $category,
             ],
         ]);
@@ -535,6 +627,10 @@ class AccountingController extends Controller
                 }
             }
 
+            if ($transactionType === 'debit' && ! $category) {
+                $errors[] = 'Category is required for Debit transactions.';
+            }
+
             $amountValue = trim((string) ($row['amount'] ?? ''));
             
             // Handle empty amount
@@ -599,6 +695,7 @@ class AccountingController extends Controller
                     'requested_amount' => $amount,
                     'approved_amount' => $amount,
                     'purpose' => $purpose !== '' ? $purpose : null,
+                    'category_id' => $category?->id,
                     'category' => $category?->particulars_category,
                     'request_date' => $expenseDate->toDateString(),
                     'date_needed' => $expenseDate->toDateString(),
@@ -703,7 +800,7 @@ class AccountingController extends Controller
         ]);
     }
 
-    public function showExpenseBreakdown(int $id): JsonResponse
+    public function showExpenseBreakdown(Request $request, int $id): JsonResponse
     {
         $this->authorizeAccounting();
 
@@ -749,12 +846,38 @@ class AccountingController extends Controller
                     'liquidation_expenses.transaction_details',
                     'liquidation_expenses.description',
                     'liquidation_expenses.amount',
+                    'liquidation_expenses.receipt_path',
                     DB::raw('categories.particulars_category as category_name')
                 )
                 ->orderBy('liquidation_expenses.expense_date')
                 ->orderBy('liquidation_expenses.id')
                 ->get();
         }
+
+        $attachments = DB::table('cash_advance_request_attachments')
+            ->where('cash_advance_request_id', $debit->id)
+            ->select('original_name', 'file_path', 'mime_type', 'file_size')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($attachment) use ($request) {
+                return [
+                    'name' => $attachment->original_name,
+                    'url' => $this->publicStorageUrl($attachment->file_path, $request),
+                    'download_url' => $this->publicStorageUrl($attachment->file_path, $request),
+                    'type' => $attachment->mime_type,
+                    'size' => (int) ($attachment->file_size ?? 0),
+                ];
+            })
+            ->values();
+
+        $transactionAttachments = $breakdowns->isEmpty()
+            ? collect()
+            : DB::table('transaction_attachments')
+                ->whereIn('transaction_breakdown_id', $breakdowns->pluck('id')->all())
+                ->select('id', 'transaction_breakdown_id', 'file_name', 'file_path', 'file_size', 'file_type', 'created_at')
+                ->orderBy('id')
+                ->get()
+                ->groupBy('transaction_breakdown_id');
 
         $allocation = $this->breakdownAllocationForRequest((int) $debit->id);
 
@@ -766,7 +889,11 @@ class AccountingController extends Controller
                 'expense_date' => Carbon::parse($debit->expense_date)->format('Y-m-d'),
                 'parent_amount' => $transactionAmount,
             ],
-            'breakdowns' => $breakdowns->map(function ($row) {
+            'breakdowns' => $breakdowns->map(function ($row) use ($request, $transactionAttachments) {
+                $rowAttachments = ($transactionAttachments->get($row->id) ?? collect())
+                    ->map(fn ($attachment) => $this->transactionAttachmentPayload($attachment, $request))
+                    ->values();
+
                 return [
                     'id' => $row->id,
                     'expense_date' => Carbon::parse($row->expense_date)->format('Y-m-d'),
@@ -774,8 +901,14 @@ class AccountingController extends Controller
                     'transaction_details' => $row->transaction_details,
                     'description' => $row->description,
                     'amount' => (float) $row->amount,
+                    'receipt_url' => $this->publicStorageUrl($row->receipt_path, $request),
+                    'attachments' => $rowAttachments,
                 ];
             })->values(),
+            'attachments' => $attachments,
+            'attachment_count' => $attachments->count()
+                + $breakdowns->filter(fn ($row) => ! empty($row->receipt_path))->count()
+                + $transactionAttachments->flatten(1)->count(),
             'allocation' => $allocation,
         ]);
     }
@@ -888,6 +1021,12 @@ class AccountingController extends Controller
                 )
                 : null;
 
+            DB::table('transaction_attachments')
+                ->where('transaction_breakdown_id', $expense->id)
+                ->select('file_path')
+                ->get()
+                ->each(fn ($attachment) => Storage::disk('public')->delete($attachment->file_path));
+
             DB::table('liquidation_expenses')->where('id', $id)->delete();
 
             if ($expense->cash_advance_request_id) {
@@ -907,9 +1046,109 @@ class AccountingController extends Controller
         ]);
     }
 
+    public function deleteTransactionAttachment(int $id): JsonResponse
+    {
+        $this->authorizeAccounting();
+
+        $attachment = DB::table('transaction_attachments')
+            ->where('id', $id)
+            ->first();
+
+        abort_unless($attachment, 404);
+
+        Storage::disk('public')->delete($attachment->file_path);
+        DB::table('transaction_attachments')->where('id', $id)->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Attachment deleted successfully.',
+        ]);
+    }
+
     private function breakdownAllocationForRequest(int $cashAdvanceRequestId): array
     {
         return app(AccountingBudgetService::class)->allocationForRequest($cashAdvanceRequestId);
+    }
+
+    private function storeTransactionAttachments(Request $request, int $transactionBreakdownId): int
+    {
+        $files = $request->file('attachments', []);
+
+        if (! is_array($files) || count($files) === 0) {
+            return 0;
+        }
+
+        $now = now();
+        $rows = [];
+
+        foreach ($files as $file) {
+            if (! $file || ! $file->isValid()) {
+                continue;
+            }
+
+            $fileName = $this->sanitizeAttachmentFileName($file->getClientOriginalName());
+            $extension = strtolower($file->getClientOriginalExtension());
+            $baseName = pathinfo($fileName, PATHINFO_FILENAME) ?: 'attachment';
+            $storedName = Str::uuid()->toString() . '-' . Str::slug($baseName ?: 'attachment') . '.' . $extension;
+            $path = $file->storeAs('transaction-attachments', $storedName, 'public');
+
+            $rows[] = [
+                'transaction_breakdown_id' => $transactionBreakdownId,
+                'file_name' => $fileName,
+                'file_path' => $path,
+                'file_size' => $file->getSize(),
+                'file_type' => $file->getClientMimeType(),
+                'uploaded_by' => Auth::id(),
+                'created_at' => $now,
+            ];
+        }
+
+        if ($rows) {
+            DB::table('transaction_attachments')->insert($rows);
+        }
+
+        return count($rows);
+    }
+
+    private function transactionAttachmentPayload(object $attachment, ?Request $request = null): array
+    {
+        $url = $this->publicStorageUrl($attachment->file_path, $request);
+
+        return [
+            'id' => $attachment->id,
+            'name' => $attachment->file_name,
+            'url' => $url,
+            'download_url' => $url,
+            'size' => (int) $attachment->file_size,
+            'type' => $attachment->file_type,
+            'created_at' => $attachment->created_at,
+        ];
+    }
+
+    private function publicStorageUrl(?string $path, ?Request $request = null): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        if (! $request) {
+            return Storage::disk('public')->url($path);
+        }
+
+        $baseUrl = rtrim($request->getSchemeAndHttpHost() . $request->getBaseUrl(), '/');
+
+        return $baseUrl . '/storage/' . ltrim($path, '/');
+    }
+
+    private function sanitizeAttachmentFileName(string $fileName): string
+    {
+        $fileName = basename($fileName);
+        $extension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $baseName = pathinfo($fileName, PATHINFO_FILENAME);
+        $baseName = Str::slug($baseName ?: 'attachment');
+        $baseName = $baseName ?: 'attachment';
+
+        return trim($baseName . ($extension ? '.' . $extension : ''));
     }
 
     private function authorizeAccounting(): void
