@@ -1,0 +1,427 @@
+# DMC-ERP Deployment Notes (DigitalOcean VPS)
+
+## 1. Connected to VPS
+
+SSH into the server:
+
+```bash
+ssh root@165.227.83.205
+```
+
+Successful login showed:
+
+```bash
+root@matt-vps:~#
+```
+
+---
+
+## 2. Installed Git
+
+Verified Git installation:
+
+```bash
+git --version
+```
+
+Configured Git identity:
+
+```bash
+git config --global user.name "Matt"
+git config --global user.email "mattquiling@gmail.com"
+```
+
+Verified:
+
+```bash
+git config --global --list
+```
+
+---
+
+## 3. Cloned Repository
+
+Cloned project from GitHub:
+
+```bash
+git clone https://github.com/Josh-statement22/DMC-SYSTEM
+```
+
+Entered Laravel project:
+
+```bash
+cd DMC-SYSTEM/DMC-ERP
+```
+
+---
+
+## 4. Installed PHP
+
+Updated package list:
+
+```bash
+apt update
+```
+
+Installed PHP 8.3 and required extensions.
+
+Verified:
+
+```bash
+php -v
+```
+
+Result:
+
+```text
+PHP 8.3.6
+```
+
+---
+
+## 5. Installed Composer
+
+Installed Composer.
+
+Verified:
+
+```bash
+composer --version
+```
+
+Result:
+
+```text
+Composer version 2.7.1
+```
+
+---
+
+## 6. Prepared Laravel Environment
+
+Created environment file:
+
+```bash
+cp .env.example .env
+```
+
+Generated application key:
+
+```bash
+php artisan key:generate
+```
+
+Result:
+
+```text
+Application key set successfully.
+```
+
+---
+
+## 7. Installed MySQL
+
+Installed MySQL server.
+
+Verified service:
+
+```bash
+systemctl status mysql
+```
+
+Result:
+
+```text
+Active: active (running)
+```
+
+Connected:
+
+```bash
+mysql -u root
+```
+
+---
+
+## 8. Imported Initial Database
+
+Originally imported:
+
+```text
+dmc_erp.sql
+```
+
+Laravel reported many migrations as pending.
+
+This revealed that the imported database was outdated.
+
+---
+
+## 9. Created Laravel Database User
+
+Inside MySQL:
+
+```sql
+CREATE USER 'laravel'@'localhost' IDENTIFIED BY 'Laravel123!';
+GRANT ALL PRIVILEGES ON dmc_erp.* TO 'laravel'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Updated `.env`:
+
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=dmc_erp
+DB_USERNAME=laravel
+DB_PASSWORD=Laravel123!
+```
+
+---
+
+## 10. Found Correct Database
+
+Uploaded:
+
+```text
+dmc_erp (production-14).sql
+```
+
+Using SCP:
+
+```bash
+scp "C:\Users\qysha\Downloads\dmc_erp (production-14).sql" root@165.227.83.205:/root/
+```
+
+Created backup of old database:
+
+```bash
+mysqldump -u root dmc_erp > /root/dmc_erp_backup_before_production14.sql
+```
+
+---
+
+## 11. Replaced Old Database
+
+Dropped and recreated database:
+
+```bash
+mysql -u root -e "DROP DATABASE dmc_erp; CREATE DATABASE dmc_erp;"
+```
+
+Imported production database:
+
+```bash
+mysql -u root dmc_erp < "/root/dmc_erp (production-14).sql"
+```
+
+Verified tables:
+
+```bash
+mysql -u root -e "USE dmc_erp; SHOW TABLES;"
+```
+
+Confirmed presence of:
+
+```text
+users
+roles
+suppliers
+categories
+items
+projects
+project_items
+cache
+sessions
+```
+
+---
+
+## 12. Verified Laravel Database
+
+Checked migrations:
+
+```bash
+php artisan migrate:status
+```
+
+All migrations reported:
+
+```text
+Ran
+```
+
+Database and code were now compatible.
+
+---
+
+## 13. Started Laravel
+
+Started server:
+
+```bash
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+Accessible at:
+
+```text
+http://165.227.83.205:8000
+```
+
+---
+
+## 14. Found Wrong Branch Issue
+
+Website loaded but showed old pages.
+
+Checked branches:
+
+```bash
+git branch -a
+```
+
+Found:
+
+```text
+main
+production-14
+production-12
+production-11
+...
+```
+
+Current branch:
+
+```text
+main
+```
+
+Database used:
+
+```text
+production-14
+```
+
+Mismatch caused old UI and authorization issues.
+
+---
+
+## 15. Switched to Correct Branch
+
+Changed branch:
+
+```bash
+git checkout production-14
+```
+
+Verified:
+
+```bash
+git status
+```
+
+Result:
+
+```text
+On branch production-14
+Your branch is up to date with 'origin/production-14'
+```
+
+Refreshed browser.
+
+Immediately:
+
+```text
+✓ Updated pages appeared
+✓ Accounting role worked
+✓ Correct version loaded
+```
+
+Root cause solved.
+
+---
+
+# Current Deployment Status
+
+Working:
+
+✓ VPS running
+
+✓ Laravel running
+
+✓ MySQL running
+
+✓ Correct database imported
+
+✓ Correct branch deployed (production-14)
+
+✓ Users accessible
+
+✓ Accounting module working
+
+✓ Data saving to database
+
+Current URL:
+
+```text
+http://165.227.83.205:8000
+```
+
+---
+
+# How to Start the Server Again
+
+SSH into VPS:
+
+```bash
+ssh root@165.227.83.205
+```
+
+Enter project:
+
+```bash
+cd ~/DMC-SYSTEM/DMC-ERP
+```
+
+Make sure correct branch:
+
+```bash
+git checkout production-14
+```
+
+Start Laravel:
+
+```bash
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+Open:
+
+```text
+http://165.227.83.205:8000
+```
+
+---
+
+# Future Update Workflow
+
+On local machine:
+
+```bash
+git checkout production-14
+git add .
+git commit -m "Update"
+git push origin production-14
+```
+
+On VPS:
+
+```bash
+cd ~/DMC-SYSTEM/DMC-ERP
+git checkout production-14
+git pull origin production-14
+```
+
+No need to re-import database unless schema changes.
