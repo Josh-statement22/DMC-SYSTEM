@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - DMC ERP</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://unpkg.com/feather-icons"></script>
     <style>
         /* Hide number input spinners */
@@ -19,29 +20,29 @@
     </style>
 </head>
 
-<body class="min-h-screen flex items-center justify-center relative overflow-hidden
+<body class="min-h-screen flex items-center justify-center relative overflow-hidden p-4
 bg-gradient-to-br from-blue-950 via-blue-700 to-blue-200">
 
     <!-- Decorative blurred background -->
-    <div class="absolute -top-40 -left-40 w-[500px] h-[500px] bg-blue-500 opacity-30 rounded-full blur-3xl"></div>
-    <div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-300 opacity-30 rounded-full blur-3xl"></div>
+    <div class="absolute -top-40 -left-40 w-[500px] h-[500px] bg-blue-500 opacity-30 rounded-full blur-3xl hidden md:block"></div>
+    <div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-300 opacity-30 rounded-full blur-3xl hidden md:block"></div>
 
     <!-- LOGIN CARD -->
-    <div class="relative z-10 w-[420px] bg-white rounded-3xl shadow-2xl overflow-hidden">
+    <div class="relative z-10 w-full sm:w-96 md:w-[420px] bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
 
         <!-- TOP BLUE LINE -->
         <div class="h-2 bg-gradient-to-r from-blue-800 to-blue-500"></div>
 
-        <div class="p-10">
+        <div class="p-6 sm:p-10">
 
             <div class="flex justify-center mb-6">
     <img src="{{ asset('images/logo.png') }}" 
          alt="Company Logo"
-         class="w-24 h-24 object-contain drop-shadow-lg">
+         class="w-20 sm:w-24 h-20 sm:h-24 object-contain drop-shadow-lg">
 </div>
 
             <div class="text-center mb-8">
-                <h1 class="text-2xl font-bold text-gray-800">
+                <h1 class="text-xl sm:text-2xl font-bold text-gray-800">
                     DMC Enterprises Corp
                 </h1>
             </div>

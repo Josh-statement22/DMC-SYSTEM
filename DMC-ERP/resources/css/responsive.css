@@ -1,0 +1,228 @@
+/**
+ * RESPONSIVE DESIGN UTILITIES
+ * Mobile-first approach with Tailwind CSS
+ * Breakpoints: sm: 640px | md: 768px | lg: 1024px | xl: 1280px | 2xl: 1536px
+ */
+
+/* ============================================================================
+   MOBILE-OPTIMIZED SPACING & MARGINS
+   ============================================================================ */
+
+/* Container Padding - Reduces on mobile, increases on desktop */
+.responsive-container {
+    @apply p-4 md:p-6 lg:p-8;
+}
+
+/* Card Spacing */
+.responsive-card {
+    @apply rounded-2xl md:rounded-3xl p-6 md:p-10 shadow-lg border border-white/40;
+}
+
+/* Section Spacing - Mobile: 16px, Tablet: 24px, Desktop: 32px */
+.section-spacing {
+    @apply space-y-4 md:space-y-6 lg:space-y-8;
+}
+
+/* Horizontal Margins for Main Content */
+.content-margin {
+    @apply mx-4 md:mx-6 lg:mx-8;
+}
+
+/* ============================================================================
+   TABLE RESPONSIVENESS
+   ============================================================================ */
+
+/* Responsive Table - Stack columns on mobile */
+@media (max-width: 640px) {
+    .responsive-table {
+        @apply text-sm;
+    }
+
+    .responsive-table thead {
+        @apply hidden;
+    }
+
+    .responsive-table tbody tr {
+        @apply block mb-4 border rounded-lg overflow-hidden shadow-md;
+    }
+
+    .responsive-table td {
+        @apply block px-4 py-3 text-left;
+        border: none;
+    }
+
+    .responsive-table td::before {
+        content: attr(data-label);
+        @apply font-semibold text-gray-700 mr-2 block;
+    }
+}
+
+@media (min-width: 641px) {
+    .responsive-table {
+        @apply w-full;
+    }
+
+    .responsive-table thead {
+        @apply bg-gray-100;
+    }
+
+    .responsive-table th {
+        @apply px-4 py-3 text-left font-semibold text-gray-700;
+    }
+
+    .responsive-table td {
+        @apply px-4 py-3 border-b border-gray-200;
+    }
+}
+
+/* Scrollable Table on Mobile */
+.table-wrapper {
+    @apply overflow-x-auto;
+}
+
+@media (max-width: 640px) {
+    .table-wrapper {
+        @apply -mx-4 px-4;
+    }
+}
+
+/* ============================================================================
+   BUTTON & FORM RESPONSIVENESS
+   ============================================================================ */
+
+/* Touch-friendly button sizing for mobile */
+.btn-responsive {
+    @apply px-4 py-2 md:px-6 md:py-3 min-h-[44px] md:min-h-[40px];
+}
+
+/* Form field responsive padding */
+.input-responsive {
+    @apply px-3 py-2 md:px-4 md:py-3 text-sm md:text-base;
+}
+
+/* Button Group - Stack on mobile, horizontal on desktop */
+.button-group {
+    @apply flex flex-col md:flex-row gap-2 md:gap-4;
+}
+
+/* ============================================================================
+   GRID RESPONSIVENESS
+   ============================================================================ */
+
+/* 1-2-3 Grid: 1 col on mobile, 2 on tablet, 3 on desktop */
+.grid-responsive-3 {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6;
+}
+
+/* 1-2 Grid: 1 col on mobile, 2 on desktop */
+.grid-responsive-2 {
+    @apply grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6;
+}
+
+/* Auto Grid - Fills width with equal columns */
+.grid-responsive-auto {
+    @apply grid auto-cols-fr gap-4 md:gap-6;
+}
+
+/* ============================================================================
+   TEXT RESPONSIVENESS
+   ============================================================================ */
+
+/* Heading Sizes - Scale down on mobile */
+.heading-responsive-xl {
+    @apply text-2xl md:text-3xl lg:text-4xl font-bold;
+}
+
+.heading-responsive-lg {
+    @apply text-xl md:text-2xl lg:text-3xl font-semibold;
+}
+
+.heading-responsive-md {
+    @apply text-lg md:text-xl font-semibold;
+}
+
+/* Paragraph Sizes */
+.text-responsive {
+    @apply text-sm md:text-base lg:text-lg;
+}
+
+/* ============================================================================
+   FLEX RESPONSIVENESS
+   ============================================================================ */
+
+/* Flex Direction - Column on mobile, row on desktop */
+.flex-responsive {
+    @apply flex flex-col md:flex-row;
+}
+
+/* Flex with Gap - Responsive spacing */
+.flex-gap-responsive {
+    @apply flex flex-col md:flex-row gap-4 md:gap-6;
+}
+
+/* ============================================================================
+   DISPLAY UTILITIES
+   ============================================================================ */
+
+/* Hide on mobile, show on desktop */
+.hide-mobile {
+    @apply hidden md:block;
+}
+
+/* Show on mobile, hide on desktop */
+.show-mobile {
+    @apply block md:hidden;
+}
+
+/* ============================================================================
+   SIDEBAR RESPONSIVE
+   ============================================================================ */
+
+/* Main Layout - Adjust for responsive sidebar */
+.sidebar-layout {
+    @apply flex h-screen;
+}
+
+.sidebar-content {
+    @apply flex-1 flex flex-col overflow-hidden;
+}
+
+/* ============================================================================
+   MODAL RESPONSIVENESS
+   ============================================================================ */
+
+/* Responsive Modal - Full screen on mobile, centered on desktop */
+.modal-responsive {
+    @apply fixed inset-0 md:inset-auto md:left-1/2 md:-translate-x-1/2 md:top-1/2 md:-translate-y-1/2
+           w-full md:w-96 h-full md:h-auto max-h-screen md:max-h-96
+           rounded-none md:rounded-2xl shadow-2xl;
+}
+
+/* ============================================================================
+   UTILITY CLASSES FOR COMMON PATTERNS
+   ============================================================================ */
+
+/* Responsive Padding Sides (left/right) */
+.px-responsive {
+    @apply px-4 md:px-6 lg:px-8;
+}
+
+/* Responsive Padding Top/Bottom */
+.py-responsive {
+    @apply py-4 md:py-6 lg:py-8;
+}
+
+/* Responsive Margin Sides */
+.mx-responsive {
+    @apply mx-4 md:mx-6 lg:mx-8;
+}
+
+/* Responsive Margin Top/Bottom */
+.my-responsive {
+    @apply my-4 md:my-6 lg:my-8;
+}
+
+/* Gap between elements - responsive */
+.gap-responsive {
+    @apply gap-4 md:gap-6 lg:gap-8;
+}

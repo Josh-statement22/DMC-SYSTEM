@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>DMC ERP - Admin</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://unpkg.com/feather-icons"></script>
 
     <style>
@@ -14,7 +15,52 @@
         }
 
         .sidebar {
-            transition: width 0.3s ease;
+            transition: transform 0.3s ease, width 0.3s ease;
+        }
+
+        /* Mobile: sidebar hidden by default, slide in from left */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                transform: translateX(-100%);
+                z-index: 40;
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 30;
+            }
+
+            .sidebar-overlay.mobile-open {
+                display: block;
+            }
+        }
+
+        /* Desktop: sidebar always visible */
+        @media (min-width: 769px) {
+            .sidebar {
+                position: static;
+                transform: none;
+                height: auto;
+            }
+
+            .sidebar-overlay {
+                display: none !important;
+            }
+
+            .mobile-toggle {
+                display: none;
+            }
         }
 
         .sidebar.collapsed {
@@ -56,14 +102,17 @@
 <body class="relative overflow-hidden">
 
 <!-- Decorative Background -->
-<div class="absolute -top-40 -left-40 w-[500px] h-[500px] bg-blue-200 opacity-30 rounded-full blur-3xl"></div>
-<div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-100 opacity-40 rounded-full blur-3xl"></div>
+<div class="absolute -top-40 -left-40 w-[500px] h-[500px] bg-blue-200 opacity-30 rounded-full blur-3xl hidden md:block"></div>
+<div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-100 opacity-40 rounded-full blur-3xl hidden md:block"></div>
+
+<!-- Mobile Overlay -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <div class="relative flex h-screen overflow-hidden">
 
     <!-- SIDEBAR -->
     <aside id="sidebar"
-        class="sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20">
+        class="sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20 md:translate-x-0">
 
         <!-- LOGO -->
         <div class="h-20 flex items-center justify-center border-b">
@@ -140,11 +189,11 @@
 
         <!-- TOPBAR -->
         <header class="h-16 glass bg-white/70 border-b
-                       flex items-center justify-between px-8 shadow-sm">
+                       flex items-center justify-between px-4 md:px-8 shadow-sm">
 
             <div class="flex items-center space-x-4">
                 <button onclick="toggleSidebar()"
-                    class="p-2 rounded-lg hover:bg-gray-100 transition">
+                    class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
                     <i data-feather="menu"></i>
                 </button>
 
@@ -158,10 +207,10 @@
         </header>
 
         <!-- CONTENT -->
-        <main class="flex-1 p-10 overflow-y-auto">
+        <main class="flex-1 p-4 md:p-10 overflow-y-auto">
 
-            <div class="glass bg-white/80 rounded-3xl
-                        shadow-lg p-10 border border-white/40
+            <div class="glass bg-white/80 rounded-2xl md:rounded-3xl
+                        shadow-lg p-6 md:p-10 border border-white/40
                         transition hover:shadow-2xl">
 
                 @yield('content')
@@ -177,8 +226,21 @@
     feather.replace()
 
     function toggleSidebar() {
-        document.getElementById('sidebar').classList.toggle('collapsed')
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        
+        sidebar.classList.toggle('mobile-open');
+        overlay.classList.toggle('mobile-open');
     }
+
+    // Close sidebar when clicking on a menu item
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth < 769) {
+                toggleSidebar();
+            }
+        });
+    });
 
     function toggleDropdown() {
         const dropdown = document.getElementById('dropdown')
