@@ -1234,6 +1234,109 @@ Route::get('/accounting/summary/data', function (Request $request) {
         }
     }
 
+    if ($categoryId) {
+        $balance = AccountingMonthlyBalance::forMonth($periodDate);
+
+        if (! $categoryName) {
+            $summary = (object) [
+                'total_count' => 0,
+                'total_credits' => 0,
+                'total_debits' => 0,
+                'net_amount' => 0,
+                'total_category_amount' => 0,
+                'selected_category_name' => null,
+                'selected_employee_name' => $employeeName,
+            ];
+
+            $balance['debit_total'] = 0;
+            $balance['credit_total'] = 0;
+            $balance['expense_total'] = 0;
+            $balance['remaining_balance'] = round((float) $balance['opening_balance'], 2);
+            $balance['ending_balance'] = $balance['remaining_balance'];
+
+            return response()->json([
+                'expenses' => [],
+                'summary' => $summary,
+                'balance' => $balance,
+                'pagination' => [
+                    'current_page' => 1,
+                    'total_pages' => 1,
+                    'total_items' => 0,
+                    'per_page' => $perPage,
+                ],
+            ]);
+        }
+
+        // Category-filtered summary should show the actual liquidation expense rows.
+        $categoryExpenseQuery = DB::table('liquidation_expenses')
+            ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+            ->leftJoin('users', 'liquidations.user_id', '=', 'users.id')
+            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+            ->where('liquidation_expenses.category_id', $categoryId)
+            ->whereBetween('liquidation_expenses.expense_date', [$fromDate, $toDate]);
+
+        if ($employeeId) {
+            $categoryExpenseQuery->where('liquidations.user_id', $employeeId);
+        }
+
+        $summary = (clone $categoryExpenseQuery)
+            ->selectRaw('
+                COUNT(*) as total_count,
+                0 as total_credits,
+                COALESCE(SUM(liquidation_expenses.amount), 0) as total_debits
+            ')
+            ->first();
+
+        $summary->total_credits = 0;
+        $summary->total_debits = $summary->total_debits ?? 0;
+        $summary->net_amount = (float) $summary->total_debits;
+        $summary->total_category_amount = (float) $summary->total_debits;
+        $summary->selected_category_name = $categoryName;
+        $summary->selected_employee_name = $employeeName;
+
+        $totalExpenses = (clone $categoryExpenseQuery)->count();
+        $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
+        $page = min($page, $totalPages);
+
+        $balance['debit_total'] = round((float) $summary->total_debits, 2);
+        $balance['credit_total'] = 0;
+        $balance['expense_total'] = round((float) $summary->net_amount, 2);
+        $balance['remaining_balance'] = round((float) $balance['opening_balance'] - (float) $summary->net_amount, 2);
+        $balance['ending_balance'] = $balance['remaining_balance'];
+
+        $expensesQuery = (clone $categoryExpenseQuery)
+            ->select(
+                'liquidation_expenses.expense_date',
+                'users.name as employee_name',
+                DB::raw("'debit' as transaction_type"),
+                'liquidation_expenses.description',
+                'liquidation_expenses.transaction_details',
+                'liquidation_expenses.amount',
+                DB::raw('liquidation_expenses.transaction_details as particular_name'),
+                DB::raw('categories.particulars_category as category_name'),
+                DB::raw('0 as credit'),
+                DB::raw('liquidation_expenses.amount as debit')
+            )
+            ->orderByDesc('liquidation_expenses.expense_date')
+            ->orderByDesc('liquidation_expenses.id');
+
+        $expenses = $showAll
+            ? $expensesQuery->get()
+            : $expensesQuery->offset(($page - 1) * $perPage)->limit($perPage)->get();
+
+        return response()->json([
+            'expenses' => $expenses,
+            'summary' => $summary,
+            'balance' => $balance,
+            'pagination' => [
+                'current_page' => $page,
+                'total_pages' => $totalPages,
+                'total_items' => $totalExpenses,
+                'per_page' => $perPage,
+            ],
+        ]);
+    }
+
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
     $expenseQuery = DB::table('cash_advance_requests')
         ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
