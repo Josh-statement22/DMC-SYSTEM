@@ -1195,6 +1195,8 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $showAll = $request->boolean('all', false);
     $employeeId = $request->query('employee_id');
     $categoryId = $request->query('category_id');
+    $selectedType = strtolower((string) $request->query('type', ''));
+    $selectedType = in_array($selectedType, ['credit', 'debit'], true) ? $selectedType : '';
     $fromDate = $request->query('from_date');
     $toDate = $request->query('to_date');
     $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
@@ -1236,6 +1238,36 @@ Route::get('/accounting/summary/data', function (Request $request) {
 
     if ($categoryId) {
         $balance = AccountingMonthlyBalance::forMonth($periodDate);
+
+        if ($selectedType === 'credit') {
+            $summary = (object) [
+                'total_count' => 0,
+                'total_credits' => 0,
+                'total_debits' => 0,
+                'net_amount' => 0,
+                'total_category_amount' => 0,
+                'selected_category_name' => $categoryName,
+                'selected_employee_name' => $employeeName,
+            ];
+
+            $balance['debit_total'] = 0;
+            $balance['credit_total'] = 0;
+            $balance['expense_total'] = 0;
+            $balance['remaining_balance'] = round((float) $balance['opening_balance'], 2);
+            $balance['ending_balance'] = $balance['remaining_balance'];
+
+            return response()->json([
+                'expenses' => [],
+                'summary' => $summary,
+                'balance' => $balance,
+                'pagination' => [
+                    'current_page' => 1,
+                    'total_pages' => 1,
+                    'total_items' => 0,
+                    'per_page' => $perPage,
+                ],
+            ]);
+        }
 
         if (! $categoryName) {
             $summary = (object) [
@@ -1345,6 +1377,10 @@ Route::get('/accounting/summary/data', function (Request $request) {
     // Apply filters
     if ($employeeId) {
         $expenseQuery->where('cash_advance_requests.requester_id', $employeeId);
+    }
+
+    if ($selectedType) {
+        $expenseQuery->whereRaw("{$transactionTypeSql} = ?", [$selectedType]);
     }
 
     $expenseQuery->whereBetween('cash_advance_requests.request_date', [$fromDate, $toDate]);
