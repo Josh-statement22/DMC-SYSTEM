@@ -12,10 +12,39 @@
     <style>
         body {
             background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            overflow-x: hidden;
+        }
+
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        .app-shell {
+            height: 100vh;
+            height: 100dvh;
+            min-width: 0;
+        }
+
+        .app-main,
+        .app-content {
+            min-width: 0;
         }
 
         .sidebar {
             transition: transform 0.3s ease, width 0.3s ease;
+            width: 16rem;
+            max-width: calc(100vw - 3rem);
+            flex-shrink: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: rgba(15, 23, 42, 0.5);
+            z-index: 30;
         }
 
         /* Mobile: sidebar hidden by default, slide in from left */
@@ -25,6 +54,7 @@
                 left: 0;
                 top: 0;
                 height: 100vh;
+                height: 100dvh;
                 transform: translateX(-100%);
                 z-index: 40;
             }
@@ -33,16 +63,22 @@
                 transform: translateX(0);
             }
 
-            .sidebar-overlay {
-                display: none;
-                position: fixed;
-                inset: 0;
-                background-color: rgba(0, 0, 0, 0.5);
-                z-index: 30;
-            }
-
             .sidebar-overlay.mobile-open {
                 display: block;
+            }
+
+            .menu-item:hover {
+                transform: none;
+            }
+
+            .app-topbar {
+                min-height: 4rem;
+                height: auto;
+            }
+
+            .app-page-title {
+                font-size: 1rem;
+                line-height: 1.35;
             }
         }
 
@@ -51,7 +87,8 @@
             .sidebar {
                 position: static;
                 transform: none;
-                height: auto;
+                height: 100vh;
+                height: 100dvh;
             }
 
             .sidebar-overlay {
@@ -99,17 +136,17 @@
     </style>
 </head>
 
-<body class="relative overflow-hidden">
+<body class="relative overflow-x-hidden">
 
 <div class="absolute -top-40 -left-40 w-[500px] h-[500px] bg-emerald-200 opacity-30 rounded-full blur-3xl hidden md:block"></div>
 <div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-teal-100 opacity-40 rounded-full blur-3xl hidden md:block"></div>
 
 <!-- Mobile Overlay -->
-<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
 
-<div class="relative flex h-screen overflow-hidden">
+<div class="app-shell relative flex overflow-hidden">
 
-    <aside id="sidebar" class="sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20 md:translate-x-0">
+    <aside id="sidebar" class="sidebar bg-white shadow-xl flex flex-col border-r z-20 md:translate-x-0" aria-label="Accounting navigation">
         <div class="h-20 flex items-center justify-center border-b">
             <img src="{{ asset('images/logo.png') }}" class="h-12 object-contain transition-all duration-300 hover:scale-105">
         </div>
@@ -156,20 +193,20 @@
         </div>
     </aside>
 
-    <div class="flex-1 flex flex-col relative z-10">
-        <header class="h-16 glass bg-white/70 border-b flex items-center justify-between px-4 md:px-8 shadow-sm">
-            <div class="flex items-center space-x-4">
-                <button onclick="toggleSidebar()" class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
+    <div class="app-main flex-1 flex flex-col relative z-10">
+        <header class="app-topbar h-16 glass bg-white/70 border-b flex items-center justify-between gap-3 px-4 md:px-8 shadow-sm">
+            <div class="flex min-w-0 items-center space-x-3 md:space-x-4">
+                <button type="button" onclick="toggleSidebar()" class="mobile-toggle inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg hover:bg-gray-100 transition md:hidden" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation menu">
                     <i data-feather="menu"></i>
                 </button>
 
-                <h1 id="accountingPageTitle" class="text-lg font-semibold text-gray-700 tracking-wide">@yield('title')</h1>
+                <h1 id="accountingPageTitle" class="app-page-title truncate text-lg font-semibold text-gray-700 tracking-wide">@yield('title')</h1>
             </div>
 
             <x-user-profile-badge />
         </header>
 
-        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+        <main class="app-content flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
             @yield('content')
         </main>
     </div>
@@ -178,21 +215,47 @@
 <script>
     feather.replace();
 
-    function toggleSidebar() {
+    function setSidebarState(isOpen) {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebarOverlay');
-        
-        sidebar.classList.toggle('mobile-open');
-        overlay.classList.toggle('mobile-open');
+        const toggle = document.querySelector('.mobile-toggle');
+
+        if (!sidebar || !overlay) {
+            return;
+        }
+
+        sidebar.classList.toggle('mobile-open', isOpen);
+        overlay.classList.toggle('mobile-open', isOpen);
+        document.body.classList.toggle('sidebar-open', isOpen);
+
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            toggle.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
+        }
+    }
+
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        setSidebarState(!sidebar.classList.contains('mobile-open'));
+    }
+
+    function closeSidebar() {
+        setSidebarState(false);
     }
 
     // Close sidebar when clicking on a menu item
     document.querySelectorAll('.menu-item').forEach(item => {
         item.addEventListener('click', () => {
             if (window.innerWidth < 769) {
-                toggleSidebar();
+                closeSidebar();
             }
         });
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 769) {
+            closeSidebar();
+        }
     });
 
     function toggleDropdown() {

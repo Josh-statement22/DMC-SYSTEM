@@ -39,6 +39,118 @@
     }
 }
 
+@layer components {
+    .responsive-data-table-wrap {
+        max-width: 100%;
+    }
+
+    .responsive-data-table {
+        border-collapse: collapse;
+    }
+
+    .responsive-data-table th,
+    .responsive-data-table td {
+        vertical-align: top;
+    }
+
+    .responsive-data-table select,
+    .responsive-data-table input,
+    .responsive-data-table button {
+        max-width: 100%;
+    }
+
+    @media (min-width: 641px) {
+        .responsive-data-table {
+            min-width: 58rem;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .responsive-data-table-wrap {
+            overflow-x: visible;
+        }
+
+        .responsive-data-table,
+        .responsive-data-table thead,
+        .responsive-data-table tbody,
+        .responsive-data-table tr,
+        .responsive-data-table td {
+            display: block;
+            width: 100%;
+        }
+
+        .responsive-data-table thead {
+            display: none;
+        }
+
+        .responsive-data-table tbody {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .responsive-data-table tbody tr {
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            border-radius: 1rem;
+            background: #ffffff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        }
+
+        .responsive-data-table tbody tr:hover {
+            background: #ffffff;
+        }
+
+        .responsive-data-table td {
+            display: grid;
+            grid-template-columns: minmax(7.5rem, 38%) minmax(0, 1fr);
+            gap: 0.75rem;
+            align-items: start;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            overflow-wrap: anywhere;
+        }
+
+        .responsive-data-table td::before {
+            content: attr(data-label);
+            color: #64748b;
+            font-size: 0.75rem;
+            font-weight: 700;
+            line-height: 1.25rem;
+        }
+
+        .responsive-data-table td:last-child {
+            border-bottom: 0;
+        }
+
+        .responsive-data-table td[data-label="Actions"] {
+            grid-template-columns: 1fr;
+        }
+
+        .responsive-data-table td[data-label="Actions"]::before {
+            margin-bottom: -0.25rem;
+        }
+
+        .responsive-data-table td[data-label="Actions"] > div {
+            justify-content: flex-start;
+        }
+
+        .responsive-data-table td[data-label="Category"] select {
+            width: 100%;
+        }
+
+        .responsive-data-table .empty-row td {
+            display: block;
+            text-align: center;
+        }
+
+        .responsive-data-table .empty-row td::before {
+            content: "";
+            display: none;
+        }
+    }
+}
+
 @layer base {
 
     *,

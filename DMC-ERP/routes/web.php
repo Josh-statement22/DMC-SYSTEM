@@ -275,6 +275,142 @@ if (!function_exists('buildLiquidationTrackingRecords')) {
     }
 }
 
+if (!function_exists('buildLiquidationApprovalSubmissionRecords')) {
+    function buildLiquidationApprovalSubmissionRecords(?int $employeeId = null)
+    {
+        $breakdownTotalsSubquery = DB::table('liquidation_breakdowns')
+            ->selectRaw('liquidation_expense_id, SUM(amount) as breakdown_total, COUNT(*) as breakdown_count')
+            ->groupBy('liquidation_expense_id');
+
+        $records = DB::table('liquidation_submissions')
+            ->join('liquidation_expenses', 'liquidation_submissions.liquidation_expense_id', '=', 'liquidation_expenses.id')
+            ->join('liquidations', 'liquidation_submissions.liquidation_id', '=', 'liquidations.id')
+            ->leftJoin('users', 'liquidations.user_id', '=', 'users.id')
+            ->leftJoin('roles', 'users.role_id', '=', 'roles.id')
+            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+            ->leftJoinSub($breakdownTotalsSubquery, 'breakdown_totals', function ($join) {
+                $join->on('breakdown_totals.liquidation_expense_id', '=', 'liquidation_expenses.id');
+            })
+            ->when($employeeId, function ($query) use ($employeeId) {
+                $query->where('liquidations.user_id', $employeeId);
+            })
+            ->select(
+                'liquidation_submissions.id as submission_id',
+                'liquidation_submissions.status as submission_status',
+                'liquidation_submissions.created_at as submitted_at',
+                'liquidation_submissions.approved_at',
+                'liquidation_submissions.rejection_reason',
+                'liquidation_expenses.id as expense_id',
+                'liquidation_expenses.liquidation_id',
+                'liquidation_expenses.expense_date',
+                'liquidation_expenses.transaction_details',
+                'liquidation_expenses.description',
+                'liquidation_expenses.amount as liquidation_amount',
+                'liquidation_expenses.receipt_path',
+                'categories.particulars_category as category_name',
+                'liquidations.user_id',
+                'liquidations.cutoff_period',
+                'users.employee_id',
+                'users.name',
+                DB::raw("COALESCE(roles.name, 'Employee') as role_name"),
+                DB::raw('COALESCE(breakdown_totals.breakdown_total, 0) as breakdown_total'),
+                DB::raw('COALESCE(breakdown_totals.breakdown_count, 0) as breakdown_count')
+            )
+            ->whereIn('liquidation_submissions.status', ['Submitted', 'Approved', 'Rejected'])
+            ->orderByDesc('liquidation_submissions.created_at')
+            ->get();
+
+        $breakdownsByExpense = DB::table('liquidation_breakdowns')
+            ->leftJoin('categories', 'liquidation_breakdowns.category_id', '=', 'categories.id')
+            ->select(
+                'liquidation_breakdowns.id',
+                'liquidation_breakdowns.liquidation_expense_id',
+                'liquidation_breakdowns.date',
+                DB::raw('COALESCE(categories.particulars_category, liquidation_breakdowns.category) as category_name'),
+                'liquidation_breakdowns.particulars',
+                'liquidation_breakdowns.amount',
+                'liquidation_breakdowns.remarks',
+                'liquidation_breakdowns.posted_cash_advance_request_id'
+            )
+            ->orderBy('liquidation_breakdowns.date')
+            ->orderBy('liquidation_breakdowns.id')
+            ->get()
+            ->groupBy('liquidation_expense_id');
+
+        return $records->map(function ($row) use ($breakdownsByExpense) {
+            $recordDate = \Carbon\Carbon::parse($row->expense_date);
+            $weekStart = $recordDate->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
+            $weekEnd = $recordDate->copy()->endOfWeek(\Carbon\Carbon::SUNDAY);
+            $breakdowns = ($breakdownsByExpense->get($row->expense_id) ?? collect())->map(function ($breakdown) {
+                return [
+                    'id' => (int) $breakdown->id,
+                    'expense_date' => $breakdown->date,
+                    'category' => $breakdown->category_name,
+                    'details' => trim((string) $breakdown->particulars),
+                    'description' => trim((string) $breakdown->remarks),
+                    'amount' => (float) $breakdown->amount,
+                    'receipt_path' => null,
+                    'receipt_url' => null,
+                    'posted_cash_advance_request_id' => $breakdown->posted_cash_advance_request_id ? (int) $breakdown->posted_cash_advance_request_id : null,
+                ];
+            })->values();
+
+            $liquidationAmount = (float) $row->liquidation_amount;
+            $breakdownTotal = (float) $row->breakdown_total;
+
+            return [
+                'id' => 'submission-' . (int) $row->submission_id,
+                'submission_id' => (int) $row->submission_id,
+                'record_type' => 'liquidation_submission',
+                'queue_record' => true,
+                'liquidation_id' => (int) $row->liquidation_id,
+                'expense_id' => (int) $row->expense_id,
+                'user_id' => $row->user_id ? (int) $row->user_id : null,
+                'employee_id' => $row->employee_id,
+                'name' => $row->name ?: 'Unassigned',
+                'role_name' => $row->role_name ?: 'Employee',
+                'cutoff_period' => $row->cutoff_period,
+                'status' => $row->submission_status,
+                'remarks' => $row->rejection_reason,
+                'document_path' => null,
+                'submitted_at' => $row->submitted_at,
+                'approved_at' => $row->approved_at,
+                'record_date' => $recordDate->format('Y-m-d'),
+                'record_timestamp' => $recordDate->toIso8601String(),
+                'period_month_key' => $recordDate->format('Y-m'),
+                'period_month_label' => $recordDate->format('F Y'),
+                'week_start' => $weekStart->format('Y-m-d'),
+                'week_end' => $weekEnd->format('Y-m-d'),
+                'week_label' => $weekStart->format('M j') . '-' . $weekEnd->format('M j'),
+                'balance_sent' => $liquidationAmount,
+                'liquidation_amount' => $liquidationAmount,
+                'total_expenses' => $breakdownTotal,
+                'breakdown_total' => $breakdownTotal,
+                'remaining_balance' => round($liquidationAmount - $breakdownTotal, 2),
+                'expense_count' => (int) $row->breakdown_count,
+                'expense_breakdown' => $breakdowns,
+                'source_expense' => [
+                    'id' => (int) $row->expense_id,
+                    'date' => $row->expense_date,
+                    'category' => $row->category_name,
+                    'particulars' => $row->transaction_details,
+                    'remarks' => $row->description,
+                    'amount' => $liquidationAmount,
+                    'receipt_url' => $row->receipt_path ? Storage::disk('public')->url($row->receipt_path) : null,
+                ],
+                'search_text' => strtolower(trim(
+                    ($row->employee_id ?? '') . ' ' .
+                    ($row->name ?? '') . ' ' .
+                    ($row->role_name ?? '') . ' ' .
+                    ($row->cutoff_period ?? '') . ' ' .
+                    ($row->submission_status ?? '') . ' ' .
+                    ($row->transaction_details ?? '')
+                )),
+            ];
+        })->values();
+    }
+}
+
 if (!function_exists('buildDashboardCategoryExpenseMatrix')) {
     function buildDashboardCategoryExpenseMatrix(Request $request, \Carbon\Carbon $selectedMonth): array
     {
@@ -1098,7 +1234,9 @@ Route::get('/accounting/liquidation', function () {
         return $redirect;
     }
 
-    $liquidationRecords = buildLiquidationTrackingRecords();
+    $liquidationRecords = buildLiquidationTrackingRecords()
+        ->concat(buildLiquidationApprovalSubmissionRecords())
+        ->values();
 
     return view('accounting.liquidation', compact('liquidationRecords'));
 })->middleware('auth')->name('accounting.liquidation');
@@ -1109,6 +1247,7 @@ Route::get('/accounting/liquidation/submitted', function () {
     }
 
     $liquidations = buildLiquidationQueueRecords()
+        ->concat(buildLiquidationApprovalSubmissionRecords())
         ->filter(fn ($record) => strtolower((string) ($record['status'] ?? '')) === 'submitted'
             || (!empty($record['submitted_at']) && strtolower((string) ($record['status'] ?? '')) === 'pending'))
         ->values();
@@ -1136,7 +1275,9 @@ Route::get('/accounting/liquidation/employee/{employee}', function ($employee) {
 
     abort_if(!$selectedEmployee, 404);
 
-    $liquidationRecords = buildLiquidationTrackingRecords((int) $selectedEmployee->id);
+    $liquidationRecords = buildLiquidationTrackingRecords((int) $selectedEmployee->id)
+        ->concat(buildLiquidationApprovalSubmissionRecords((int) $selectedEmployee->id))
+        ->values();
 
     return view('accounting.liquidation', compact('liquidationRecords', 'selectedEmployee'));
 })->middleware('auth')->name('accounting.liquidation.employee');
@@ -2055,19 +2196,34 @@ Route::get('/admin/liquidation', function () {
         ->orderBy('particulars_category')
         ->pluck('particulars_category', 'id');
 
+    $breakdownTotalsSubquery = DB::table('liquidation_breakdowns')
+        ->selectRaw('liquidation_expense_id, SUM(amount) as breakdown_total, COUNT(*) as breakdown_count')
+        ->groupBy('liquidation_expense_id');
+
     $liquidationExpenses = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
         ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+        ->leftJoinSub($breakdownTotalsSubquery, 'breakdown_totals', function ($join) {
+            $join->on('breakdown_totals.liquidation_expense_id', '=', 'liquidation_expenses.id');
+        })
+        ->leftJoin('liquidation_submissions', 'liquidation_submissions.liquidation_expense_id', '=', 'liquidation_expenses.id')
         ->where('liquidations.user_id', $user->id)
-        ->where('liquidations.status', 'pending')
+        ->whereIn('liquidations.status', ['pending', 'rejected'])
         ->select(
             'liquidation_expenses.id',
+            'liquidation_expenses.liquidation_id',
             'liquidation_expenses.expense_date',
             'categories.particulars_category as category_name',
             'liquidation_expenses.transaction_details',
             'liquidation_expenses.description',
             'liquidation_expenses.amount',
-            'liquidation_expenses.receipt_path'
+            'liquidation_expenses.receipt_path',
+            DB::raw('COALESCE(breakdown_totals.breakdown_total, 0) as breakdown_total'),
+            DB::raw('COALESCE(breakdown_totals.breakdown_count, 0) as breakdown_count'),
+            DB::raw("COALESCE(liquidation_submissions.status, 'Draft') as submission_status"),
+            'liquidation_submissions.id as submission_id',
+            'liquidation_submissions.approved_at',
+            'liquidation_submissions.rejection_reason'
         )
         ->orderBy('liquidation_expenses.expense_date')
         ->get();
@@ -2157,6 +2313,236 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'expense' => $expense,
     ]);
 })->middleware('auth')->name('admin.liquidation.expenses.store');
+
+Route::get('/admin/liquidation/expenses/{expenseId}/breakdown', function ($expenseId) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $user = Auth::user();
+
+    $expense = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+        ->leftJoin('liquidation_submissions', 'liquidation_submissions.liquidation_expense_id', '=', 'liquidation_expenses.id')
+        ->where('liquidation_expenses.id', (int) $expenseId)
+        ->where('liquidations.user_id', $user->id)
+        ->select(
+            'liquidation_expenses.id',
+            'liquidation_expenses.liquidation_id',
+            'liquidation_expenses.expense_date',
+            'liquidation_expenses.transaction_details',
+            'liquidation_expenses.amount',
+            'categories.particulars_category as category_name',
+            DB::raw("COALESCE(liquidation_submissions.status, 'Draft') as submission_status"),
+            'liquidation_submissions.rejection_reason'
+        )
+        ->first();
+
+    if (! $expense) {
+        return response()->json(['message' => 'Liquidation record not found.'], 404);
+    }
+
+    $breakdowns = DB::table('liquidation_breakdowns')
+        ->leftJoin('categories', 'liquidation_breakdowns.category_id', '=', 'categories.id')
+        ->where('liquidation_breakdowns.liquidation_expense_id', (int) $expenseId)
+        ->orderBy('liquidation_breakdowns.date')
+        ->orderBy('liquidation_breakdowns.id')
+        ->get([
+            'liquidation_breakdowns.id',
+            'liquidation_breakdowns.date',
+            'liquidation_breakdowns.category_id',
+            DB::raw('COALESCE(categories.particulars_category, liquidation_breakdowns.category) as category'),
+            'liquidation_breakdowns.particulars',
+            'liquidation_breakdowns.amount',
+            'liquidation_breakdowns.remarks',
+            'liquidation_breakdowns.posted_cash_advance_request_id',
+        ]);
+
+    $breakdownTotal = (float) $breakdowns->sum('amount');
+    $originalAmount = (float) $expense->amount;
+
+    return response()->json([
+        'expense' => [
+            'id' => (int) $expense->id,
+            'liquidation_id' => (int) $expense->liquidation_id,
+            'date' => $expense->expense_date,
+            'category' => $expense->category_name,
+            'particulars' => $expense->transaction_details,
+            'amount' => $originalAmount,
+            'submission_status' => $expense->submission_status,
+            'rejection_reason' => $expense->rejection_reason,
+        ],
+        'breakdowns' => $breakdowns,
+        'summary' => [
+            'original_amount' => $originalAmount,
+            'breakdown_total' => $breakdownTotal,
+            'remaining_balance' => round($originalAmount - $breakdownTotal, 2),
+        ],
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.breakdown.show');
+
+Route::post('/admin/liquidation/expenses/{expenseId}/breakdown', function (Request $request, $expenseId) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'breakdowns' => 'required|array|min:1',
+        'breakdowns.*.date' => 'required|date',
+        'breakdowns.*.category_id' => 'required|exists:categories,id',
+        'breakdowns.*.particulars' => 'required|string|max:255',
+        'breakdowns.*.amount' => 'required|numeric|min:0.01',
+        'breakdowns.*.remarks' => 'nullable|string|max:1000',
+    ]);
+
+    $user = Auth::user();
+
+    $expense = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->leftJoin('liquidation_submissions', 'liquidation_submissions.liquidation_expense_id', '=', 'liquidation_expenses.id')
+        ->where('liquidation_expenses.id', (int) $expenseId)
+        ->where('liquidations.user_id', $user->id)
+        ->whereIn('liquidations.status', ['pending', 'rejected'])
+        ->select(
+            'liquidation_expenses.id',
+            'liquidation_expenses.liquidation_id',
+            'liquidation_expenses.amount',
+            DB::raw("COALESCE(liquidation_submissions.status, 'Draft') as submission_status")
+        )
+        ->first();
+
+    if (! $expense) {
+        return response()->json(['message' => 'Liquidation record not found or is not editable.'], 404);
+    }
+
+    if (in_array(strtolower((string) $expense->submission_status), ['submitted', 'approved'], true)) {
+        return response()->json(['message' => 'Submitted or approved liquidations can no longer be edited.'], 422);
+    }
+
+    $categories = DB::table('categories')
+        ->whereIn('id', collect($validated['breakdowns'])->pluck('category_id')->unique()->all())
+        ->pluck('particulars_category', 'id');
+
+    $total = collect($validated['breakdowns'])->sum(fn ($row) => (float) $row['amount']);
+    $originalAmount = (float) $expense->amount;
+
+    if (round($total, 2) > round($originalAmount, 2)) {
+        return response()->json([
+            'message' => 'Breakdown total cannot exceed the liquidation amount.',
+        ], 422);
+    }
+
+    DB::transaction(function () use ($validated, $expense, $categories) {
+        DB::table('liquidation_breakdowns')
+            ->where('liquidation_expense_id', (int) $expense->id)
+            ->delete();
+
+        $now = now();
+        $rows = collect($validated['breakdowns'])->map(function ($row) use ($expense, $categories, $now) {
+            return [
+                'liquidation_id' => (int) $expense->liquidation_id,
+                'liquidation_expense_id' => (int) $expense->id,
+                'date' => \Carbon\Carbon::parse($row['date'])->toDateString(),
+                'category_id' => (int) $row['category_id'],
+                'category' => $categories[(int) $row['category_id']] ?? null,
+                'particulars' => trim($row['particulars']),
+                'amount' => (float) $row['amount'],
+                'remarks' => isset($row['remarks']) ? trim((string) $row['remarks']) : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        })->all();
+
+        DB::table('liquidation_breakdowns')->insert($rows);
+
+        DB::table('liquidation_submissions')->updateOrInsert(
+            ['liquidation_expense_id' => (int) $expense->id],
+            [
+                'liquidation_id' => (int) $expense->liquidation_id,
+                'status' => 'Draft',
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => null,
+                'updated_at' => $now,
+                'created_at' => $now,
+            ]
+        );
+    });
+
+    return response()->json([
+        'message' => 'Breakdown saved successfully.',
+        'summary' => [
+            'original_amount' => $originalAmount,
+            'breakdown_total' => round($total, 2),
+            'remaining_balance' => round($originalAmount - $total, 2),
+        ],
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.breakdown.store');
+
+Route::post('/admin/liquidation/expenses/{expenseId}/submit', function ($expenseId) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $user = Auth::user();
+
+    $expense = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->leftJoin('liquidation_submissions', 'liquidation_submissions.liquidation_expense_id', '=', 'liquidation_expenses.id')
+        ->where('liquidation_expenses.id', (int) $expenseId)
+        ->where('liquidations.user_id', $user->id)
+        ->whereIn('liquidations.status', ['pending', 'rejected'])
+        ->select(
+            'liquidation_expenses.id',
+            'liquidation_expenses.liquidation_id',
+            'liquidation_expenses.amount',
+            DB::raw("COALESCE(liquidation_submissions.status, 'Draft') as submission_status")
+        )
+        ->first();
+
+    if (! $expense) {
+        return response()->json(['message' => 'Liquidation record not found or access denied.'], 404);
+    }
+
+    if (in_array(strtolower((string) $expense->submission_status), ['submitted', 'approved'], true)) {
+        return response()->json(['message' => 'This liquidation has already been submitted.'], 422);
+    }
+
+    $breakdownTotal = (float) DB::table('liquidation_breakdowns')
+        ->where('liquidation_expense_id', (int) $expense->id)
+        ->sum('amount');
+
+    if ($breakdownTotal <= 0) {
+        return response()->json(['message' => 'Create at least one breakdown before submitting.'], 422);
+    }
+
+    if (round($breakdownTotal, 2) !== round((float) $expense->amount, 2)) {
+        return response()->json(['message' => 'Breakdown total must exactly match the liquidation amount before submission.'], 422);
+    }
+
+    $now = now();
+    DB::transaction(function () use ($expense, $user, $now) {
+        DB::table('liquidation_submissions')->updateOrInsert(
+            ['liquidation_expense_id' => (int) $expense->id],
+            [
+                'liquidation_id' => (int) $expense->liquidation_id,
+                'submitted_by' => (int) $user->id,
+                'status' => 'Submitted',
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejection_reason' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]
+        );
+    });
+
+    return response()->json([
+        'message' => 'Liquidation submitted to accounting.',
+        'status' => 'Submitted',
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.submit');
 
 Route::post('/admin/liquidation/submit', function (Request $request) {
     if ($redirect = redirect_if_role_not_allowed([1, 2])) {
@@ -2279,6 +2665,195 @@ Route::patch('/accounting/liquidation/{liquidation}/decision', function (Request
     ]);
 })->middleware('auth')->name('accounting.liquidation.decision');
 
+Route::patch('/accounting/liquidation-submissions/{submission}/decision', function (Request $request, $submission) {
+    if ($redirect = redirect_if_role_not_allowed([3])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'decision' => 'required|in:approved,rejected',
+        'remarks' => 'nullable|string|max:2000',
+    ]);
+
+    if ($validated['decision'] === 'rejected' && trim((string) ($validated['remarks'] ?? '')) === '') {
+        return response()->json([
+            'message' => 'Rejection remarks are required.',
+        ], 422);
+    }
+
+    try {
+        $result = DB::transaction(function () use ($submission, $validated) {
+            $submissionRecord = DB::table('liquidation_submissions')
+                ->where('id', (int) $submission)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $submissionRecord) {
+                return ['status' => 404, 'message' => 'Liquidation submission not found.'];
+            }
+
+            if (strtolower((string) $submissionRecord->status) !== 'submitted') {
+                return ['status' => 422, 'message' => 'This liquidation submission has already been decided.'];
+            }
+
+            $source = DB::table('liquidation_expenses')
+                ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+                ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+                ->where('liquidation_expenses.id', (int) $submissionRecord->liquidation_expense_id)
+                ->select(
+                    'liquidation_expenses.id',
+                    'liquidation_expenses.liquidation_id',
+                    'liquidation_expenses.expense_date',
+                    'liquidation_expenses.transaction_details',
+                    'liquidation_expenses.description',
+                    'liquidation_expenses.amount',
+                    'liquidations.user_id',
+                    'categories.particulars_category as category_name'
+                )
+                ->first();
+
+            if (! $source || ! $source->user_id) {
+                return ['status' => 422, 'message' => 'The source liquidation record is missing an employee.'];
+            }
+
+            if ($validated['decision'] === 'rejected') {
+                DB::table('liquidation_submissions')
+                    ->where('id', (int) $submissionRecord->id)
+                    ->update([
+                        'status' => 'Rejected',
+                        'approved_by' => null,
+                        'approved_at' => null,
+                        'rejection_reason' => trim((string) $validated['remarks']),
+                        'updated_at' => now(),
+                    ]);
+
+                return [
+                    'status' => 200,
+                    'message' => 'Liquidation rejected successfully.',
+                    'payload' => [
+                        'status' => 'Rejected',
+                        'remarks' => trim((string) $validated['remarks']),
+                        'approved_at' => null,
+                    ],
+                ];
+            }
+
+            $breakdowns = DB::table('liquidation_breakdowns')
+                ->where('liquidation_expense_id', (int) $source->id)
+                ->lockForUpdate()
+                ->orderBy('date')
+                ->orderBy('id')
+                ->get();
+
+            if ($breakdowns->isEmpty()) {
+                return ['status' => 422, 'message' => 'Cannot approve a liquidation without breakdown entries.'];
+            }
+
+            $breakdownTotal = (float) $breakdowns->sum('amount');
+            if (round($breakdownTotal, 2) !== round((float) $source->amount, 2)) {
+                return ['status' => 422, 'message' => 'Breakdown total must exactly match the liquidation amount.'];
+            }
+
+            if ($breakdowns->contains(fn ($breakdown) => ! empty($breakdown->posted_cash_advance_request_id))) {
+                return ['status' => 422, 'message' => 'This liquidation has already been posted to liquidate expenses.'];
+            }
+
+            $actor = Auth::user();
+            $postedRequestIds = [];
+
+            foreach ($breakdowns as $breakdown) {
+                $breakdownDate = \Carbon\Carbon::parse($breakdown->date);
+                $categoryName = $breakdown->category ?: DB::table('categories')->where('id', $breakdown->category_id)->value('particulars_category');
+                $referenceNo = 'LIQ-' . $breakdownDate->format('Ymd') . '-' . str_pad((string) $breakdown->id, 5, '0', STR_PAD_LEFT);
+
+                $requestId = DB::table('cash_advance_requests')->insertGetId([
+                    'reference_no' => $referenceNo,
+                    'requester_id' => (int) $source->user_id,
+                    'requested_amount' => (float) $breakdown->amount,
+                    'approved_amount' => (float) $breakdown->amount,
+                    'purpose' => trim((string) $breakdown->particulars),
+                    'category' => $categoryName,
+                    'category_id' => $breakdown->category_id,
+                    'request_date' => $breakdownDate->toDateString(),
+                    'date_needed' => $breakdownDate->toDateString(),
+                    'status' => 'approved',
+                    'accounting_remarks' => trim('Posted from approved liquidation #' . $source->id . ($breakdown->remarks ? ': ' . $breakdown->remarks : '')),
+                    'reviewed_by' => Auth::id(),
+                    'approved_by_name' => $actor?->name,
+                    'sent_by_name' => $actor?->name,
+                    'submitted_at' => $breakdownDate,
+                    'reviewed_at' => now(),
+                    'released_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('cash_advance_request_audits')->insert([
+                    'cash_advance_request_id' => $requestId,
+                    'action' => 'posted_from_liquidation',
+                    'old_status' => null,
+                    'new_status' => 'approved',
+                    'remarks' => 'Automatic posting from approved liquidation submission #' . $submissionRecord->id,
+                    'acted_by' => Auth::id(),
+                    'meta' => json_encode([
+                        'liquidation_submission_id' => (int) $submissionRecord->id,
+                        'liquidation_expense_id' => (int) $source->id,
+                        'liquidation_breakdown_id' => (int) $breakdown->id,
+                    ]),
+                    'acted_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('liquidation_breakdowns')
+                    ->where('id', (int) $breakdown->id)
+                    ->update([
+                        'posted_cash_advance_request_id' => $requestId,
+                        'updated_at' => now(),
+                    ]);
+
+                $postedRequestIds[] = $requestId;
+            }
+
+            DB::table('liquidation_submissions')
+                ->where('id', (int) $submissionRecord->id)
+                ->update([
+                    'status' => 'Approved',
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now(),
+                    'rejection_reason' => null,
+                    'updated_at' => now(),
+                ]);
+
+            return [
+                'status' => 200,
+                'message' => 'Liquidation approved and posted to liquidate expenses.',
+                'payload' => [
+                    'status' => 'Approved',
+                    'remarks' => null,
+                    'approved_at' => now()->toDateTimeString(),
+                    'posted_request_ids' => $postedRequestIds,
+                ],
+            ];
+        });
+
+        if (($result['status'] ?? 500) !== 200) {
+            return response()->json(['message' => $result['message'] ?? 'Unable to update liquidation decision.'], $result['status'] ?? 500);
+        }
+
+        return response()->json(array_merge([
+            'message' => $result['message'],
+            'submission_id' => (int) $submission,
+        ], $result['payload'] ?? []));
+    } catch (\Throwable $exception) {
+        report($exception);
+
+        return response()->json([
+            'message' => 'Unable to update liquidation decision. Changes were rolled back.',
+        ], 500);
+    }
+})->middleware('auth')->name('accounting.liquidation-submissions.decision');
+
 Route::delete('/admin/liquidation/expenses/{expenseId}', function ($expenseId) {
     if ($redirect = redirect_if_role_not_allowed([1, 2])) {
         return $redirect;
@@ -2288,9 +2863,14 @@ Route::delete('/admin/liquidation/expenses/{expenseId}', function ($expenseId) {
 
     $expense = DB::table('liquidation_expenses')
         ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->leftJoin('liquidation_submissions', 'liquidation_submissions.liquidation_expense_id', '=', 'liquidation_expenses.id')
         ->where('liquidation_expenses.id', $expenseId)
         ->where('liquidations.user_id', $user->id)
         ->where('liquidations.status', 'pending')
+        ->where(function ($query) {
+            $query->whereNull('liquidation_submissions.id')
+                ->orWhereIn('liquidation_submissions.status', ['Draft', 'Rejected']);
+        })
         ->select('liquidation_expenses.id', 'liquidation_expenses.receipt_path')
         ->first();
 

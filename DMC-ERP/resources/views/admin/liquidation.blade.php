@@ -297,16 +297,32 @@
                         <th class="text-left py-4 px-4 text-sm font-semibold text-gray-700">Particulars</th>
                         <th class="text-right py-4 px-4 text-sm font-semibold text-gray-700">Amount</th>
                         <th class="text-center py-4 px-4 text-sm font-semibold text-gray-700">Receipt</th>
+                        <th class="text-center py-4 px-4 text-sm font-semibold text-gray-700">Status</th>
                         <th class="text-center py-4 px-4 text-sm font-semibold text-gray-700">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="expensesTableBody">
                     @forelse($liquidationExpenses as $expense)
+                    @php
+                        $workflowStatus = $expense->submission_status ?? 'Draft';
+                        $statusKey = strtolower($workflowStatus);
+                        $isLocked = in_array($statusKey, ['submitted', 'approved'], true);
+                        $canSubmit = ! $isLocked && (float) ($expense->breakdown_total ?? 0) === (float) $expense->amount && (int) ($expense->breakdown_count ?? 0) > 0;
+                        $statusClasses = match ($statusKey) {
+                            'submitted' => 'bg-orange-100 text-orange-700 ring-orange-200',
+                            'approved' => 'bg-green-100 text-green-700 ring-green-200',
+                            'rejected' => 'bg-red-100 text-red-700 ring-red-200',
+                            default => 'bg-gray-100 text-gray-700 ring-gray-200',
+                        };
+                    @endphp
                     <tr class="border-b border-gray-100 hover:bg-gray-50 transition"
                         data-expense-id="{{ $expense->id }}"
                         data-expense-date="{{ $expense->expense_date }}"
                         data-expense-amount="{{ $expense->amount }}"
                         data-expense-category="{{ $expense->category_name }}"
+                        data-breakdown-total="{{ $expense->breakdown_total ?? 0 }}"
+                        data-breakdown-count="{{ $expense->breakdown_count ?? 0 }}"
+                        data-submission-status="{{ $workflowStatus }}"
                         data-receipt-url="{{ $expense->receipt_path ? asset('storage/' . $expense->receipt_path) : '' }}">
                         <td class="py-4 px-4 text-sm text-gray-700">
                             {{ \Carbon\Carbon::parse($expense->expense_date)->format('F j, Y') }}
@@ -336,14 +352,32 @@
                             @endif
                         </td>
                         <td class="py-4 px-4 text-center">
-                            <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
-                                <i data-feather="trash-2" class="w-4 h-4"></i>
-                            </button>
+                            <span class="liquidation-status-badge inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 {{ $statusClasses }}">{{ $workflowStatus }}</span>
+                            <p class="mt-1 text-[11px] font-semibold text-gray-400">
+                                {{ (int) ($expense->breakdown_count ?? 0) }} item(s) / ₱{{ number_format((float) ($expense->breakdown_total ?? 0), 2) }}
+                            </p>
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            <div class="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap">
+                                <button type="button" onclick="openBreakdownModal(this)" class="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50" {{ $isLocked ? 'disabled' : '' }}>
+                                    Create Breakdown
+                                </button>
+                                <button type="button" onclick="openViewBreakdownModal(this)" class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">
+                                    View Breakdown
+                                </button>
+                                <button type="button" onclick="submitExpenseLiquidation(this)" class="submit-expense-liquidation-btn rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300" {{ $canSubmit ? '' : 'disabled' }}>
+                                    Submit to Accounting
+                                </button>
+                                <button type="button" onclick="deleteExpense(this)" class="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50" {{ $isLocked ? 'disabled' : '' }}>
+                                    <span class="sr-only">Delete</span>
+                                    <i data-feather="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     @empty
                     <tr id="emptyExpenseRow" class="border-b border-gray-100">
-                        <td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">
+                        <td colspan="7" class="py-8 px-4 text-sm text-center text-gray-500">
                             No expense entries yet. Add expense records once funds are released.
                         </td>
                     </tr>
@@ -355,13 +389,14 @@
                         <td id="totalExpensesAmount" class="py-4 px-4 text-right text-xl font-bold text-red-600">₱0.00</td>
                         <td></td>
                         <td></td>
+                        <td></td>
                     </tr>
                 </tfoot>
             </table>
         </div>
 
         <!-- Submit Button -->
-        <div class="mt-8 flex justify-end">
+        <div class="mt-8 hidden justify-end">
             <button id="submitLiquidationReviewBtn"
                     type="button"
                     class="inline-flex items-center space-x-2 px-8 py-3
@@ -652,6 +687,108 @@
     </div>
 </div>
 
+<!-- LIQUIDATION BREAKDOWN MODAL -->
+<div id="liquidationBreakdownModal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-5">
+    <div class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between gap-4 border-b border-blue-100 bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1] px-5 py-4 sm:px-6">
+            <div>
+                <h3 id="breakdownModalTitle" class="text-lg font-bold text-white sm:text-xl">Create Breakdown</h3>
+                <p id="breakdownModalSubtitle" class="mt-1 text-sm text-blue-50"></p>
+            </div>
+            <button type="button" onclick="closeBreakdownModal()" class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25" aria-label="Close breakdown modal">
+                <i data-feather="x" class="h-5 w-5"></i>
+            </button>
+        </div>
+
+        <form id="liquidationBreakdownForm" class="flex-1 overflow-y-auto p-4 sm:p-6">
+            @csrf
+            <input id="breakdownExpenseId" type="hidden">
+
+            <div class="grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm sm:grid-cols-3">
+                <div>
+                    <p class="font-semibold text-gray-500">Original Amount</p>
+                    <p id="breakdownOriginalAmount" class="mt-1 text-lg font-bold text-gray-900">₱0.00</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-500">Breakdown Total</p>
+                    <p id="breakdownRunningTotal" class="mt-1 text-lg font-bold text-blue-700">₱0.00</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-500">Remaining Balance</p>
+                    <p id="breakdownRemainingBalance" class="mt-1 text-lg font-bold text-emerald-700">₱0.00</p>
+                </div>
+            </div>
+
+            <div class="mt-5 space-y-3" id="breakdownRows"></div>
+
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" onclick="addBreakdownRow()" class="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-700 transition hover:bg-blue-100">
+                    <i data-feather="plus" class="h-4 w-4"></i>
+                    Add Entry
+                </button>
+                <p id="breakdownValidationText" class="text-sm font-semibold text-gray-500"></p>
+            </div>
+        </form>
+
+        <div class="flex flex-col-reverse gap-3 border-t border-gray-100 bg-gray-50 p-4 sm:flex-row sm:justify-end">
+            <button type="button" onclick="closeBreakdownModal()" class="rounded-xl bg-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-300">Cancel</button>
+            <button id="saveBreakdownBtn" type="button" onclick="saveBreakdown()" class="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-gray-300">Save Breakdown</button>
+        </div>
+    </div>
+</div>
+
+<!-- VIEW LIQUIDATION BREAKDOWN MODAL -->
+<div id="viewLiquidationBreakdownModal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-5">
+    <div class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between gap-4 border-b border-gray-100 bg-gradient-to-r from-slate-700 to-slate-900 px-5 py-4 sm:px-6">
+            <div>
+                <h3 id="viewBreakdownTitle" class="text-lg font-bold text-white sm:text-xl">View Breakdown</h3>
+                <p id="viewBreakdownSubtitle" class="mt-1 text-sm text-slate-200"></p>
+            </div>
+            <button type="button" onclick="closeViewBreakdownModal()" class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25" aria-label="Close view breakdown modal">
+                <i data-feather="x" class="h-5 w-5"></i>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div class="grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm sm:grid-cols-3">
+                <div>
+                    <p class="font-semibold text-gray-500">Original Liquidation Amount</p>
+                    <p id="viewOriginalAmount" class="mt-1 text-lg font-bold text-gray-900">₱0.00</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-500">Total Breakdown Amount</p>
+                    <p id="viewBreakdownTotal" class="mt-1 text-lg font-bold text-blue-700">₱0.00</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-500">Remaining Balance</p>
+                    <p id="viewRemainingBalance" class="mt-1 text-lg font-bold text-emerald-700">₱0.00</p>
+                </div>
+            </div>
+
+            <div class="mt-5 overflow-x-auto rounded-2xl border border-gray-200">
+                <table class="w-full min-w-[720px]">
+                    <thead>
+                        <tr class="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                            <th class="px-4 py-3">Date</th>
+                            <th class="px-4 py-3">Category</th>
+                            <th class="px-4 py-3">Particulars</th>
+                            <th class="px-4 py-3">Remarks</th>
+                            <th class="px-4 py-3 text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="viewBreakdownRows"></tbody>
+                </table>
+                <p id="viewBreakdownEmpty" class="hidden px-4 py-8 text-center text-sm text-gray-500">No breakdown entries yet.</p>
+            </div>
+        </div>
+
+        <div class="flex justify-end border-t border-gray-100 bg-gray-50 p-4">
+            <button type="button" onclick="closeViewBreakdownModal()" class="rounded-xl bg-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-300">Close</button>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -660,6 +797,8 @@
     const CASH_ADVANCE_MY_REQUESTS_ROUTE = @json(route('cash-advance.requests.my'));
     const CASH_ADVANCE_STORE_ROUTE = @json(route('cash-advance.requests.store'));
     const LIQUIDATION_SUBMIT_ROUTE = @json(route('admin.liquidation.submit'));
+    const LIQUIDATION_EXPENSE_BASE_URL = @json(url('/admin/liquidation/expenses'));
+    const LIQUIDATION_CATEGORY_OPTIONS = @json($categories);
     const CASH_ADVANCE_CSRF = @json(csrf_token());
     
     // Store total approved amount to calculate current balance
@@ -686,6 +825,8 @@
     const weekToggleBtn = document.getElementById('liquidationWeekToggle');
     const monthToggleBtn = document.getElementById('liquidationMonthToggle');
     const submitLiquidationReviewBtn = document.getElementById('submitLiquidationReviewBtn');
+    let activeBreakdownRow = null;
+    let activeBreakdownOriginalAmount = 0;
 
     function setFieldError(fieldId, message) {
         const field = document.getElementById(fieldId);
@@ -1061,6 +1202,325 @@
         const date = new Date(dateString);
         if (Number.isNaN(date.getTime())) return '-';
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function categoryOptions(selectedId = '') {
+        return Object.entries(LIQUIDATION_CATEGORY_OPTIONS || {}).map(([id, name]) => {
+            const selected = String(id) === String(selectedId) ? 'selected' : '';
+            return `<option value="${escapeHtml(id)}" ${selected}>${escapeHtml(name)}</option>`;
+        }).join('');
+    }
+
+    function getRowWorkflowStatus(row) {
+        return String(row?.dataset?.submissionStatus || 'Draft');
+    }
+
+    function workflowBadgeClass(status) {
+        switch (String(status || '').toLowerCase()) {
+            case 'submitted':
+                return 'bg-orange-100 text-orange-700 ring-orange-200';
+            case 'approved':
+                return 'bg-green-100 text-green-700 ring-green-200';
+            case 'rejected':
+                return 'bg-red-100 text-red-700 ring-red-200';
+            default:
+                return 'bg-gray-100 text-gray-700 ring-gray-200';
+        }
+    }
+
+    function updateWorkflowRow(row, summary = {}, status = null) {
+        if (!row) return;
+
+        const nextStatus = status || row.dataset.submissionStatus || 'Draft';
+        const breakdownTotal = Number(summary.breakdown_total ?? row.dataset.breakdownTotal ?? 0);
+        const breakdownCount = Number(summary.breakdown_count ?? row.dataset.breakdownCount ?? 0);
+        const originalAmount = Number(row.dataset.expenseAmount || 0);
+        const locked = ['submitted', 'approved'].includes(String(nextStatus).toLowerCase());
+        const canSubmit = !locked && breakdownCount > 0 && Math.round(breakdownTotal * 100) === Math.round(originalAmount * 100);
+
+        row.dataset.submissionStatus = nextStatus;
+        row.dataset.breakdownTotal = String(breakdownTotal);
+        row.dataset.breakdownCount = String(breakdownCount);
+
+        const badge = row.querySelector('.liquidation-status-badge');
+        if (badge) {
+            badge.textContent = nextStatus;
+            badge.className = `liquidation-status-badge inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 ${workflowBadgeClass(nextStatus)}`;
+        }
+
+        const statusHelper = badge?.nextElementSibling;
+        if (statusHelper) {
+            statusHelper.textContent = `${breakdownCount} item(s) / ${formatCurrency(breakdownTotal)}`;
+        }
+
+        const createBtn = row.querySelector('[onclick^="openBreakdownModal"]');
+        const submitBtn = row.querySelector('.submit-expense-liquidation-btn');
+        const deleteBtn = row.querySelector('[onclick^="deleteExpense"]');
+
+        if (createBtn) createBtn.disabled = locked;
+        if (deleteBtn) deleteBtn.disabled = locked;
+        if (submitBtn) submitBtn.disabled = !canSubmit;
+    }
+
+    function buildBreakdownRow(entry = {}) {
+        const row = document.createElement('div');
+        row.className = 'breakdown-entry-grid grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm lg:grid-cols-[150px_190px_minmax(0,1fr)_130px_minmax(0,1fr)_auto]';
+        row.innerHTML = `
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wide text-gray-500">Date</label>
+                <input type="date" class="breakdown-date mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" value="${escapeHtml(entry.date || '')}" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wide text-gray-500">Category</label>
+                <select class="breakdown-category mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" required>
+                    <option value="">Select</option>
+                    ${categoryOptions(entry.category_id || '')}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wide text-gray-500">Particulars</label>
+                <input type="text" class="breakdown-particulars mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" value="${escapeHtml(entry.particulars || '')}" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wide text-gray-500">Amount</label>
+                <input type="number" min="0.01" step="0.01" class="breakdown-amount mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" value="${escapeHtml(entry.amount || '')}" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wide text-gray-500">Remarks</label>
+                <input type="text" class="breakdown-remarks mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm" value="${escapeHtml(entry.remarks || '')}">
+            </div>
+            <div class="flex items-end">
+                <button type="button" onclick="removeBreakdownRow(this)" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100" aria-label="Remove breakdown row">
+                    <i data-feather="trash-2" class="h-4 w-4"></i>
+                </button>
+            </div>
+        `;
+        row.querySelectorAll('input, select').forEach(input => input.addEventListener('input', updateBreakdownTotals));
+        return row;
+    }
+
+    function addBreakdownRow(entry = {}) {
+        const container = document.getElementById('breakdownRows');
+        if (!container) return;
+        container.appendChild(buildBreakdownRow({
+            date: entry.date || activeBreakdownRow?.dataset?.expenseDate || formatDateKey(new Date()),
+            category_id: entry.category_id || '',
+            particulars: entry.particulars || '',
+            amount: entry.amount || '',
+            remarks: entry.remarks || '',
+        }));
+        updateBreakdownTotals();
+        feather.replace();
+    }
+
+    function removeBreakdownRow(button) {
+        button.closest('.breakdown-entry-grid')?.remove();
+        updateBreakdownTotals();
+    }
+
+    function getBreakdownRowsPayload() {
+        return [...document.querySelectorAll('#breakdownRows .breakdown-entry-grid')].map(row => ({
+            date: row.querySelector('.breakdown-date')?.value || '',
+            category_id: row.querySelector('.breakdown-category')?.value || '',
+            particulars: row.querySelector('.breakdown-particulars')?.value?.trim() || '',
+            amount: Number(row.querySelector('.breakdown-amount')?.value || 0),
+            remarks: row.querySelector('.breakdown-remarks')?.value?.trim() || '',
+        }));
+    }
+
+    function updateBreakdownTotals() {
+        const rows = getBreakdownRowsPayload();
+        const total = rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+        const remaining = activeBreakdownOriginalAmount - total;
+
+        document.getElementById('breakdownOriginalAmount').textContent = formatCurrency(activeBreakdownOriginalAmount);
+        document.getElementById('breakdownRunningTotal').textContent = formatCurrency(total);
+        document.getElementById('breakdownRemainingBalance').textContent = formatCurrency(remaining);
+
+        const validationText = document.getElementById('breakdownValidationText');
+        const saveBtn = document.getElementById('saveBreakdownBtn');
+        const exceeds = Math.round(total * 100) > Math.round(activeBreakdownOriginalAmount * 100);
+
+        if (validationText) {
+            validationText.textContent = exceeds
+                ? 'Breakdown total cannot exceed the liquidation amount.'
+                : Math.round(total * 100) === Math.round(activeBreakdownOriginalAmount * 100)
+                    ? 'Ready to submit when saved.'
+                    : 'Save is allowed; submit requires an exact total match.';
+            validationText.className = `text-sm font-semibold ${exceeds ? 'text-red-600' : 'text-gray-500'}`;
+        }
+
+        if (saveBtn) saveBtn.disabled = rows.length === 0 || exceeds;
+    }
+
+    async function fetchBreakdown(expenseId) {
+        const response = await fetch(`${LIQUIDATION_EXPENSE_BASE_URL}/${expenseId}/breakdown`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload?.message || 'Unable to load breakdown.');
+        }
+        return payload;
+    }
+
+    async function openBreakdownModal(button) {
+        activeBreakdownRow = button.closest('tr');
+        const expenseId = activeBreakdownRow?.dataset?.expenseId;
+        if (!expenseId) return;
+
+        try {
+            const payload = await fetchBreakdown(expenseId);
+            activeBreakdownOriginalAmount = Number(payload?.summary?.original_amount || activeBreakdownRow.dataset.expenseAmount || 0);
+            document.getElementById('breakdownExpenseId').value = expenseId;
+            document.getElementById('breakdownModalSubtitle').textContent = `${payload?.expense?.particulars || 'Liquidation'} - ${formatCurrency(activeBreakdownOriginalAmount)}`;
+
+            const container = document.getElementById('breakdownRows');
+            container.innerHTML = '';
+            const entries = Array.isArray(payload?.breakdowns) ? payload.breakdowns : [];
+            if (entries.length === 0) {
+                addBreakdownRow({
+                    date: activeBreakdownRow.dataset.expenseDate,
+                    particulars: activeBreakdownRow.querySelectorAll('td')[2]?.textContent?.trim() || '',
+                    amount: activeBreakdownOriginalAmount,
+                });
+            } else {
+                entries.forEach(addBreakdownRow);
+            }
+
+            document.getElementById('liquidationBreakdownModal').classList.remove('hidden');
+            document.getElementById('liquidationBreakdownModal').classList.add('flex');
+            updateBreakdownTotals();
+        } catch (error) {
+            showLiquidationToast(error.message || 'Unable to open breakdown.', 'error');
+        }
+    }
+
+    function closeBreakdownModal() {
+        document.getElementById('liquidationBreakdownModal')?.classList.add('hidden');
+        document.getElementById('liquidationBreakdownModal')?.classList.remove('flex');
+        activeBreakdownRow = null;
+    }
+
+    async function saveBreakdown() {
+        const expenseId = document.getElementById('breakdownExpenseId')?.value;
+        const rows = getBreakdownRowsPayload();
+
+        if (!expenseId || rows.length === 0) return;
+        if (rows.some(row => !row.date || !row.category_id || !row.particulars || !row.amount || row.amount <= 0)) {
+            showLiquidationToast('Please complete every breakdown row.', 'error');
+            return;
+        }
+
+        const total = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        if (Math.round(total * 100) > Math.round(activeBreakdownOriginalAmount * 100)) {
+            showLiquidationToast('Breakdown total cannot exceed the liquidation amount.', 'error');
+            return;
+        }
+
+        const saveBtn = document.getElementById('saveBreakdownBtn');
+        saveBtn.disabled = true;
+
+        try {
+            const response = await fetch(`${LIQUIDATION_EXPENSE_BASE_URL}/${expenseId}/breakdown`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': CASH_ADVANCE_CSRF,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ breakdowns: rows }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || 'Unable to save breakdown.');
+            }
+
+            updateWorkflowRow(activeBreakdownRow, {
+                breakdown_total: payload?.summary?.breakdown_total || total,
+                breakdown_count: rows.length,
+            }, 'Draft');
+            closeBreakdownModal();
+            showLiquidationToast(payload?.message || 'Breakdown saved successfully.', 'success');
+        } catch (error) {
+            showLiquidationToast(error.message || 'Unable to save breakdown.', 'error');
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    async function openViewBreakdownModal(button) {
+        const row = button.closest('tr');
+        const expenseId = row?.dataset?.expenseId;
+        if (!expenseId) return;
+
+        try {
+            const payload = await fetchBreakdown(expenseId);
+            document.getElementById('viewBreakdownSubtitle').textContent = `${payload?.expense?.particulars || 'Liquidation'} - ${payload?.expense?.submission_status || 'Draft'}`;
+            document.getElementById('viewOriginalAmount').textContent = formatCurrency(payload?.summary?.original_amount || 0);
+            document.getElementById('viewBreakdownTotal').textContent = formatCurrency(payload?.summary?.breakdown_total || 0);
+            document.getElementById('viewRemainingBalance').textContent = formatCurrency(payload?.summary?.remaining_balance || 0);
+
+            const tbody = document.getElementById('viewBreakdownRows');
+            const empty = document.getElementById('viewBreakdownEmpty');
+            const entries = Array.isArray(payload?.breakdowns) ? payload.breakdowns : [];
+            tbody.innerHTML = entries.map(entry => `
+                <tr class="border-b border-gray-100">
+                    <td class="px-4 py-3 text-sm text-gray-700">${formatDate(entry.date)}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(entry.category || '-')}</td>
+                    <td class="px-4 py-3 text-sm font-semibold text-gray-900">${escapeHtml(entry.particulars || '-')}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(entry.remarks || '-')}</td>
+                    <td class="px-4 py-3 text-right text-sm font-bold text-gray-900">${formatCurrency(entry.amount || 0)}</td>
+                </tr>
+            `).join('');
+            empty.classList.toggle('hidden', entries.length > 0);
+
+            document.getElementById('viewLiquidationBreakdownModal').classList.remove('hidden');
+            document.getElementById('viewLiquidationBreakdownModal').classList.add('flex');
+        } catch (error) {
+            showLiquidationToast(error.message || 'Unable to view breakdown.', 'error');
+        }
+    }
+
+    function closeViewBreakdownModal() {
+        document.getElementById('viewLiquidationBreakdownModal')?.classList.add('hidden');
+        document.getElementById('viewLiquidationBreakdownModal')?.classList.remove('flex');
+    }
+
+    async function submitExpenseLiquidation(button) {
+        const row = button.closest('tr');
+        const expenseId = row?.dataset?.expenseId;
+        if (!expenseId) return;
+
+        if (!confirm('Submit this liquidation breakdown to Accounting?')) {
+            return;
+        }
+
+        button.disabled = true;
+        try {
+            const response = await fetch(`${LIQUIDATION_EXPENSE_BASE_URL}/${expenseId}/submit`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': CASH_ADVANCE_CSRF,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || 'Unable to submit liquidation.');
+            }
+
+            updateWorkflowRow(row, {}, 'Submitted');
+            showLiquidationToast(payload?.message || 'Submitted to accounting.', 'success');
+        } catch (error) {
+            showLiquidationToast(error.message || 'Unable to submit liquidation.', 'error');
+            updateWorkflowRow(row);
+        }
     }
 
     function getRequestActivityDate(request) {
@@ -2072,6 +2532,9 @@
         newRow.dataset.expenseAmount = String(savedAmount);
         newRow.dataset.expenseCategory = savedExpense?.category_name || categoryName;
         newRow.dataset.receiptUrl = savedExpense?.receipt_url || '';
+        newRow.dataset.breakdownTotal = '0';
+        newRow.dataset.breakdownCount = '0';
+        newRow.dataset.submissionStatus = 'Draft';
         const displayCategory = escapeHtml(savedExpense?.category_name || categoryName);
         const displayDetails = escapeHtml(savedExpense?.transaction_details || details);
         const displayDescription = savedExpense?.description || description;
@@ -2085,9 +2548,19 @@
             <td class="py-4 px-4 text-sm text-right font-semibold text-red-600">₱${formattedAmount}</td>
             <td class="py-4 px-4 text-center">${receiptCell}</td>
             <td class="py-4 px-4 text-center">
-                <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
-                    <i data-feather="trash-2" class="w-4 h-4"></i>
-                </button>
+                <span class="liquidation-status-badge inline-flex rounded-full px-3 py-1 text-xs font-bold ring-1 bg-gray-100 text-gray-700 ring-gray-200">Draft</span>
+                <p class="mt-1 text-[11px] font-semibold text-gray-400">0 item(s) / ₱0.00</p>
+            </td>
+            <td class="py-4 px-4 text-center">
+                <div class="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap">
+                    <button type="button" onclick="openBreakdownModal(this)" class="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">Create Breakdown</button>
+                    <button type="button" onclick="openViewBreakdownModal(this)" class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">View Breakdown</button>
+                    <button type="button" onclick="submitExpenseLiquidation(this)" class="submit-expense-liquidation-btn rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300" disabled>Submit to Accounting</button>
+                    <button type="button" onclick="deleteExpense(this)" class="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50">
+                        <span class="sr-only">Delete</span>
+                        <i data-feather="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
             </td>
         `;
         
@@ -2217,7 +2690,7 @@
                 const emptyRow = document.createElement('tr');
                 emptyRow.id = 'emptyExpenseRow';
                 emptyRow.className = 'border-b border-gray-100';
-                emptyRow.innerHTML = '<td colspan="6" class="py-8 px-4 text-sm text-center text-gray-500">No expense entries yet. Add expense records once funds are released.</td>';
+                emptyRow.innerHTML = '<td colspan="7" class="py-8 px-4 text-sm text-center text-gray-500">No expense entries yet. Add expense records once funds are released.</td>';
                 tbody.appendChild(emptyRow);
             }
 

@@ -1,6 +1,6 @@
 <div id="transactionsTableMeta" data-total="{{ isset($expenses) && method_exists($expenses, 'total') ? $expenses->total() : ($expenses ?? collect())->count() }}" class="hidden"></div>
-<div class="overflow-x-auto">
-    <table class="w-full">
+<div class="responsive-data-table-wrap overflow-x-auto">
+    <table class="responsive-data-table w-full">
         <thead>
             <tr class="border-b border-gray-200 bg-gray-50">
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
@@ -16,15 +16,15 @@
         <tbody id="transactionsTableBody">
             @forelse($expenses ?? [] as $expense)
                 <tr class="transaction-row border-b border-gray-200 hover:bg-gray-50" data-transaction-date="{{ $expense->expense_date->format('Y-m-d') }}" data-transaction-type="{{ $expense->transaction_type }}">
-                    <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->expense_date->format('Y-m-d') }}</td>
-                    <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->employee_name ?? 'Unassigned' }}</td>
-                    <td class="px-6 py-3 text-sm">
+                    <td data-label="Date" class="px-6 py-3 text-sm text-gray-900">{{ $expense->expense_date->format('Y-m-d') }}</td>
+                    <td data-label="Employee" class="px-6 py-3 text-sm text-gray-900">{{ $expense->employee_name ?? 'Unassigned' }}</td>
+                    <td data-label="Type" class="px-6 py-3 text-sm">
                         <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 {{ $expense->transaction_type === 'debit' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700' }}">
                             {{ ucfirst($expense->transaction_type) }}
                         </span>
                     </td>
-                    <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->transaction_details ?? '-' }}</td>
-                    <td class="px-6 py-2 text-sm text-gray-900">
+                    <td data-label="Purpose" class="px-6 py-3 text-sm text-gray-900">{{ $expense->transaction_details ?? '-' }}</td>
+                    <td data-label="Category" class="px-6 py-2 text-sm text-gray-900">
                         <select
                             class="transactionCategorySelect w-44 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-700 transition focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:cursor-wait disabled:bg-gray-50"
                             data-id="{{ $expense->id }}"
@@ -40,11 +40,11 @@
                             @endforelse
                         </select>
                     </td>
-                    <td class="px-6 py-3 text-sm text-gray-600">{{ $expense->description ?? '-' }}</td>
-                    <td class="px-6 py-3 text-sm text-right font-semibold {{ $expense->transaction_type === 'debit' ? 'text-red-600' : 'text-green-600' }}">
+                    <td data-label="Remarks" class="px-6 py-3 text-sm text-gray-600">{{ $expense->description ?? '-' }}</td>
+                    <td data-label="Amount" class="px-6 py-3 text-sm text-right font-semibold {{ $expense->transaction_type === 'debit' ? 'text-red-600' : 'text-green-600' }}">
                         {{ $expense->transaction_type === 'debit' ? '-' : '+' }}PHP {{ number_format($expense->amount, 2) }}
                     </td>
-                    <td class="px-6 py-3 text-center">
+                    <td data-label="Actions" class="px-6 py-3 text-center">
                         <div class="inline-flex items-center gap-3">
                             <button
                                 type="button"
@@ -70,7 +70,7 @@
                     </td>
                 </tr>
             @empty
-                <tr class="border-b border-gray-200">
+                <tr class="empty-row border-b border-gray-200">
                     <td colspan="8" class="px-6 py-8 text-center text-gray-500">
                         {{ $hasTransactionFilters ?? false ? 'No transactions found for the selected filters.' : 'No transactions recorded yet' }}
                     </td>

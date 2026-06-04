@@ -8,6 +8,37 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://unpkg.com/feather-icons"></script>
     <style>
+        .login-page {
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding: clamp(1rem, 4vw, 2rem);
+            overflow-x: hidden;
+        }
+
+        .login-card {
+            width: min(100%, 28rem);
+            max-height: calc(100vh - 2rem);
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (min-width: 768px) {
+            .login-card {
+                width: min(92vw, 30rem);
+            }
+        }
+
+        @media (max-height: 640px) {
+            .login-page {
+                align-items: flex-start;
+            }
+
+            .login-card {
+                max-height: none;
+            }
+        }
+
         /* Hide number input spinners */
         input[type="number"]::-webkit-outer-spin-button,
         input[type="number"]::-webkit-inner-spin-button {
@@ -20,7 +51,7 @@
     </style>
 </head>
 
-<body class="min-h-screen flex items-center justify-center relative overflow-hidden p-4
+<body class="login-page flex items-center justify-center relative
 bg-gradient-to-br from-blue-950 via-blue-700 to-blue-200">
 
     <!-- Decorative blurred background -->
@@ -28,12 +59,12 @@ bg-gradient-to-br from-blue-950 via-blue-700 to-blue-200">
     <div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-300 opacity-30 rounded-full blur-3xl hidden md:block"></div>
 
     <!-- LOGIN CARD -->
-    <div class="relative z-10 w-full sm:w-96 md:w-[420px] bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
+    <div class="login-card relative z-10 bg-white rounded-2xl sm:rounded-3xl shadow-2xl">
 
         <!-- TOP BLUE LINE -->
         <div class="h-2 bg-gradient-to-r from-blue-800 to-blue-500"></div>
 
-        <div class="p-6 sm:p-10">
+        <div class="p-5 sm:p-8 md:p-10">
 
             <div class="flex justify-center mb-6">
     <img src="{{ asset('images/logo.png') }}" 

@@ -262,6 +262,7 @@
     const employeeRouteTemplate = @json(route('accounting.liquidation.employee', ['employee' => '__EMPLOYEE__']));
     const liquidationSubmittedRoute = @json(route('accounting.liquidation.submitted'));
     const liquidationDecisionRouteTemplate = @json(route('accounting.liquidation.decision', ['liquidation' => '__LIQUIDATION__']));
+    const liquidationSubmissionDecisionRouteTemplate = @json(route('accounting.liquidation-submissions.decision', ['submission' => '__SUBMISSION__']));
 
     let currentViewMode = 'month';
     let currentPeriodStart = startOfDay(getMonthStart(monthKeyToDate(initialMonthKey) || new Date()));
@@ -499,7 +500,7 @@
         liquidationQueueRecords = Array.isArray(records) ? records : [];
 
         liquidationQueueRecords.forEach((incomingRecord) => {
-            const existingIndex = liquidationRecords.findIndex((record) => Number(record.id) === Number(incomingRecord.id));
+            const existingIndex = liquidationRecords.findIndex((record) => String(record.id) === String(incomingRecord.id));
 
             if (existingIndex === -1) {
                 liquidationRecords.push(incomingRecord);
@@ -584,8 +585,8 @@
     }
 
     function findLiquidationRecord(liquidationId) {
-        return liquidationRecords.find((item) => Number(item.id) === Number(liquidationId))
-            || liquidationQueueRecords.find((item) => Number(item.id) === Number(liquidationId));
+        return liquidationRecords.find((item) => String(item.id) === String(liquidationId))
+            || liquidationQueueRecords.find((item) => String(item.id) === String(liquidationId));
     }
 
     function openLiquidationReviewModal(liquidationId) {
@@ -645,13 +646,21 @@
             return;
         }
 
+        const record = findLiquidationRecord(liquidationId);
         const promptedRemarks = decision === 'rejected' ? window.prompt('Reason for rejection?', '') : '';
         if (decision === 'rejected' && promptedRemarks === null) {
             return;
         }
 
-        const remarks = promptedRemarks || '';
-        const decisionUrl = liquidationDecisionRouteTemplate.replace('__LIQUIDATION__', liquidationId);
+        const remarks = (promptedRemarks || '').trim();
+        if (decision === 'rejected' && !remarks) {
+            showAccountingToast('Rejection remarks are required.', 'error');
+            return;
+        }
+
+        const decisionUrl = record?.record_type === 'liquidation_submission'
+            ? liquidationSubmissionDecisionRouteTemplate.replace('__SUBMISSION__', record.submission_id)
+            : liquidationDecisionRouteTemplate.replace('__LIQUIDATION__', liquidationId);
 
         try {
             const response = await fetch(decisionUrl, {
@@ -670,14 +679,14 @@
                 throw new Error(payload?.message || 'Failed to update liquidation decision.');
             }
 
-            const record = liquidationRecords.find((item) => Number(item.id) === Number(liquidationId));
-            if (record) {
-                record.status = payload.status || decision;
-                record.remarks = payload.remarks || remarks;
-                record.approved_at = payload.approved_at || null;
+            const updatedRecord = findLiquidationRecord(liquidationId);
+            if (updatedRecord) {
+                updatedRecord.status = payload.status || decision;
+                updatedRecord.remarks = payload.remarks || remarks;
+                updatedRecord.approved_at = payload.approved_at || null;
             }
 
-            liquidationQueueRecords = liquidationQueueRecords.filter((item) => Number(item.id) !== Number(liquidationId));
+            liquidationQueueRecords = liquidationQueueRecords.filter((item) => String(item.id) !== String(liquidationId));
             closeLiquidationReviewModal();
             renderLiquidationQueue();
             renderLiquidationDashboard();
