@@ -18,8 +18,8 @@
             transition: transform 0.3s ease, width 0.3s ease;
         }
 
-        /* Mobile: sidebar hidden by default, slide in from left */
-        @media (max-width: 768px) {
+        /* Tablet/mobile: sidebar hidden by default, slide in from left */
+        @media (max-width: 1023px) {
             .sidebar {
                 position: fixed;
                 left: 0;
@@ -47,7 +47,7 @@
         }
 
         /* Desktop: sidebar always visible */
-        @media (min-width: 769px) {
+        @media (min-width: 1024px) {
             .sidebar {
                 position: static;
                 transform: none;
@@ -106,13 +106,13 @@
 <div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-100 opacity-40 rounded-full blur-3xl hidden md:block"></div>
 
 <!-- Mobile Overlay -->
-<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <div class="app-shell relative flex h-screen overflow-hidden">
 
     <!-- SIDEBAR -->
     <aside id="sidebar"
-        class="app-sidebar sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20 md:translate-x-0">
+        class="app-sidebar sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20 lg:translate-x-0">
 
         <!-- LOGO -->
         <div class="h-20 flex items-center justify-center border-b">
@@ -193,7 +193,7 @@
 
             <div class="flex items-center space-x-4">
                 <button onclick="toggleSidebar()"
-                    class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
+                    class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition lg:hidden">
                     <i data-feather="menu"></i>
                 </button>
 
@@ -233,13 +233,27 @@
         overlay.classList.toggle('mobile-open');
     }
 
+    function closeSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+
+        sidebar.classList.remove('mobile-open');
+        overlay.classList.remove('mobile-open');
+    }
+
     // Close sidebar when clicking on a menu item
     document.querySelectorAll('.menu-item').forEach(item => {
         item.addEventListener('click', () => {
-            if (window.innerWidth < 769) {
-                toggleSidebar();
+            if (window.innerWidth < 1024) {
+                closeSidebar();
             }
         });
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) {
+            closeSidebar();
+        }
     });
 
     function toggleDropdown() {

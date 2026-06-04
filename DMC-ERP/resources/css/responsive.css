@@ -239,7 +239,7 @@
     min-width: 0;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
     html,
     body {
         overflow-x: hidden;
@@ -275,17 +275,29 @@
     }
 
     .app-content {
-        padding: 0.75rem;
+        padding: 1rem;
     }
 
     .app-content-card {
+        max-width: 100%;
+        overflow: visible;
         border-radius: 1rem;
-        padding: 1rem;
+        padding: 1.25rem;
         box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
     }
 
     .menu-item:hover {
         transform: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .app-content {
+        padding: 0.75rem;
+    }
+
+    .app-content-card {
+        padding: 1rem;
     }
 }
 
@@ -398,5 +410,291 @@
         right: 0.75rem;
         top: 4.75rem;
         width: auto;
+    }
+}
+
+/* ============================================================================
+   ADMIN PANEL RESPONSIVE REFINEMENTS
+   ============================================================================ */
+
+@media (max-width: 1023px) {
+    body {
+        min-width: 0;
+    }
+
+    .app-shell,
+    .app-shell-main,
+    .app-content,
+    .app-content-card {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .app-sidebar {
+        width: min(18rem, 84vw);
+        max-width: 84vw;
+    }
+
+    .mobile-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+
+    .admin-liquidation-page {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .admin-liquidation-page .admin-responsive-table-wrap {
+        max-width: 100%;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-liquidation-page > .flex.items-center.justify-between {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .admin-liquidation-page > .flex.items-center.justify-between > .flex.items-center {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .admin-liquidation-page > .flex.items-center.justify-between > .flex.items-center.space-x-3 {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .admin-liquidation-page > .flex.items-center.justify-between > .flex.items-center.space-x-3 > * {
+        margin-left: 0;
+    }
+
+    .admin-liquidation-page h2,
+    .admin-liquidation-page h3,
+    .admin-liquidation-page p {
+        overflow-wrap: anywhere;
+    }
+
+    .admin-liquidation-page #liquidationToast {
+        left: 0.75rem;
+        right: 0.75rem;
+        top: 0.75rem;
+    }
+
+    .admin-liquidation-page #cashAdvanceNotificationPanel {
+        left: 0;
+        right: auto;
+        width: calc(100vw - 2rem);
+    }
+
+    .admin-liquidation-page #categoryFilterDropdown {
+        left: auto;
+        right: 0;
+        width: min(18rem, calc(100vw - 2rem));
+    }
+
+    .admin-liquidation-page .admin-responsive-table-wrap {
+        overflow-x: visible;
+    }
+
+    .admin-card-table,
+    .admin-card-table thead,
+    .admin-card-table tbody,
+    .admin-card-table tfoot,
+    .admin-card-table tr,
+    .admin-card-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .admin-card-table thead {
+        display: none;
+    }
+
+    .admin-card-table tbody {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .admin-card-table tbody tr {
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
+        padding: 0.75rem;
+    }
+
+    .admin-card-table tbody tr:hover {
+        background: #fff;
+    }
+
+    .admin-card-table tbody td {
+        display: grid;
+        grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: start;
+        border: 0;
+        padding: 0.45rem 0;
+        text-align: right;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-card-table tbody td::before {
+        content: attr(data-label);
+        color: #64748b;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        line-height: 1.25;
+        text-align: left;
+        text-transform: uppercase;
+    }
+
+    .admin-card-table tbody td:not([data-label]) {
+        display: block;
+        padding: 1.25rem 0.5rem;
+        text-align: center;
+    }
+
+    .admin-card-table tbody td:not([data-label])::before {
+        content: none;
+    }
+
+    .admin-card-table tbody td[data-label="Particulars"],
+    .admin-card-table tbody td[data-label="Purpose"],
+    .admin-card-table tbody td[data-label="Accounting Remarks"] {
+        grid-template-columns: 1fr;
+        text-align: left;
+    }
+
+    .admin-card-table tbody td[data-label="Amount"],
+    .admin-card-table tbody td[data-label="Receipt"],
+    .admin-card-table tbody td[data-label="Status"],
+    .admin-card-table tbody td[data-label="Actions"] {
+        align-items: center;
+    }
+
+    .admin-card-table tbody td[data-label="Receipt"] a,
+    .admin-card-table tbody td[data-label="Actions"] button {
+        justify-self: end;
+        min-height: 2.5rem;
+        min-width: 2.5rem;
+    }
+
+    .liquidation-expenses-table tfoot {
+        margin-top: 0.75rem;
+    }
+
+    .liquidation-expenses-table tfoot tr {
+        align-items: center;
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        display: flex;
+        justify-content: space-between;
+        padding: 0.875rem 1rem;
+    }
+
+    .liquidation-expenses-table tfoot td {
+        display: none;
+        padding: 0;
+        width: auto;
+    }
+
+    .liquidation-expenses-table tfoot td:first-child,
+    .liquidation-expenses-table tfoot #totalExpensesAmount {
+        display: block;
+        text-align: left;
+    }
+
+    .liquidation-expenses-table tfoot #totalExpensesAmount {
+        text-align: right;
+    }
+}
+
+@media (max-width: 576px) {
+    .admin-liquidation-page {
+        font-size: 0.95rem;
+    }
+
+    .admin-liquidation-page > .flex.items-center.justify-between button,
+    .admin-liquidation-page #submitLiquidationReviewBtn {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .admin-liquidation-page > .flex.items-center.justify-between > .flex.items-center.space-x-3 > * {
+        flex: 1 1 100%;
+    }
+
+    .admin-liquidation-page .request-status-filter-btn {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-height: 2.75rem;
+    }
+
+    .admin-liquidation-page #cashAdvanceNotificationBtn {
+        justify-content: center;
+        width: 100%;
+    }
+
+    #requestAdvanceModal,
+    #addExpenseModal,
+    #previousBalanceModal {
+        align-items: stretch;
+        padding: 0.5rem;
+    }
+
+    #requestAdvanceModal > div,
+    #addExpenseModal > div,
+    #previousBalanceModal > div {
+        max-height: calc(100dvh - 1rem);
+        border-radius: 1rem;
+    }
+
+    #requestAdvanceModal textarea,
+    #addExpenseModal textarea {
+        min-height: 8rem;
+    }
+
+    #requestAdvanceModal input,
+    #requestAdvanceModal select,
+    #requestAdvanceModal textarea,
+    #addExpenseModal input,
+    #addExpenseModal select,
+    #addExpenseModal textarea {
+        font-size: 1rem;
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-topbar {
+        gap: 0.5rem;
+    }
+
+    .app-page-title {
+        max-width: calc(100vw - 8rem);
+    }
+
+    .admin-liquidation-page .request-status-filter-btn {
+        flex-basis: 100%;
+    }
+
+    .admin-card-table tbody td {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+        text-align: left;
+    }
+
+    .admin-card-table tbody td[data-label="Receipt"] a,
+    .admin-card-table tbody td[data-label="Actions"] button {
+        justify-self: stretch;
+        width: 100%;
     }
 }

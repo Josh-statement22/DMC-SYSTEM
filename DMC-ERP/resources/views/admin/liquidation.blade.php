@@ -3,7 +3,7 @@
 
 @section('content')
 
-<div class="space-y-8">
+<div class="admin-liquidation-page space-y-8">
 
     <div id="liquidationToast"
          class="hidden fixed top-6 right-6 z-50 p-4 rounded-xl shadow-xl flex items-start gap-3 transition-opacity duration-500">
@@ -221,8 +221,8 @@
             </button>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="w-full">
+        <div class="admin-responsive-table-wrap overflow-x-auto">
+            <table class="admin-card-table employee-requests-table w-full">
                 <thead>
                     <tr class="border-b border-gray-200">
                         <th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Request Date</th>
@@ -246,8 +246,8 @@
     <!-- EXPENSES TABLE -->
     <div id="expensesTableContainer" class="relative overflow-hidden rounded-3xl bg-white p-8 shadow-2xl">
         
-        <div class="overflow-x-auto">
-            <table class="w-full">
+        <div class="admin-responsive-table-wrap overflow-x-auto">
+            <table class="admin-card-table liquidation-expenses-table w-full">
                 <thead>
                     <tr class="border-b-2 border-gray-200">
                         <th class="text-left py-4 px-4 text-sm font-semibold text-gray-700">Date</th>
@@ -308,22 +308,22 @@
                         data-expense-amount="{{ $expense->amount }}"
                         data-expense-category="{{ $expense->category_name }}"
                         data-receipt-url="{{ $expense->receipt_path ? asset('storage/' . $expense->receipt_path) : '' }}">
-                        <td class="py-4 px-4 text-sm text-gray-700">
+                        <td data-label="Date" class="py-4 px-4 text-sm text-gray-700">
                             {{ \Carbon\Carbon::parse($expense->expense_date)->format('F j, Y') }}
                         </td>
-                        <td class="py-4 px-4 text-sm text-gray-800 font-medium">
+                        <td data-label="Category" class="py-4 px-4 text-sm text-gray-800 font-medium">
                             {{ $expense->category_name }}
                         </td>
-                        <td class="py-4 px-4 text-sm text-gray-800 font-medium">
+                        <td data-label="Particulars" class="py-4 px-4 text-sm text-gray-800 font-medium">
                             {{ $expense->transaction_details }}
                             @if($expense->description)
                             <br><span class="text-xs text-gray-400">{{ $expense->description }}</span>
                             @endif
                         </td>
-                        <td class="py-4 px-4 text-sm text-right font-semibold text-red-600">
+                        <td data-label="Amount" class="py-4 px-4 text-sm text-right font-semibold text-red-600">
                             &#8369;{{ number_format((float) $expense->amount, 2) }}
                         </td>
-                        <td class="py-4 px-4 text-center">
+                        <td data-label="Receipt" class="py-4 px-4 text-center">
                             @if($expense->receipt_path)
                             <a href="{{ asset('storage/' . $expense->receipt_path) }}"
                                target="_blank"
@@ -335,7 +335,7 @@
                             <span class="text-xs text-gray-400">None</span>
                             @endif
                         </td>
-                        <td class="py-4 px-4 text-center">
+                        <td data-label="Actions" class="py-4 px-4 text-center">
                             <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
                                 <i data-feather="trash-2" class="w-4 h-4"></i>
                             </button>
@@ -1569,13 +1569,13 @@
             renderCashAdvanceNotifications(myRequests);
             tbody.innerHTML = filteredRequests.map(request => `
                 <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
-                    <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.request_date)}</td>
-                    <td class="py-3 px-3 text-sm text-gray-700">${formatDate(request.reviewed_at)}</td>
-                    <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.purpose || '-')}</td>
-                    <td class="py-3 px-3 text-sm text-right font-semibold text-gray-900">${formatCurrency(request.approved_amount || request.requested_amount || 0)}</td>
-                    <td class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.reviewer_name || '-')}</td>
-                    <td class="py-3 px-3 text-sm text-center">${getStatusBadge(request.status)}</td>
-                    <td class="py-3 px-3 text-sm text-gray-600">${escapeHtml(request.accounting_remarks || '-')}</td>
+                    <td data-label="Request Date" class="py-3 px-3 text-sm text-gray-700">${formatDate(request.request_date)}</td>
+                    <td data-label="Date Approved" class="py-3 px-3 text-sm text-gray-700">${formatDate(request.reviewed_at)}</td>
+                    <td data-label="Purpose" class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.purpose || '-')}</td>
+                    <td data-label="Amount" class="py-3 px-3 text-sm text-right font-semibold text-gray-900">${formatCurrency(request.approved_amount || request.requested_amount || 0)}</td>
+                    <td data-label="Approved/Sent By" class="py-3 px-3 text-sm text-gray-700">${escapeHtml(request.reviewer_name || '-')}</td>
+                    <td data-label="Status" class="py-3 px-3 text-sm text-center">${getStatusBadge(request.status)}</td>
+                    <td data-label="Accounting Remarks" class="py-3 px-3 text-sm text-gray-600">${escapeHtml(request.accounting_remarks || '-')}</td>
                 </tr>
             `).join('');
 
@@ -2079,12 +2079,12 @@
             ? `<a href="${savedExpense.receipt_url}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"><i data-feather="paperclip" class="w-3.5 h-3.5"></i>View</a>`
             : '<span class="text-xs text-gray-400">None</span>';
         newRow.innerHTML = `
-            <td class="py-4 px-4 text-sm text-gray-700">${formattedDate}</td>
-            <td class="py-4 px-4 text-sm text-gray-800 font-medium">${displayCategory}</td>
-            <td class="py-4 px-4 text-sm text-gray-800 font-medium">${displayDetails}${displayDescription ? '<br><span class="text-xs text-gray-400">' + escapeHtml(displayDescription) + '</span>' : ''}</td>
-            <td class="py-4 px-4 text-sm text-right font-semibold text-red-600">₱${formattedAmount}</td>
-            <td class="py-4 px-4 text-center">${receiptCell}</td>
-            <td class="py-4 px-4 text-center">
+            <td data-label="Date" class="py-4 px-4 text-sm text-gray-700">${formattedDate}</td>
+            <td data-label="Category" class="py-4 px-4 text-sm text-gray-800 font-medium">${displayCategory}</td>
+            <td data-label="Particulars" class="py-4 px-4 text-sm text-gray-800 font-medium">${displayDetails}${displayDescription ? '<br><span class="text-xs text-gray-400">' + escapeHtml(displayDescription) + '</span>' : ''}</td>
+            <td data-label="Amount" class="py-4 px-4 text-sm text-right font-semibold text-red-600">₱${formattedAmount}</td>
+            <td data-label="Receipt" class="py-4 px-4 text-center">${receiptCell}</td>
+            <td data-label="Actions" class="py-4 px-4 text-center">
                 <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
                     <i data-feather="trash-2" class="w-4 h-4"></i>
                 </button>
