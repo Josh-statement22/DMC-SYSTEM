@@ -1200,6 +1200,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
     $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
     $categoryName = null;
+    $employeeName = null;
 
     try {
         $periodDate = $fromDate
@@ -1220,6 +1221,17 @@ Route::get('/accounting/summary/data', function (Request $request) {
         $categoryName = DB::table('categories')
             ->where('id', $categoryId)
             ->value('particulars_category');
+    }
+
+    if ($employeeId) {
+        $employee = DB::table('users')
+            ->where('id', $employeeId)
+            ->select('name', 'employee_id')
+            ->first();
+
+        if ($employee) {
+            $employeeName = $employee->name . ($employee->employee_id ? ' (' . $employee->employee_id . ')' : '');
+        }
     }
 
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
@@ -1305,6 +1317,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $summary->net_amount = $summary->total_debits - $summary->total_credits;
     $summary->total_category_amount = (float) $summary->total_debits + (float) $summary->total_credits;
     $summary->selected_category_name = $categoryName;
+    $summary->selected_employee_name = $employeeName;
 
     // Get paginated expenses
     $totalExpenses = (clone $expenseQuery)->count();

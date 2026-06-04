@@ -42,7 +42,7 @@
 					<div class="w-full sm:w-64">
 						<button id="summaryFilterBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
 							<i data-feather="filter" class="w-4 h-4"></i>
-							<span>Category</span>
+							<span>Filters</span>
 						</button>
 					</div>
 				</div>
@@ -53,8 +53,8 @@
 				<div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
 					<div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
 						<div>
-							<h3 class="text-xl font-bold text-gray-800">Category Filter</h3>
-							<p class="text-sm text-gray-500 mt-1">Choose a category to update the table and print view.</p>
+							<h3 class="text-xl font-bold text-gray-800">Summary Filters</h3>
+							<p class="text-sm text-gray-500 mt-1">Choose a category and employee to update the table and print view.</p>
 						</div>
 						<button id="summaryCloseModalBtn" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
 							<i data-feather="x" class="w-5 h-5"></i>
@@ -70,6 +70,15 @@
 								@endforeach
 							</select>
 						</div>
+						<div>
+							<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
+							<select id="summaryEmployeeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+								<option value="">All Employees</option>
+								@foreach($employees as $employee)
+									<option value="{{ $employee->id }}">{{ $employee->name }}{{ $employee->employee_id ? ' (' . $employee->employee_id . ')' : '' }}</option>
+								@endforeach
+							</select>
+						</div>
 						<div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
 							<button id="summaryResetModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
 								<i data-feather="rotate-ccw" class="w-4 h-4"></i>
@@ -77,7 +86,7 @@
 							</button>
 							<button id="summarySaveFiltersBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
 								<i data-feather="check" class="w-4 h-4"></i>
-								Apply Category
+								Apply Filters
 							</button>
 						</div>
 					</div>
@@ -91,7 +100,10 @@
 				<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 					<div>
 						<h3 class="text-xl font-bold text-gray-800">Liquidation Expenses</h3>
-						<p class="text-sm text-gray-500 mt-1"><span id="summaryExpenseCount">0</span> records</p>
+						<p class="text-sm text-gray-500 mt-1">
+							<span id="summaryExpenseCount">0</span> records
+							<span id="summaryActiveFilters" class="block text-xs text-emerald-700 mt-1"></span>
+						</p>
 					</div>
 					<button id="summaryPrintBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all duration-200 shadow-sm">
 						<i data-feather="printer" class="w-4 h-4"></i>
@@ -198,6 +210,7 @@
 	let openingBalance = @json($pageOpeningBalance);
 	let endingBalance = @json($pageRemainingBalance);
 	let appliedCategoryId = '';
+	let appliedEmployeeId = '';
 	const summaryPrintedByName = @json(Auth::user()->name ?? Auth::user()->email ?? 'Current User');
 
 	function updateBalanceDisplay() {
@@ -215,14 +228,36 @@
 		return select?.selectedOptions[0]?.textContent || 'All Categories';
 	}
 
+	function getSelectedEmployeeLabel() {
+		const select = document.getElementById('summaryEmployeeFilter');
+
+		return select?.selectedOptions[0]?.textContent || 'All Employees';
+	}
+
+	function getActiveFilterLabel(data = null) {
+		const filters = [];
+
+		if (appliedCategoryId) {
+			filters.push(data?.summary?.selected_category_name || getSelectedCategoryLabel());
+		}
+
+		if (appliedEmployeeId) {
+			filters.push(data?.summary?.selected_employee_name || getSelectedEmployeeLabel());
+		}
+
+		return filters.length ? `Filtered by ${filters.join(' / ')}` : '';
+	}
+
 	function getAppliedFilters() {
 		return {
 			categoryId: appliedCategoryId,
+			employeeId: appliedEmployeeId,
 		};
 	}
 
 	function syncFilterModalFields() {
 		document.getElementById('summaryCategoryFilter').value = appliedCategoryId;
+		document.getElementById('summaryEmployeeFilter').value = appliedEmployeeId;
 	}
 
 	function openFilterModal() {
@@ -240,13 +275,16 @@
 
 	function applyFilterSelections() {
 		appliedCategoryId = document.getElementById('summaryCategoryFilter').value;
+		appliedEmployeeId = document.getElementById('summaryEmployeeFilter').value;
 		closeFilterModal();
 		loadExpenses(1);
 	}
 
 	function resetFilterSelections() {
 		document.getElementById('summaryCategoryFilter').value = '';
+		document.getElementById('summaryEmployeeFilter').value = '';
 		appliedCategoryId = '';
+		appliedEmployeeId = '';
 		closeFilterModal();
 		loadExpenses(1);
 	}
@@ -290,7 +328,7 @@
 
 	// Load expenses data
 	async function loadExpenses(page = 1) {
-		const { categoryId } = getAppliedFilters();
+		const { categoryId, employeeId } = getAppliedFilters();
 		const dateRange = getDateRange();
 
 		if (!dateRange) return;
@@ -305,6 +343,10 @@
 				params.set('category_id', categoryId);
 			}
 
+			if (employeeId) {
+				params.set('employee_id', employeeId);
+			}
+
 			const response = await fetch(`/accounting/summary/data?${params.toString()}`);
 			const data = await response.json();
 
@@ -317,14 +359,14 @@
 	}
 
 	function getSummaryFilters() {
-		const { categoryId } = getAppliedFilters();
+		const { categoryId, employeeId } = getAppliedFilters();
 		const dateRange = getDateRange();
 
-		return { categoryId, dateRange };
+		return { categoryId, employeeId, dateRange };
 	}
 
 	async function fetchAllExpenses() {
-		const { categoryId, dateRange } = getSummaryFilters();
+		const { categoryId, employeeId, dateRange } = getSummaryFilters();
 		const params = new URLSearchParams();
 		params.set('all', '1');
 		params.set('from_date', dateRange.from_date);
@@ -332,6 +374,10 @@
 
 		if (categoryId) {
 			params.set('category_id', categoryId);
+		}
+
+		if (employeeId) {
+			params.set('employee_id', employeeId);
 		}
 
 		const response = await fetch(`/accounting/summary/data?${params.toString()}`);
@@ -350,7 +396,9 @@
 	function buildPrintHtml(expenses, summary, balance) {
 		const periodLabel = document.getElementById('summaryPeriodLabel').textContent || 'Current Period';
 		const categoryActive = Boolean(appliedCategoryId);
+		const employeeActive = Boolean(appliedEmployeeId);
 		const categoryLabel = getSelectedCategoryLabel();
+		const employeeLabel = summary.selected_employee_name || getSelectedEmployeeLabel();
 		const totalCategoryAmount = Number(summary.total_category_amount ?? 0);
 		const printedAt = new Date().toLocaleString();
 		const rows = expenses.length
@@ -368,10 +416,12 @@
 		const summaryRows = categoryActive
 			? `
 				<div class="summary-item">Selected Category: <span class="summary-value">${escapeHtml(categoryLabel)}</span></div>
+				${employeeActive ? `<div class="summary-item">Selected Employee: <span class="summary-value">${escapeHtml(employeeLabel)}</span></div>` : ''}
 				<div class="summary-item">Total Category Amount: <span class="summary-value">${formatCurrencyValue(totalCategoryAmount)}</span></div>
 			`
 			: `
 				<div class="summary-item">Total Records: <span class="summary-value">${summary.total_count ?? 0}</span></div>
+				${employeeActive ? `<div class="summary-item">Selected Employee: <span class="summary-value">${escapeHtml(employeeLabel)}</span></div>` : ''}
 				<div class="summary-item">Opening Balance: <span class="summary-value">${formatCurrencyValue(balance?.opening_balance ?? 0)}</span></div>
 				<div class="summary-item">Ending Balance: <span class="summary-value">${formatCurrencyValue(balance?.remaining_balance ?? balance?.ending_balance ?? 0)}</span></div>
 				<div class="summary-item">Total Credits: <span class="summary-value">${formatCurrencyValue(summary.total_credits ?? 0)}</span></div>
@@ -411,6 +461,7 @@
 			<div class="meta">
 				<div>Period: ${escapeHtml(periodLabel)}</div>
 				<div>Category: ${escapeHtml(categoryLabel)}</div>
+				<div>Employee: ${escapeHtml(employeeLabel)}</div>
 				<div>Printed: ${escapeHtml(printedAt)}</div>
 				<div>Printed By: ${escapeHtml(summaryPrintedByName)}</div>
 			</div>
@@ -490,6 +541,7 @@
 		const totalCategoryAmount = Number(data.summary.total_category_amount ?? 0);
 
 		document.getElementById('summaryExpenseCount').textContent = data.summary.total_count;
+		document.getElementById('summaryActiveFilters').textContent = getActiveFilterLabel(data);
 		document.getElementById('summaryTotalDebits').textContent = formatCurrencyValue(data.summary.total_debits);
 		document.getElementById('summaryTotalCredits').textContent = formatCurrencyValue(data.summary.total_credits);
 		document.getElementById('summarySelectedCategory').textContent = data.summary.selected_category_name || getSelectedCategoryLabel();

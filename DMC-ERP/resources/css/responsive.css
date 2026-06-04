@@ -454,7 +454,7 @@
     }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
     .admin-liquidation-page > .flex.items-center.justify-between {
         align-items: flex-start;
         flex-direction: column;
@@ -500,7 +500,7 @@
     }
 
     .admin-liquidation-page .admin-responsive-table-wrap {
-        overflow-x: visible;
+        overflow-x: visible !important;
     }
 
     .admin-card-table,
@@ -509,16 +509,18 @@
     .admin-card-table tfoot,
     .admin-card-table tr,
     .admin-card-table td {
-        display: block;
-        width: 100%;
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        white-space: normal !important;
     }
 
     .admin-card-table thead {
-        display: none;
+        display: none !important;
     }
 
     .admin-card-table tbody {
-        display: grid;
+        display: grid !important;
         gap: 0.75rem;
     }
 
@@ -535,7 +537,7 @@
     }
 
     .admin-card-table tbody td {
-        display: grid;
+        display: grid !important;
         grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
         gap: 0.75rem;
         align-items: start;
@@ -558,7 +560,7 @@
     }
 
     .admin-card-table tbody td:not([data-label]) {
-        display: block;
+        display: block !important;
         padding: 1.25rem 0.5rem;
         text-align: center;
     }
@@ -596,25 +598,36 @@
         align-items: center;
         border: 1px solid #e5e7eb;
         border-radius: 1rem;
-        display: flex;
+        display: flex !important;
         justify-content: space-between;
         padding: 0.875rem 1rem;
     }
 
     .liquidation-expenses-table tfoot td {
-        display: none;
+        display: none !important;
         padding: 0;
         width: auto;
     }
 
     .liquidation-expenses-table tfoot td:first-child,
     .liquidation-expenses-table tfoot #totalExpensesAmount {
-        display: block;
+        display: block !important;
         text-align: left;
     }
 
     .liquidation-expenses-table tfoot #totalExpensesAmount {
         text-align: right;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-liquidation-page #liquidationPeriodLabel {
+        font-size: 1.35rem;
+        line-height: 1.75rem;
+    }
+
+    .admin-liquidation-page #liquidationWeekBreakdown {
+        width: 100%;
     }
 }
 
