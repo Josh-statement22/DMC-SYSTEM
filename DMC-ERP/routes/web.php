@@ -1281,7 +1281,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
                 ->leftJoinSub($categoryBreakdownsSubquery, 'summary_category_breakdowns', function ($join) {
                     $join->on('summary_category_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
                 })
-                ->where(function ($query) use ($categoryName) {
+                ->where(function ($query) use ($categoryId, $categoryName) {
                     $query->where(function ($breakdownQuery) {
                         $breakdownQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) > 0')
                             ->whereRaw('COALESCE(summary_category_breakdowns.matching_amount, 0) > 0');
