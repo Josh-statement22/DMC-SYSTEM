@@ -226,3 +226,177 @@
 .gap-responsive {
     @apply gap-4 md:gap-6 lg:gap-8;
 }
+
+/* ============================================================================
+   APP SHELL MOBILE LAYOUT
+   ============================================================================ */
+
+.app-shell-main {
+    min-width: 0;
+}
+
+.app-shell-content {
+    min-width: 0;
+}
+
+@media (max-width: 768px) {
+    html,
+    body {
+        overflow-x: hidden;
+    }
+
+    .app-shell {
+        width: 100%;
+    }
+
+    .app-sidebar {
+        width: min(18rem, 84vw);
+        max-width: 84vw;
+    }
+
+    .app-shell-main {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .app-topbar {
+        min-height: 4rem;
+        padding-left: 0.875rem;
+        padding-right: 0.875rem;
+    }
+
+    .app-page-title {
+        max-width: calc(100vw - 9.5rem);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.95rem;
+        line-height: 1.35;
+    }
+
+    .app-content {
+        padding: 0.75rem;
+    }
+
+    .app-content-card {
+        border-radius: 1rem;
+        padding: 1rem;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .menu-item:hover {
+        transform: none;
+    }
+}
+
+/* ============================================================================
+   MOBILE DENSITY OVERRIDES FOR EXISTING PAGES
+   ============================================================================ */
+
+@media (max-width: 640px) {
+    main .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 1rem;
+    }
+
+    main .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 0.875rem;
+    }
+
+    main .gap-8 {
+        gap: 1rem;
+    }
+
+    main .gap-6 {
+        gap: 0.875rem;
+    }
+
+    main .p-8,
+    main .p-7,
+    main .p-6 {
+        padding: 1rem;
+    }
+
+    main .rounded-3xl,
+    main .rounded-2xl {
+        border-radius: 1rem;
+    }
+
+    main .shadow-2xl,
+    main .shadow-xl,
+    main .shadow-lg {
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    main .text-4xl {
+        font-size: 1.875rem;
+        line-height: 2.25rem;
+    }
+
+    main .text-3xl {
+        font-size: 1.5rem;
+        line-height: 2rem;
+    }
+
+    main .text-2xl {
+        font-size: 1.25rem;
+        line-height: 1.75rem;
+    }
+
+    main .w-14.h-14 {
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 0.875rem;
+    }
+
+    main .w-14.h-14 svg,
+    main .w-14.h-14 i {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+
+    main .h-56.w-56 {
+        width: min(13rem, 72vw);
+        height: min(13rem, 72vw);
+    }
+
+    main .absolute.inset-12 {
+        inset: 2.5rem;
+    }
+
+    main table {
+        white-space: nowrap;
+    }
+
+    main th,
+    main td {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    main button,
+    main a,
+    main select,
+    main input,
+    main textarea {
+        max-width: 100%;
+    }
+
+    main button,
+    main a.inline-flex {
+        min-height: 2.75rem;
+    }
+
+    #accountingToast {
+        left: 0.75rem;
+        right: 0.75rem;
+        top: 0.75rem;
+    }
+
+    #liquidationQueuePanel {
+        position: fixed;
+        left: 0.75rem;
+        right: 0.75rem;
+        top: 4.75rem;
+        width: auto;
+    }
+}

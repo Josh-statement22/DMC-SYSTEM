@@ -26,7 +26,7 @@
                 top: 0;
                 height: 100vh;
                 transform: translateX(-100%);
-                z-index: 40;
+                z-index: 50;
             }
 
             .sidebar.mobile-open {
@@ -38,7 +38,7 @@
                 position: fixed;
                 inset: 0;
                 background-color: rgba(0, 0, 0, 0.5);
-                z-index: 30;
+                z-index: 40;
             }
 
             .sidebar-overlay.mobile-open {
@@ -107,9 +107,9 @@
 <!-- Mobile Overlay -->
 <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
-<div class="relative flex h-screen overflow-hidden">
+<div class="app-shell relative flex h-screen overflow-hidden">
 
-    <aside id="sidebar" class="sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20 md:translate-x-0">
+    <aside id="sidebar" class="app-sidebar sidebar w-64 bg-white shadow-xl flex flex-col border-r z-20 md:translate-x-0">
         <div class="h-20 flex items-center justify-center border-b">
             <img src="{{ asset('images/logo.png') }}" class="h-12 object-contain transition-all duration-300 hover:scale-105">
         </div>
@@ -156,20 +156,20 @@
         </div>
     </aside>
 
-    <div class="flex-1 flex flex-col relative z-10">
-        <header class="h-16 glass bg-white/70 border-b flex items-center justify-between px-4 md:px-8 shadow-sm">
+    <div class="app-shell-main flex-1 flex flex-col relative z-10">
+        <header class="app-topbar h-16 glass bg-white/70 border-b flex items-center justify-between px-4 md:px-8 shadow-sm">
             <div class="flex items-center space-x-4">
                 <button onclick="toggleSidebar()" class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
                     <i data-feather="menu"></i>
                 </button>
 
-                <h1 id="accountingPageTitle" class="text-lg font-semibold text-gray-700 tracking-wide">@yield('title')</h1>
+                <h1 id="accountingPageTitle" class="app-page-title text-lg font-semibold text-gray-700 tracking-wide">@yield('title')</h1>
             </div>
 
             <x-user-profile-badge />
         </header>
 
-        <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+        <main class="app-content flex-1 p-4 md:p-8 overflow-y-auto">
             @yield('content')
         </main>
     </div>
