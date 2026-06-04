@@ -62,20 +62,20 @@
 					</div>
 					<div class="p-6 space-y-5">
 						<div>
-							<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-							<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-								<option value="">All Categories</option>
-								@foreach($categories as $category)
-									<option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
-								@endforeach
-							</select>
-						</div>
-						<div>
 							<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
 							<select id="summaryEmployeeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
 								<option value="">All Employees</option>
 								@foreach($employees as $employee)
 									<option value="{{ $employee->id }}">{{ $employee->name }}{{ $employee->employee_id ? ' (' . $employee->employee_id . ')' : '' }}</option>
+								@endforeach
+							</select>
+						</div>
+						<div>
+							<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+							<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+								<option value="">All Categories</option>
+								@foreach($categories as $category)
+									<option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
 								@endforeach
 							</select>
 						</div>
