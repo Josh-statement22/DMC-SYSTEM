@@ -22,7 +22,50 @@ return new class extends Migration
             }
         });
 
-            DB::statement("\n            UPDATE cash_advance_requests AS car\n            LEFT JOIN users AS reviewers ON car.reviewed_by = reviewers.id\n            SET\n                car.approved_by_name = COALESCE(\n                    car.approved_by_name,\n                    CASE\n                        WHEN LOWER(COALESCE(car.status, '')) = 'approved' THEN reviewers.name\n                        ELSE NULL\n                    END\n                ),\n                car.sent_by_name = COALESCE(\n                    car.sent_by_name,\n                    CASE\n                        WHEN LOWER(COALESCE(car.status, '')) = 'approved' THEN reviewers.name\n                        ELSE NULL\n                    END\n                )\n            WHERE car.reviewed_by IS NOT NULL\n        ");
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            DB::statement("
+                UPDATE cash_advance_requests
+                SET
+                    approved_by_name = COALESCE(
+                        approved_by_name,
+                        CASE
+                            WHEN LOWER(COALESCE(status, '')) = 'approved'
+                            THEN (SELECT users.name FROM users WHERE users.id = cash_advance_requests.reviewed_by)
+                            ELSE NULL
+                        END
+                    ),
+                    sent_by_name = COALESCE(
+                        sent_by_name,
+                        CASE
+                            WHEN LOWER(COALESCE(status, '')) = 'approved'
+                            THEN (SELECT users.name FROM users WHERE users.id = cash_advance_requests.reviewed_by)
+                            ELSE NULL
+                        END
+                    )
+                WHERE reviewed_by IS NOT NULL
+            ");
+        } else {
+            DB::statement("
+                UPDATE cash_advance_requests AS car
+                LEFT JOIN users AS reviewers ON car.reviewed_by = reviewers.id
+                SET
+                    car.approved_by_name = COALESCE(
+                        car.approved_by_name,
+                        CASE
+                            WHEN LOWER(COALESCE(car.status, '')) = 'approved' THEN reviewers.name
+                            ELSE NULL
+                        END
+                    ),
+                    car.sent_by_name = COALESCE(
+                        car.sent_by_name,
+                        CASE
+                            WHEN LOWER(COALESCE(car.status, '')) = 'approved' THEN reviewers.name
+                            ELSE NULL
+                        END
+                    )
+                WHERE car.reviewed_by IS NOT NULL
+            ");
+        }
     }
 
     /**

@@ -12,6 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Drop existing foreign key, make column nullable, and re-add FK with ON DELETE SET NULL
         // Use raw statements to avoid requiring doctrine/dbal for column change
         DB::statement('ALTER TABLE `liquidations` DROP FOREIGN KEY `liquidations_user_id_foreign`');
@@ -24,6 +28,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return;
+        }
+
         // Revert to non-nullable with cascade on delete
         DB::statement('ALTER TABLE `liquidations` DROP FOREIGN KEY `liquidations_user_id_foreign`');
         DB::statement('ALTER TABLE `liquidations` MODIFY `user_id` BIGINT UNSIGNED NOT NULL');

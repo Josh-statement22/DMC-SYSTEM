@@ -188,7 +188,7 @@
     <div class="app-shell-main flex-1 flex flex-col relative z-10">
 
         <!-- TOPBAR -->
-        <header class="app-topbar h-16 glass bg-white/70 border-b
+        <header class="app-topbar relative z-[80] h-16 glass bg-white/70 border-b
                        flex items-center justify-between px-4 md:px-8 shadow-sm">
 
             <div class="flex items-center space-x-4">
@@ -207,15 +207,19 @@
         </header>
 
         <!-- CONTENT -->
-        <main class="app-content flex-1 p-4 md:p-10 overflow-y-auto">
+        <main class="app-content flex-1 overflow-y-auto p-4 md:p-10">
 
-            <div class="app-content-card glass bg-white/80 rounded-2xl md:rounded-3xl
-                        shadow-lg p-6 md:p-10 border border-white/40
-                        transition hover:shadow-2xl">
-
+            @if(request()->routeIs('admin.dashboard') || request()->routeIs('admin.liquidation'))
                 @yield('content')
+            @else
+                <div class="app-content-card glass bg-white/80 rounded-2xl md:rounded-3xl
+                            shadow-lg p-6 md:p-10 border border-white/40
+                            transition hover:shadow-2xl">
 
-            </div>
+                    @yield('content')
+
+                </div>
+            @endif
 
         </main>
 

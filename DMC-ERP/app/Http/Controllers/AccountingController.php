@@ -135,6 +135,7 @@ class AccountingController extends Controller
         if ($request->ajax()) {
             return view('transactions.partials.table', [
                 'categories' => $categories,
+                'employees' => $employees,
                 'expenses' => $expenses,
                 'hasTransactionFilters' => $hasTransactionFilters,
             ])->render();
@@ -369,6 +370,86 @@ class AccountingController extends Controller
 
     // Cash advance requests endpoint removed — UI no longer uses it
 
+    public function updateExpense(Request $request, int $id): JsonResponse
+    {
+        $this->authorizeAccounting();
+
+        $validated = $request->validate([
+            'expense_date' => 'required|date',
+            'employee_id' => 'nullable|integer|exists:users,id',
+            'transaction_type' => 'required|in:debit,credit',
+            'amount' => 'required|numeric|min:0.01',
+            'purpose' => 'required|string|max:2000',
+            'category_id' => 'nullable|integer|exists:categories,id',
+            'remarks' => 'nullable|string|max:2000',
+        ]);
+
+        $expense = DB::table('cash_advance_requests')
+            ->where('id', $id)
+            ->first();
+
+        abort_unless($expense, 404);
+
+        $categoryId = $validated['category_id'] ?? null;
+
+        if ($validated['transaction_type'] === 'debit' && ! $categoryId) {
+            throw ValidationException::withMessages([
+                'category_id' => 'Category is required for Debit transactions.',
+            ]);
+        }
+
+        $categoryName = $categoryId
+            ? DB::table('categories')->where('id', $categoryId)->value('particulars_category')
+            : null;
+
+        $remarks = trim((string) ($validated['remarks'] ?? ''));
+        $accountingRemarks = $this->normalizeAccountingRemarks($validated['transaction_type'], $remarks);
+        $oldDate = $expense->request_date;
+
+        DB::table('cash_advance_requests')
+            ->where('id', $id)
+            ->update([
+                'requester_id' => $validated['employee_id'] ?? Auth::id(),
+                'requested_amount' => round((float) $validated['amount'], 2),
+                'approved_amount' => round((float) $validated['amount'], 2),
+                'purpose' => trim($validated['purpose']),
+                'category_id' => $categoryId,
+                'category' => $categoryName,
+                'request_date' => $validated['expense_date'],
+                'date_needed' => $validated['expense_date'],
+                'accounting_remarks' => $accountingRemarks,
+                'updated_at' => now(),
+            ]);
+
+        AccountingMonthlyBalance::syncStoredMonth($oldDate);
+        AccountingMonthlyBalance::syncStoredMonth($validated['expense_date']);
+
+        $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
+        $updatedExpense = DB::table('cash_advance_requests')
+            ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
+            ->leftJoin('categories as transaction_categories', 'cash_advance_requests.category_id', '=', 'transaction_categories.id')
+            ->where('cash_advance_requests.id', $id)
+            ->select(
+                'cash_advance_requests.id',
+                'cash_advance_requests.requester_id as employee_id',
+                'cash_advance_requests.request_date as expense_date',
+                DB::raw("{$transactionTypeSql} as transaction_type"),
+                'cash_advance_requests.purpose as transaction_details',
+                'cash_advance_requests.category_id',
+                DB::raw('COALESCE(transaction_categories.particulars_category, cash_advance_requests.category) as category'),
+                'cash_advance_requests.accounting_remarks as description',
+                'cash_advance_requests.approved_amount as amount',
+                'users.name as employee_name'
+            )
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Transaction updated successfully.',
+            'expense' => $updatedExpense,
+        ]);
+    }
+
     public function updateExpenseCategory(Request $request, int $id): JsonResponse
     {
         $this->authorizeAccounting();
@@ -427,6 +508,25 @@ class AccountingController extends Controller
             ->first();
 
         return $category?->id ?? null;
+    }
+
+    private function normalizeAccountingRemarks(string $transactionType, string $remarks): string
+    {
+        if ($transactionType === 'credit') {
+            if ($remarks === '') {
+                return 'Manual Credit Entry';
+            }
+
+            return str_contains(strtolower($remarks), 'manual credit entry')
+                ? $remarks
+                : 'Manual Credit Entry - ' . Str::limit($remarks, 1800, '');
+        }
+
+        if ($remarks === '') {
+            return 'Manually Recorded';
+        }
+
+        return preg_replace('/manual credit entry\s*-?\s*/i', '', $remarks) ?: 'Manually Recorded';
     }
 
     public function updateOpeningBalance(Request $request): JsonResponse
@@ -820,39 +920,21 @@ class AccountingController extends Controller
         abort_unless($debit, 404);
 
         $transactionAmount = round((float) ($debit->approved_amount ?? $debit->requested_amount ?? 0), 2);
-        $cutoffPeriod = Carbon::parse($debit->expense_date)->format('F Y');
-
-        $liquidation = DB::table('liquidations')
-            ->where('user_id', $debit->employee_id)
-            ->where('cutoff_period', $cutoffPeriod)
-            ->orderByDesc('id')
-            ->first();
-
-        $breakdowns = collect();
-
-        if ($liquidation) {
-            $breakdowns = DB::table('liquidation_expenses')
-                ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-                ->where(function ($query) use ($debit, $liquidation) {
-                    $query->where('liquidation_expenses.cash_advance_request_id', $debit->id)
-                        ->orWhere(function ($fallbackQuery) use ($liquidation) {
-                            $fallbackQuery->whereNull('liquidation_expenses.cash_advance_request_id')
-                                ->where('liquidation_expenses.liquidation_id', $liquidation->id);
-                        });
-                })
-                ->select(
-                    'liquidation_expenses.id',
-                    'liquidation_expenses.expense_date',
-                    'liquidation_expenses.transaction_details',
-                    'liquidation_expenses.description',
-                    'liquidation_expenses.amount',
-                    'liquidation_expenses.receipt_path',
-                    DB::raw('categories.particulars_category as category_name')
-                )
-                ->orderBy('liquidation_expenses.expense_date')
-                ->orderBy('liquidation_expenses.id')
-                ->get();
-        }
+        $breakdowns = DB::table('liquidation_expenses')
+            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
+            ->where('liquidation_expenses.cash_advance_request_id', $debit->id)
+            ->select(
+                'liquidation_expenses.id',
+                'liquidation_expenses.expense_date',
+                'liquidation_expenses.transaction_details',
+                'liquidation_expenses.description',
+                'liquidation_expenses.amount',
+                'liquidation_expenses.receipt_path',
+                DB::raw('categories.particulars_category as category_name')
+            )
+            ->orderBy('liquidation_expenses.expense_date')
+            ->orderBy('liquidation_expenses.id')
+            ->get();
 
         $attachments = DB::table('cash_advance_request_attachments')
             ->where('cash_advance_request_id', $debit->id)

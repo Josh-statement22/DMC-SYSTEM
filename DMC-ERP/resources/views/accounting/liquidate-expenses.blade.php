@@ -391,9 +391,90 @@
         <div id="transactions-table-container" class="relative">
             @include('transactions.partials.table', [
                 'categories' => $categories,
+                'employees' => $employees,
                 'expenses' => $expenses,
                 'hasTransactionFilters' => $hasTransactionFilters,
             ])
+        </div>
+    </div>
+
+    <!-- Edit Transaction Modal -->
+    <div id="editTransactionModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div class="shrink-0 bg-gradient-to-r from-indigo-600 to-teal-600 p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Edit Transaction</h3>
+                        <p class="text-indigo-100 text-sm mt-1">Update the transaction details without changing the table layout</p>
+                    </div>
+                    <button id="closeEditTransactionBtn" type="button" class="text-white hover:text-indigo-100 transition">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+            <form id="editTransactionForm" class="flex-1 overflow-y-auto p-6 space-y-5">
+                @csrf
+                <input type="hidden" id="editTransactionId">
+
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="editTransactionDate" class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                        <input id="editTransactionDate" name="expense_date" type="date" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500" required>
+                    </div>
+                    <div>
+                        <label for="editTransactionEmployee" class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
+                        <select id="editTransactionEmployee" name="employee_id" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
+                            <option value="">Unassigned</option>
+                            @forelse($employees ?? [] as $employee)
+                                <option value="{{ $employee->id }}">{{ $employee->name }}</option>
+                            @empty
+                            @endforelse
+                        </select>
+                    </div>
+                    <div>
+                        <label for="editTransactionType" class="block text-sm font-semibold text-gray-700 mb-2">Transaction Type</label>
+                        <select id="editTransactionType" name="transaction_type" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500" required>
+                            <option value="debit">Debit</option>
+                            <option value="credit">Credit</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="editTransactionCategory" class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                        <select id="editTransactionCategory" name="category_id" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
+                            <option value="">Select Category</option>
+                            @forelse($categories ?? [] as $category)
+                                <option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+                            @empty
+                            @endforelse
+                        </select>
+                    </div>
+                    <div>
+                        <label for="editTransactionAmount" class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                        <input id="editTransactionAmount" name="amount" type="number" step="0.01" min="0.01" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500" required>
+                    </div>
+                    <div>
+                        <label for="editTransactionPurpose" class="block text-sm font-semibold text-gray-700 mb-2">Purpose</label>
+                        <input id="editTransactionPurpose" name="purpose" type="text" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500" required>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="editTransactionRemarks" class="block text-sm font-semibold text-gray-700 mb-2">Remarks</label>
+                    <textarea id="editTransactionRemarks" name="remarks" rows="3" class="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm bg-white text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"></textarea>
+                </div>
+
+                <div class="flex shrink-0 justify-end gap-3 border-t border-gray-200 pt-5">
+                    <button id="cancelEditTransactionBtn" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                        <i data-feather="x" class="w-4 h-4"></i>
+                        Cancel
+                    </button>
+                    <button id="saveEditTransactionBtn" type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-700">
+                        <i data-feather="check" class="w-4 h-4"></i>
+                        Save
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -676,6 +757,7 @@
     const importExpensesRoute = @json(route('accounting.import-expenses'));
     const updateOpeningBalanceRoute = @json(route('accounting.update-opening-balance'));
     const deleteExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
+    const updateExpenseBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const updateExpenseCategoryBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const viewBreakdownBaseUrl = @json(url('/accounting/liquidate-expenses/expense'));
     const deleteBreakdownAttachmentBaseUrl = @json(url('/accounting/liquidate-expenses/breakdown-attachment'));
@@ -708,6 +790,13 @@
     const transactionFilterForm = document.getElementById('transactionFilterForm');
     const transactionsTableContainer = document.getElementById('transactions-table-container');
     const transactionsVisibleCount = document.getElementById('transactionsVisibleCount');
+    const editTransactionModal = document.getElementById('editTransactionModal');
+    const editTransactionForm = document.getElementById('editTransactionForm');
+    const closeEditTransactionBtn = document.getElementById('closeEditTransactionBtn');
+    const cancelEditTransactionBtn = document.getElementById('cancelEditTransactionBtn');
+    const saveEditTransactionBtn = document.getElementById('saveEditTransactionBtn');
+    const editTransactionType = document.getElementById('editTransactionType');
+    const editTransactionCategory = document.getElementById('editTransactionCategory');
     const successModal = document.getElementById('successModal');
     const closeSuccessModalBtn = document.getElementById('closeSuccessModalBtn');
     const successModalMessage = document.getElementById('successModalMessage');
@@ -2172,6 +2261,166 @@
         });
     });
 
+    function setEditTransactionCategoryRequirement() {
+        if (!editTransactionType || !editTransactionCategory) {
+            return;
+        }
+
+        editTransactionCategory.required = editTransactionType.value === 'debit';
+    }
+
+    function openEditTransactionModalFromButton(button) {
+        const row = button.closest('.transaction-row');
+
+        if (!row || !editTransactionModal || !editTransactionForm) {
+            return;
+        }
+
+        document.getElementById('editTransactionId').value = row.dataset.id || '';
+        document.getElementById('editTransactionDate').value = row.dataset.originalDate || row.dataset.transactionDate || '';
+        document.getElementById('editTransactionEmployee').value = row.dataset.originalEmployeeId || '';
+        document.getElementById('editTransactionType').value = row.dataset.originalType || row.dataset.transactionType || 'debit';
+        document.getElementById('editTransactionCategory').value = row.dataset.originalCategoryId || '';
+        document.getElementById('editTransactionAmount').value = row.dataset.originalAmount || '';
+        document.getElementById('editTransactionPurpose').value = row.dataset.originalPurpose || '';
+        document.getElementById('editTransactionRemarks').value = row.dataset.originalRemarks || '';
+        setEditTransactionCategoryRequirement();
+
+        editTransactionModal.classList.remove('hidden');
+        editTransactionModal.style.display = 'flex';
+        document.getElementById('editTransactionDate')?.focus();
+
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+
+    function closeEditTransactionModal() {
+        if (!editTransactionModal || !editTransactionForm) {
+            return;
+        }
+
+        editTransactionForm.reset();
+        document.getElementById('editTransactionId').value = '';
+        editTransactionModal.classList.add('hidden');
+        editTransactionModal.style.display = 'none';
+    }
+
+    function getEditTransactionPayload() {
+        return {
+            expense_date: document.getElementById('editTransactionDate')?.value || '',
+            employee_id: document.getElementById('editTransactionEmployee')?.value || null,
+            transaction_type: document.getElementById('editTransactionType')?.value || '',
+            purpose: document.getElementById('editTransactionPurpose')?.value?.trim() || '',
+            category_id: document.getElementById('editTransactionCategory')?.value || null,
+            remarks: document.getElementById('editTransactionRemarks')?.value?.trim() || '',
+            amount: document.getElementById('editTransactionAmount')?.value || '',
+        };
+    }
+
+    function validateTransactionRowPayload(payload) {
+        if (!payload.expense_date) {
+            return 'Date is required.';
+        }
+
+        if (!payload.transaction_type) {
+            return 'Transaction type is required.';
+        }
+
+        if (!payload.purpose) {
+            return 'Purpose is required.';
+        }
+
+        if (payload.transaction_type === 'debit' && !payload.category_id) {
+            return 'Category is required for Debit transactions.';
+        }
+
+        if (!payload.amount || Number(payload.amount) <= 0) {
+            return 'Amount must be greater than zero.';
+        }
+
+        return '';
+    }
+
+    function saveEditTransaction() {
+        const transactionId = document.getElementById('editTransactionId')?.value || '';
+
+        if (!transactionId) {
+            return;
+        }
+
+        const payload = getEditTransactionPayload();
+        const validationMessage = validateTransactionRowPayload(payload);
+
+        if (validationMessage) {
+            showErrorModal(validationMessage);
+            return;
+        }
+
+        if (saveEditTransactionBtn) {
+            saveEditTransactionBtn.disabled = true;
+            saveEditTransactionBtn.classList.add('pointer-events-none', 'opacity-70');
+        }
+
+        fetch(`${updateExpenseBaseUrl}/${transactionId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.success) {
+                const errors = data.errors ? Object.values(data.errors).flat().join(' ') : '';
+                throw new Error(errors || data.message || 'Unable to update transaction.');
+            }
+
+            showSuccessModal('Transaction updated successfully!');
+            closeEditTransactionModal();
+            setTimeout(() => window.location.reload(), 800);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showErrorModal(error.message || 'An error occurred while updating the transaction');
+        })
+        .finally(() => {
+            if (saveEditTransactionBtn) {
+                saveEditTransactionBtn.disabled = false;
+                saveEditTransactionBtn.classList.remove('pointer-events-none', 'opacity-70');
+            }
+        });
+    }
+
+    if (editTransactionType) {
+        editTransactionType.addEventListener('change', setEditTransactionCategoryRequirement);
+    }
+
+    if (editTransactionForm) {
+        editTransactionForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            saveEditTransaction();
+        });
+    }
+
+    if (closeEditTransactionBtn) {
+        closeEditTransactionBtn.addEventListener('click', closeEditTransactionModal);
+    }
+
+    if (cancelEditTransactionBtn) {
+        cancelEditTransactionBtn.addEventListener('click', closeEditTransactionModal);
+    }
+
+    if (editTransactionModal) {
+        editTransactionModal.addEventListener('click', function(event) {
+            if (event.target === editTransactionModal) {
+                closeEditTransactionModal();
+            }
+        });
+    }
+
     function updateTransactionCategory(select) {
         const transactionId = select.dataset.id;
         const previousCategoryId = select.dataset.originalCategoryId || '';
@@ -2616,7 +2865,14 @@
 
     // Native delegated equivalent of $(document).on('click', '.btn-*', ...)
     document.addEventListener('click', function(event) {
-        const editButton = event.target.closest('.btn-edit, .breakdownBtn');
+        const rowEditButton = event.target.closest('.transactionEditBtn');
+        if (rowEditButton && transactionsTableContainer?.contains(rowEditButton)) {
+            event.preventDefault();
+            openEditTransactionModalFromButton(rowEditButton);
+            return;
+        }
+
+        const editButton = event.target.closest('.breakdownBtn');
         if (editButton && transactionsTableContainer?.contains(editButton)) {
             event.preventDefault();
             openBreakdownModalFromButton(editButton);

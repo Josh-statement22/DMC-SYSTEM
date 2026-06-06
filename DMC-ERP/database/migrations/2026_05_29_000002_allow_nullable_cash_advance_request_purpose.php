@@ -8,7 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('cash_advance_requests') || ! Schema::hasColumn('cash_advance_requests', 'purpose')) {
+        if (DB::connection()->getDriverName() === 'sqlite'
+            || ! Schema::hasTable('cash_advance_requests')
+            || ! Schema::hasColumn('cash_advance_requests', 'purpose')) {
             return;
         }
 
@@ -17,7 +19,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('cash_advance_requests') || ! Schema::hasColumn('cash_advance_requests', 'purpose')) {
+        if (DB::connection()->getDriverName() === 'sqlite'
+            || ! Schema::hasTable('cash_advance_requests')
+            || ! Schema::hasColumn('cash_advance_requests', 'purpose')) {
             return;
         }
 

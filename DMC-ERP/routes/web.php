@@ -1145,6 +1145,7 @@ Route::get('/accounting/liquidate-expenses', [\App\Http\Controllers\AccountingCo
 Route::post('/accounting/liquidate-expenses/expense', [\App\Http\Controllers\AccountingController::class, 'storeExpense'])->middleware('auth')->name('accounting.store-expense');
 Route::post('/accounting/liquidate-expenses/import', [\App\Http\Controllers\AccountingController::class, 'importExpenses'])->middleware('auth')->name('accounting.import-expenses');
 Route::get('/accounting/liquidate-expenses/expense/{id}/breakdown', [\App\Http\Controllers\AccountingController::class, 'showExpenseBreakdown'])->middleware('auth')->name('accounting.show-expense-breakdown');
+Route::patch('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'updateExpense'])->middleware('auth')->name('accounting.update-expense');
 Route::patch('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'updateBreakdown'])->middleware('auth')->name('accounting.update-breakdown');
 Route::delete('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteBreakdown'])->middleware('auth')->name('accounting.delete-breakdown');
 Route::delete('/accounting/liquidate-expenses/breakdown-attachment/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteTransactionAttachment'])->middleware('auth')->name('accounting.delete-breakdown-attachment');
@@ -1193,8 +1194,8 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $page = max(1, (int) $request->query('page', 1));
     $perPage = 20;
     $showAll = $request->boolean('all', false);
-    $employeeId = $request->query('employee_id');
-    $categoryId = $request->query('category_id');
+    $employeeId = $request->filled('employee_id') ? (int) $request->query('employee_id') : null;
+    $categoryId = $request->filled('category_id') ? (int) $request->query('category_id') : null;
     $selectedType = strtolower((string) $request->query('type', ''));
     $selectedType = in_array($selectedType, ['credit', 'debit'], true) ? $selectedType : '';
     $fromDate = $request->query('from_date');
@@ -1236,139 +1237,6 @@ Route::get('/accounting/summary/data', function (Request $request) {
         }
     }
 
-    if ($categoryId) {
-        $balance = AccountingMonthlyBalance::forMonth($periodDate);
-
-        if ($selectedType === 'credit') {
-            $summary = (object) [
-                'total_count' => 0,
-                'total_credits' => 0,
-                'total_debits' => 0,
-                'net_amount' => 0,
-                'total_category_amount' => 0,
-                'selected_category_name' => $categoryName,
-                'selected_employee_name' => $employeeName,
-            ];
-
-            $balance['debit_total'] = 0;
-            $balance['credit_total'] = 0;
-            $balance['expense_total'] = 0;
-            $balance['remaining_balance'] = round((float) $balance['opening_balance'], 2);
-            $balance['ending_balance'] = $balance['remaining_balance'];
-
-            return response()->json([
-                'expenses' => [],
-                'summary' => $summary,
-                'balance' => $balance,
-                'pagination' => [
-                    'current_page' => 1,
-                    'total_pages' => 1,
-                    'total_items' => 0,
-                    'per_page' => $perPage,
-                ],
-            ]);
-        }
-
-        if (! $categoryName) {
-            $summary = (object) [
-                'total_count' => 0,
-                'total_credits' => 0,
-                'total_debits' => 0,
-                'net_amount' => 0,
-                'total_category_amount' => 0,
-                'selected_category_name' => null,
-                'selected_employee_name' => $employeeName,
-            ];
-
-            $balance['debit_total'] = 0;
-            $balance['credit_total'] = 0;
-            $balance['expense_total'] = 0;
-            $balance['remaining_balance'] = round((float) $balance['opening_balance'], 2);
-            $balance['ending_balance'] = $balance['remaining_balance'];
-
-            return response()->json([
-                'expenses' => [],
-                'summary' => $summary,
-                'balance' => $balance,
-                'pagination' => [
-                    'current_page' => 1,
-                    'total_pages' => 1,
-                    'total_items' => 0,
-                    'per_page' => $perPage,
-                ],
-            ]);
-        }
-
-        // Category-filtered summary should show the actual liquidation expense rows.
-        $categoryExpenseQuery = DB::table('liquidation_expenses')
-            ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
-            ->leftJoin('users', 'liquidations.user_id', '=', 'users.id')
-            ->leftJoin('categories', 'liquidation_expenses.category_id', '=', 'categories.id')
-            ->where('liquidation_expenses.category_id', $categoryId)
-            ->whereBetween('liquidation_expenses.expense_date', [$fromDate, $toDate]);
-
-        if ($employeeId) {
-            $categoryExpenseQuery->where('liquidations.user_id', $employeeId);
-        }
-
-        $summary = (clone $categoryExpenseQuery)
-            ->selectRaw('
-                COUNT(*) as total_count,
-                0 as total_credits,
-                COALESCE(SUM(liquidation_expenses.amount), 0) as total_debits
-            ')
-            ->first();
-
-        $summary->total_credits = 0;
-        $summary->total_debits = $summary->total_debits ?? 0;
-        $summary->net_amount = (float) $summary->total_debits;
-        $summary->total_category_amount = (float) $summary->total_debits;
-        $summary->selected_category_name = $categoryName;
-        $summary->selected_employee_name = $employeeName;
-
-        $totalExpenses = (clone $categoryExpenseQuery)->count();
-        $totalPages = max(1, (int) ceil($totalExpenses / $perPage));
-        $page = min($page, $totalPages);
-
-        $balance['debit_total'] = round((float) $summary->total_debits, 2);
-        $balance['credit_total'] = 0;
-        $balance['expense_total'] = round((float) $summary->net_amount, 2);
-        $balance['remaining_balance'] = round((float) $balance['opening_balance'] - (float) $summary->net_amount, 2);
-        $balance['ending_balance'] = $balance['remaining_balance'];
-
-        $expensesQuery = (clone $categoryExpenseQuery)
-            ->select(
-                'liquidation_expenses.expense_date',
-                'users.name as employee_name',
-                DB::raw("'debit' as transaction_type"),
-                'liquidation_expenses.description',
-                'liquidation_expenses.transaction_details',
-                'liquidation_expenses.amount',
-                DB::raw('liquidation_expenses.transaction_details as particular_name'),
-                DB::raw('categories.particulars_category as category_name'),
-                DB::raw('0 as credit'),
-                DB::raw('liquidation_expenses.amount as debit')
-            )
-            ->orderByDesc('liquidation_expenses.expense_date')
-            ->orderByDesc('liquidation_expenses.id');
-
-        $expenses = $showAll
-            ? $expensesQuery->get()
-            : $expensesQuery->offset(($page - 1) * $perPage)->limit($perPage)->get();
-
-        return response()->json([
-            'expenses' => $expenses,
-            'summary' => $summary,
-            'balance' => $balance,
-            'pagination' => [
-                'current_page' => $page,
-                'total_pages' => $totalPages,
-                'total_items' => $totalExpenses,
-                'per_page' => $perPage,
-            ],
-        ]);
-    }
-
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
     $expenseQuery = DB::table('cash_advance_requests')
         ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
@@ -1393,24 +1261,32 @@ Route::get('/accounting/summary/data', function (Request $request) {
     if ($categoryId) {
         if ($categoryName) {
             $allBreakdownsSubquery = DB::table('liquidation_expenses')
-                ->whereNotNull('cash_advance_request_id')
-                ->groupBy('cash_advance_request_id')
+                ->whereNotNull('liquidation_expenses.cash_advance_request_id')
+                ->groupBy('liquidation_expenses.cash_advance_request_id')
                 ->selectRaw('
-                    cash_advance_request_id,
+                    liquidation_expenses.cash_advance_request_id as cash_advance_request_id,
                     COUNT(*) as breakdown_count,
-                    SUM(amount) as breakdown_amount
+                    SUM(liquidation_expenses.amount) as breakdown_amount
                 ');
 
+            $particularConcatSql = DB::connection()->getDriverName() === 'sqlite'
+                ? "GROUP_CONCAT(NULLIF(liquidation_expenses.transaction_details, ''), ', ')"
+                : "GROUP_CONCAT(NULLIF(liquidation_expenses.transaction_details, '') ORDER BY liquidation_expenses.id SEPARATOR ', ')";
+            $descriptionConcatSql = DB::connection()->getDriverName() === 'sqlite'
+                ? "GROUP_CONCAT(NULLIF(liquidation_expenses.description, ''), ', ')"
+                : "GROUP_CONCAT(NULLIF(liquidation_expenses.description, '') ORDER BY liquidation_expenses.id SEPARATOR ', ')";
+
             $categoryBreakdownsSubquery = DB::table('liquidation_expenses')
-                ->whereNotNull('cash_advance_request_id')
-                ->where('category_id', $categoryId)
-                ->groupBy('cash_advance_request_id')
+                ->leftJoin('particulars as summary_particulars', 'liquidation_expenses.particular_id', '=', 'summary_particulars.id')
+                ->whereNotNull('liquidation_expenses.cash_advance_request_id')
+                ->whereRaw('COALESCE(liquidation_expenses.category_id, summary_particulars.category_id) = ?', [$categoryId])
+                ->groupBy('liquidation_expenses.cash_advance_request_id')
                 ->selectRaw("
-                    cash_advance_request_id,
+                    liquidation_expenses.cash_advance_request_id as cash_advance_request_id,
                     COUNT(*) as matching_count,
-                    SUM(amount) as matching_amount,
-                    GROUP_CONCAT(NULLIF(transaction_details, '') ORDER BY id SEPARATOR ', ') as matching_particular_name,
-                    GROUP_CONCAT(NULLIF(description, '') ORDER BY id SEPARATOR ', ') as matching_description
+                    SUM(liquidation_expenses.amount) as matching_amount,
+                    {$particularConcatSql} as matching_particular_name,
+                    {$descriptionConcatSql} as matching_description
                 ");
 
             $expenseQuery
