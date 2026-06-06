@@ -1149,6 +1149,7 @@ Route::patch('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controlle
 Route::patch('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'updateBreakdown'])->middleware('auth')->name('accounting.update-breakdown');
 Route::delete('/accounting/liquidate-expenses/breakdown/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteBreakdown'])->middleware('auth')->name('accounting.delete-breakdown');
 Route::delete('/accounting/liquidate-expenses/breakdown-attachment/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteTransactionAttachment'])->middleware('auth')->name('accounting.delete-breakdown-attachment');
+Route::get('/accounting/liquidate-expenses/attachment/{type}/{id}', [\App\Http\Controllers\AccountingController::class, 'serveAttachment'])->where('type', 'request|transaction|receipt')->middleware('auth')->name('accounting.attachment');
 Route::patch('/accounting/liquidate-expenses/expense/{id}/category', [\App\Http\Controllers\AccountingController::class, 'updateExpenseCategory'])->middleware('auth')->name('accounting.update-expense-category');
 Route::post('/accounting/liquidate-expenses/opening-balance', [\App\Http\Controllers\AccountingController::class, 'updateOpeningBalance'])->middleware('auth')->name('accounting.update-opening-balance');
 Route::delete('/accounting/liquidate-expenses/expense/{id}', [\App\Http\Controllers\AccountingController::class, 'deleteExpense'])->middleware('auth')->name('accounting.delete-expense');
@@ -1497,7 +1498,7 @@ Route::post('/cash-advance/requests', function (Request $request) {
         'requested_amount' => 'required|numeric|min:0.01',
         'date_needed' => 'nullable|date',
         'attachments' => 'nullable|array|max:5',
-        'attachments.*' => 'file|mimes:jpg,jpeg,png,webp,heic,heif,pdf|max:10240',
+        'attachments.*' => 'file|mimes:pdf,jpg,jpeg,png,webp,heic,heif,gif,bmp,svg,doc,docx,xls,xlsx,csv,txt,rtf,ppt,pptx|max:10240',
     ]);
 
     $requestDate = now();
@@ -2114,7 +2115,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'transaction_details' => 'required|string|max:255',
         'description' => 'nullable|string|max:1000',
         'amount' => 'required|numeric|min:0.01',
-        'receipt_image' => 'nullable|file|mimes:jpg,jpeg,png,webp,heic,heif,pdf|max:5120',
+        'receipt_image' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp,heic,heif,gif,bmp,svg,doc,docx,xls,xlsx,csv,txt,rtf,ppt,pptx|max:10240',
     ]);
 
     $user = Auth::user();
@@ -2147,7 +2148,11 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
 
     $receiptPath = null;
     if ($request->hasFile('receipt_image')) {
-        $receiptPath = $request->file('receipt_image')->store('liquidation-receipts', 'public');
+        $file = $request->file('receipt_image');
+        $extension = strtolower($file->getClientOriginalExtension());
+        $baseName = \Illuminate\Support\Str::slug($expenseDate->format('Y-m-d') . '-' . $validated['transaction_details'] . '-' . $user->employee_id);
+        $storedName = ($baseName ?: 'liquidation-receipt') . '-' . \Illuminate\Support\Str::uuid() . ($extension ? '.' . $extension : '');
+        $receiptPath = $file->storeAs('liquidation-receipts', $storedName, 'public');
     }
 
     $expenseId = DB::table('liquidation_expenses')->insertGetId([
@@ -2177,7 +2182,7 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         ->first();
 
     if ($expense && $expense->receipt_path) {
-        $expense->receipt_url = Storage::disk('public')->url($expense->receipt_path);
+        $expense->receipt_url = route('admin.liquidation.expenses.receipt', ['expenseId' => $expense->id], false);
     }
 
     return response()->json([
@@ -2185,6 +2190,90 @@ Route::post('/admin/liquidation/expenses', function (Request $request) {
         'expense' => $expense,
     ]);
 })->middleware('auth')->name('admin.liquidation.expenses.store');
+
+Route::post('/admin/liquidation/expenses/{expenseId}/receipt', function (Request $request, $expenseId) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $validated = $request->validate([
+        'receipt_image' => 'required|file|mimes:pdf,jpg,jpeg,png,webp,heic,heif,gif,bmp,svg,doc,docx,xls,xlsx,csv,txt,rtf,ppt,pptx|max:10240',
+    ]);
+
+    $user = Auth::user();
+    $expense = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->where('liquidation_expenses.id', (int) $expenseId)
+        ->where('liquidations.user_id', $user->id)
+        ->where('liquidations.status', 'pending')
+        ->select(
+            'liquidation_expenses.id',
+            'liquidation_expenses.expense_date',
+            'liquidation_expenses.transaction_details',
+            'liquidation_expenses.receipt_path'
+        )
+        ->first();
+
+    if (! $expense) {
+        return response()->json([
+            'message' => 'Expense not found or access denied.',
+        ], 404);
+    }
+
+    $file = $validated['receipt_image'];
+    $extension = strtolower($file->getClientOriginalExtension());
+    $baseName = \Illuminate\Support\Str::slug(
+        \Carbon\Carbon::parse($expense->expense_date)->format('Y-m-d') . '-' . $expense->transaction_details . '-' . $user->employee_id
+    );
+    $storedName = ($baseName ?: 'liquidation-receipt') . '-' . \Illuminate\Support\Str::uuid() . ($extension ? '.' . $extension : '');
+    $receiptPath = $file->storeAs('liquidation-receipts', $storedName, 'public');
+
+    if ($expense->receipt_path) {
+        Storage::disk('public')->delete($expense->receipt_path);
+    }
+
+    DB::table('liquidation_expenses')
+        ->where('id', (int) $expenseId)
+        ->update([
+            'receipt_path' => $receiptPath,
+            'updated_at' => now(),
+        ]);
+
+    return response()->json([
+        'message' => 'Receipt uploaded successfully.',
+        'receipt_url' => route('admin.liquidation.expenses.receipt', ['expenseId' => (int) $expenseId], false),
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.receipt.store');
+
+Route::get('/admin/liquidation/expenses/{expenseId}/receipt', function (Request $request, $expenseId) {
+    if ($redirect = redirect_if_role_not_allowed([1, 2])) {
+        return $redirect;
+    }
+
+    $user = Auth::user();
+    $expense = DB::table('liquidation_expenses')
+        ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
+        ->where('liquidation_expenses.id', (int) $expenseId)
+        ->where('liquidations.user_id', $user->id)
+        ->whereNotNull('liquidation_expenses.receipt_path')
+        ->select('liquidation_expenses.receipt_path')
+        ->first();
+
+    abort_unless($expense && Storage::disk('public')->exists($expense->receipt_path), 404);
+
+    $path = Storage::disk('public')->path($expense->receipt_path);
+    $fileName = basename($expense->receipt_path);
+    $mimeType = Storage::disk('public')->mimeType($expense->receipt_path) ?: 'application/octet-stream';
+
+    if ($request->boolean('download')) {
+        return response()->download($path, $fileName, ['Content-Type' => $mimeType]);
+    }
+
+    return response()->file($path, [
+        'Content-Type' => $mimeType,
+        'Content-Disposition' => 'inline; filename="' . addslashes($fileName) . '"',
+    ]);
+})->middleware('auth')->name('admin.liquidation.expenses.receipt');
 
 Route::post('/admin/liquidation/submit', function (Request $request) {
     if ($redirect = redirect_if_role_not_allowed([1, 2])) {

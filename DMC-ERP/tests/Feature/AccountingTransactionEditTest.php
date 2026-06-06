@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AccountingTransactionEditTest extends TestCase
@@ -237,5 +239,67 @@ class AccountingTransactionEditTest extends TestCase
             ->assertJsonMissing([
                 'transaction_details' => 'legacy null-linked expense',
             ]);
+    }
+
+    public function test_recorded_transaction_receipt_is_stored_with_descriptive_name_and_served_as_file(): void
+    {
+        Storage::fake('public');
+
+        DB::table('roles')->insert([
+            ['id' => 2, 'name' => 'Admin', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => 3, 'name' => 'Accounting', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $employee = User::query()->create([
+            'employee_id' => '1007',
+            'name' => 'Receipt Employee',
+            'email' => 'receipt-employee@example.com',
+            'password' => 'password',
+            'role_id' => 2,
+        ]);
+
+        $accounting = User::query()->create([
+            'employee_id' => '2007',
+            'name' => 'Accounting User',
+            'email' => 'accounting-receipt@example.com',
+            'password' => 'password',
+            'role_id' => 3,
+        ]);
+
+        $categoryId = DB::table('categories')
+            ->where('particulars_category', 'Purchases')
+            ->value('id');
+
+        $this
+            ->actingAs($accounting)
+            ->post(route('accounting.store-expense'), [
+                'expense_date' => '2026-01-01',
+                'employee_id' => $employee->id,
+                'transaction_type' => 'debit',
+                'amount' => 1500,
+                'purpose' => 'Backtracking Data',
+                'category_id' => $categoryId,
+                'attachments' => [
+                    UploadedFile::fake()->create('old-name.pdf', 10, 'application/pdf'),
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('success', true);
+
+        $attachment = DB::table('cash_advance_request_attachments')->first();
+
+        $this->assertNotNull($attachment);
+        $this->assertStringStartsWith('2026-01-01-backtracking-data-1007', $attachment->original_name);
+        Storage::disk('public')->assertExists($attachment->file_path);
+
+        $this
+            ->actingAs($accounting)
+            ->get(route('accounting.attachment', [
+                'type' => 'request',
+                'id' => $attachment->id,
+                'download' => 1,
+            ]))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
     }
 }

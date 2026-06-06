@@ -170,7 +170,7 @@ class AccountingController extends Controller
                 'transaction_details' => 'nullable|string|max:255',
                 'description' => 'nullable|string',
                 'attachments' => 'nullable|array|max:10',
-                'attachments.*' => 'file|mimes:pdf,jpg,jpeg,png,docx,xlsx|max:10240',
+                'attachments.*' => 'file|mimes:pdf,jpg,jpeg,png,webp,heic,heif,gif,bmp,svg,doc,docx,xls,xlsx,csv,txt,rtf,ppt,pptx|max:10240',
             ]);
 
             $expenseDate = Carbon::parse($validated['expense_date']);
@@ -229,7 +229,13 @@ class AccountingController extends Controller
                 return compact('expenseId', 'allocation');
             });
 
-            $attachmentCount = $this->storeTransactionAttachments($request, (int) $result['expenseId']);
+            $attachmentCount = $this->storeTransactionAttachments(
+                $request,
+                (int) $result['expenseId'],
+                $expenseDate,
+                $validated['transaction_details'] ?? $validated['description'] ?? 'breakdown',
+                (int) $validated['employee_id']
+            );
 
             $expense = DB::table('liquidation_expenses')
                 ->join('liquidations', 'liquidation_expenses.liquidation_id', '=', 'liquidations.id')
@@ -267,6 +273,8 @@ class AccountingController extends Controller
             'amount' => 'required|numeric|min:0.01',
             'purpose' => 'required|string|max:2000',
             'category_id' => 'nullable|integer|exists:categories,id',
+            'attachments' => 'nullable|array|max:10',
+            'attachments.*' => 'file|mimes:pdf,jpg,jpeg,png,webp,heic,heif,gif,bmp,svg,doc,docx,xls,xlsx,csv,txt,rtf,ppt,pptx|max:10240',
         ]);
 
         $expenseDate = Carbon::parse($validated['expense_date']);
@@ -341,6 +349,14 @@ class AccountingController extends Controller
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+
+        $this->storeCashAdvanceRequestAttachments(
+            $request,
+            (int) $requestId,
+            $expenseDate,
+            $purpose,
+            $requesterId
+        );
 
         $expense = DB::table('cash_advance_requests')
             ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
@@ -938,14 +954,17 @@ class AccountingController extends Controller
 
         $attachments = DB::table('cash_advance_request_attachments')
             ->where('cash_advance_request_id', $debit->id)
-            ->select('original_name', 'file_path', 'mime_type', 'file_size')
+            ->select('id', 'original_name', 'file_path', 'mime_type', 'file_size')
             ->orderBy('id')
             ->get()
             ->map(function ($attachment) use ($request) {
+                $url = $this->attachmentRouteUrl('request', (int) $attachment->id, $request);
+
                 return [
+                    'id' => $attachment->id,
                     'name' => $attachment->original_name,
-                    'url' => $this->publicStorageUrl($attachment->file_path, $request),
-                    'download_url' => $this->publicStorageUrl($attachment->file_path, $request),
+                    'url' => $url,
+                    'download_url' => $this->attachmentRouteUrl('request', (int) $attachment->id, $request, true),
                     'type' => $attachment->mime_type,
                     'size' => (int) ($attachment->file_size ?? 0),
                 ];
@@ -983,7 +1002,12 @@ class AccountingController extends Controller
                     'transaction_details' => $row->transaction_details,
                     'description' => $row->description,
                     'amount' => (float) $row->amount,
-                    'receipt_url' => $this->publicStorageUrl($row->receipt_path, $request),
+                    'receipt_url' => $row->receipt_path
+                        ? $this->attachmentRouteUrl('receipt', (int) $row->id, $request)
+                        : null,
+                    'receipt_download_url' => $row->receipt_path
+                        ? $this->attachmentRouteUrl('receipt', (int) $row->id, $request, true)
+                        : null,
                     'attachments' => $rowAttachments,
                 ];
             })->values(),
@@ -1147,12 +1171,100 @@ class AccountingController extends Controller
         ]);
     }
 
+    public function serveAttachment(Request $request, string $type, int $id)
+    {
+        $this->authorizeAccounting();
+
+        $attachment = match ($type) {
+            'request' => DB::table('cash_advance_request_attachments')
+                ->where('id', $id)
+                ->select('original_name as name', 'file_path as path', 'mime_type as type')
+                ->first(),
+            'transaction' => DB::table('transaction_attachments')
+                ->where('id', $id)
+                ->select('file_name as name', 'file_path as path', 'file_type as type')
+                ->first(),
+            'receipt' => DB::table('liquidation_expenses')
+                ->where('id', $id)
+                ->whereNotNull('receipt_path')
+                ->select('receipt_path as path')
+                ->first(),
+            default => null,
+        };
+
+        abort_unless($attachment && ! empty($attachment->path), 404);
+        abort_unless(Storage::disk('public')->exists($attachment->path), 404);
+
+        $path = Storage::disk('public')->path($attachment->path);
+        $fileName = $this->downloadFileName($attachment->name ?? basename($attachment->path));
+        $mimeType = ($attachment->type ?? null) ?: Storage::disk('public')->mimeType($attachment->path) ?: 'application/octet-stream';
+
+        if ($request->boolean('download')) {
+            return response()->download($path, $fileName, ['Content-Type' => $mimeType]);
+        }
+
+        return response()->file($path, [
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="' . addslashes($fileName) . '"',
+        ]);
+    }
+
     private function breakdownAllocationForRequest(int $cashAdvanceRequestId): array
     {
         return app(AccountingBudgetService::class)->allocationForRequest($cashAdvanceRequestId);
     }
 
-    private function storeTransactionAttachments(Request $request, int $transactionBreakdownId): int
+    private function storeCashAdvanceRequestAttachments(
+        Request $request,
+        int $cashAdvanceRequestId,
+        Carbon $expenseDate,
+        ?string $purpose,
+        ?int $employeeUserId
+    ): int {
+        $files = $request->file('attachments', []);
+
+        if (! is_array($files) || count($files) === 0) {
+            return 0;
+        }
+
+        $employeeNumber = $this->employeeNumberForUser($employeeUserId);
+        $now = now();
+        $rows = [];
+
+        foreach ($files as $file) {
+            if (! $file || ! $file->isValid()) {
+                continue;
+            }
+
+            $fileName = $this->descriptiveAttachmentFileName($file, $expenseDate, $purpose, $employeeNumber);
+            $path = $file->storeAs('cash-advance-attachments', $this->storedAttachmentFileName($fileName), 'public');
+
+            $rows[] = [
+                'cash_advance_request_id' => $cashAdvanceRequestId,
+                'original_name' => $fileName,
+                'file_path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => Auth::id(),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if ($rows) {
+            DB::table('cash_advance_request_attachments')->insert($rows);
+        }
+
+        return count($rows);
+    }
+
+    private function storeTransactionAttachments(
+        Request $request,
+        int $transactionBreakdownId,
+        ?Carbon $expenseDate = null,
+        ?string $purpose = null,
+        ?int $employeeUserId = null
+    ): int
     {
         $files = $request->file('attachments', []);
 
@@ -1168,11 +1280,13 @@ class AccountingController extends Controller
                 continue;
             }
 
-            $fileName = $this->sanitizeAttachmentFileName($file->getClientOriginalName());
-            $extension = strtolower($file->getClientOriginalExtension());
-            $baseName = pathinfo($fileName, PATHINFO_FILENAME) ?: 'attachment';
-            $storedName = Str::uuid()->toString() . '-' . Str::slug($baseName ?: 'attachment') . '.' . $extension;
-            $path = $file->storeAs('transaction-attachments', $storedName, 'public');
+            $fileName = $this->descriptiveAttachmentFileName(
+                $file,
+                $expenseDate ?? now(),
+                $purpose,
+                $this->employeeNumberForUser($employeeUserId)
+            );
+            $path = $file->storeAs('transaction-attachments', $this->storedAttachmentFileName($fileName), 'public');
 
             $rows[] = [
                 'transaction_breakdown_id' => $transactionBreakdownId,
@@ -1194,17 +1308,27 @@ class AccountingController extends Controller
 
     private function transactionAttachmentPayload(object $attachment, ?Request $request = null): array
     {
-        $url = $this->publicStorageUrl($attachment->file_path, $request);
+        $url = $this->attachmentRouteUrl('transaction', (int) $attachment->id, $request);
 
         return [
             'id' => $attachment->id,
             'name' => $attachment->file_name,
             'url' => $url,
-            'download_url' => $url,
+            'download_url' => $this->attachmentRouteUrl('transaction', (int) $attachment->id, $request, true),
             'size' => (int) $attachment->file_size,
             'type' => $attachment->file_type,
             'created_at' => $attachment->created_at,
         ];
+    }
+
+    private function attachmentRouteUrl(string $type, int $id, ?Request $request = null, bool $download = false): string
+    {
+        $path = route('accounting.attachment', ['type' => $type, 'id' => $id], false);
+        $url = $request
+            ? rtrim($request->getSchemeAndHttpHost() . $request->getBaseUrl(), '/') . $path
+            : url($path);
+
+        return $download ? $url . '?download=1' : $url;
     }
 
     private function publicStorageUrl(?string $path, ?Request $request = null): ?string
@@ -1231,6 +1355,42 @@ class AccountingController extends Controller
         $baseName = $baseName ?: 'attachment';
 
         return trim($baseName . ($extension ? '.' . $extension : ''));
+    }
+
+    private function descriptiveAttachmentFileName($file, Carbon $expenseDate, ?string $purpose, ?string $employeeNumber): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+        $purposeSlug = Str::limit(Str::slug($purpose ?: 'receipt') ?: 'receipt', 80, '');
+        $baseParts = [
+            $expenseDate->format('Y-m-d'),
+            $purposeSlug,
+            Str::slug($employeeNumber ?: 'no-employee-number') ?: 'no-employee-number',
+        ];
+
+        return implode('-', $baseParts) . ($extension ? '.' . $extension : '');
+    }
+
+    private function storedAttachmentFileName(string $fileName): string
+    {
+        $safeName = $this->sanitizeAttachmentFileName($fileName);
+        $extension = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
+        $baseName = pathinfo($safeName, PATHINFO_FILENAME) ?: 'attachment';
+
+        return $baseName . '-' . Str::uuid()->toString() . ($extension ? '.' . $extension : '');
+    }
+
+    private function employeeNumberForUser(?int $employeeUserId): ?string
+    {
+        if (! $employeeUserId) {
+            return null;
+        }
+
+        return DB::table('users')->where('id', $employeeUserId)->value('employee_id');
+    }
+
+    private function downloadFileName(?string $fileName): string
+    {
+        return $this->sanitizeAttachmentFileName($fileName ?: 'attachment') ?: 'attachment';
     }
 
     private function authorizeAccounting(): void

@@ -21,69 +21,34 @@
     </div>
 
     <!-- CASH ADVANCE PERIOD CONTROLS -->
-    <div>
-        <!-- Current Balance -->
-        <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
-                    <div class="flex w-full min-w-0 items-center gap-2 lg:w-auto">
-                        <button id="prevPeriodBtn" type="button" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700">
-                            <i data-feather="arrow-left" class="w-4 h-4"></i>
-                        </button>
-
-                    <div class="min-h-[44px] min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 lg:w-[260px] lg:flex-none">
-                        <h2 id="liquidationPeriodLabel" class="truncate text-sm font-semibold text-gray-800">Loading...</h2>
-                        <p id="liquidationPeriodSubLabel" class="mt-0.5 text-xs font-medium text-gray-500">Month view</p>
-                    </div>
-
-                        <button id="nextPeriodBtn" type="button" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700">
-                            <i data-feather="arrow-right" class="w-4 h-4"></i>
-                        </button>
-                    </div>
-
-                    <div class="inline-flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2 text-sm lg:w-auto lg:justify-start">
-                        <span class="font-semibold text-teal-700">Current Balance</span>
-                        <span id="currentBalanceAmount" class="rounded-full bg-white px-3 py-1 text-sm font-bold text-teal-900 shadow-sm">
-                            <span id="balanceAmountDisplay">₱0.00</span>
-                        </span>
-                    </div>
-
-                    <div class="flex w-full flex-wrap items-center gap-2 lg:w-auto">
-                        <div class="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
-                            <button id="liquidationWeekToggle" type="button" data-view-toggle="week" onclick="setWeekView()" class="rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 transition hover:text-teal-700">Week</button>
-                            <button id="liquidationMonthToggle" type="button" data-view-toggle="month" onclick="setMonthView(new Date())" class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-teal-800 shadow-sm transition hover:text-teal-700">Month</button>
-                        </div>
-
-                        <button id="liquidationCurrentWeekBtn" type="button" onclick="setWeekView()" class="inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-100 sm:flex-none">
-                            <i data-feather="calendar" class="w-4 h-4"></i>
-                            Current Week
-                        </button>
-
-                        <button id="liquidationCurrentMonthBtn" type="button" onclick="setMonthView(new Date())" class="inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 sm:flex-none">
-                            <i data-feather="grid" class="w-4 h-4"></i>
-                            Current Month
-                        </button>
-
-                        <button id="openPrevBalanceBtn" type="button" class="hidden min-h-[42px] items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700">
-                            <i data-feather="dollar-sign" class="w-4 h-4"></i>
-                            Set Previous Balance
-                        </button>
-                    </div>
+    <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
+                <div class="w-full lg:w-[340px]">
+                    <label for="liquidationMonthSelector" class="sr-only">Select Month</label>
+                    <select id="liquidationMonthSelector" class="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20">
+                        <option value="">Loading months...</option>
+                    </select>
                 </div>
 
-                <button onclick="openRequestAdvanceModal()"
-                        class="inline-flex w-full min-w-[190px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 xl:w-auto">
-                    <i data-feather="credit-card" class="h-4 w-4"></i>
-                    <span>Request Cash Advance</span>
-                </button>
-            </div>
-
-            <div class="mt-3">
-                <div id="liquidationWeekBreakdown" class="flex flex-wrap gap-2">
-                    <!-- Week chips will be rendered here -->
+                <div class="inline-flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2 text-sm lg:w-auto lg:justify-start">
+                    <span class="font-semibold text-teal-700">Current Period</span>
+                    <span id="liquidationPeriodLabel" class="rounded-full bg-white px-3 py-1 text-sm font-bold text-teal-900 shadow-sm">Loading...</span>
                 </div>
 
+                <div class="inline-flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2 text-sm lg:w-auto lg:justify-start">
+                    <span class="font-semibold text-teal-700">Current Balance</span>
+                    <span id="currentBalanceAmount" class="rounded-full bg-white px-3 py-1 text-sm font-bold text-teal-900 shadow-sm">
+                        <span id="balanceAmountDisplay">₱0.00</span>
+                    </span>
+                </div>
             </div>
+
+            <button onclick="openRequestAdvanceModal()"
+                    class="inline-flex w-full min-w-[190px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 xl:w-auto">
+                <i data-feather="credit-card" class="h-4 w-4"></i>
+                <span>Request Cash Advance</span>
+            </button>
         </div>
     </div>
 
@@ -300,7 +265,7 @@
                         data-expense-date="{{ $expense->expense_date }}"
                         data-expense-amount="{{ $expense->amount }}"
                         data-expense-category="{{ $expense->category_name }}"
-                        data-receipt-url="{{ $expense->receipt_path ? asset('storage/' . $expense->receipt_path) : '' }}">
+                        data-receipt-url="{{ $expense->receipt_path ? route('admin.liquidation.expenses.receipt', ['expenseId' => $expense->id], false) : '' }}">
                         <td data-label="Date" class="py-4 px-4 text-sm text-gray-700">
                             {{ \Carbon\Carbon::parse($expense->expense_date)->format('F j, Y') }}
                         </td>
@@ -317,16 +282,25 @@
                             &#8369;{{ number_format((float) $expense->amount, 2) }}
                         </td>
                         <td data-label="Receipt" class="py-4 px-4 text-center">
-                            @if($expense->receipt_path)
-                            <a href="{{ asset('storage/' . $expense->receipt_path) }}"
-                               target="_blank"
-                               class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                                <i data-feather="paperclip" class="w-3.5 h-3.5"></i>
-                                View
-                            </a>
-                            @else
-                            <span class="text-xs text-gray-400">None</span>
-                            @endif
+                            <div class="receipt-cell flex flex-wrap items-center justify-center gap-2">
+                                @if($expense->receipt_path)
+                                <a href="{{ route('admin.liquidation.expenses.receipt', ['expenseId' => $expense->id], false) }}"
+                                   target="_blank"
+                                   class="receipt-view-link inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                                    <i data-feather="paperclip" class="w-3.5 h-3.5"></i>
+                                    View
+                                </a>
+                                @else
+                                <span class="receipt-empty-label text-xs text-gray-400">None</span>
+                                @endif
+                                <button type="button"
+                                        onclick="uploadExpenseReceipt(this)"
+                                        data-expense-id="{{ $expense->id }}"
+                                        class="inline-flex items-center gap-1 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100">
+                                    <i data-feather="upload" class="w-3.5 h-3.5"></i>
+                                    {{ $expense->receipt_path ? 'Replace' : 'Upload' }}
+                                </button>
+                            </div>
                         </td>
                         <td data-label="Actions" class="py-4 px-4 text-center">
                             <button onclick="deleteExpense(this)" class="text-red-500 hover:text-red-700 transition">
@@ -439,7 +413,7 @@
                                 <label for="requestAttachments" class="block text-sm font-semibold text-gray-700">Supporting Attachments</label>
                                 <span class="text-xs font-medium text-gray-500">Images or PDF</span>
                             </div>
-                            <input type="file" id="requestAttachments" class="sr-only" accept="image/*,application/pdf" multiple>
+                            <input type="file" id="requestAttachments" class="sr-only" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/rtf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple>
                             <input type="file" id="requestAttachmentCamera" class="sr-only" accept="image/*" capture="environment">
                             <div class="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row">
@@ -566,10 +540,10 @@
 
                         <div>
                             <div class="mb-2 flex items-center justify-between gap-3">
-                                <label for="expenseReceipt" class="block text-sm font-semibold text-gray-700">Receipt / Proof Image</label>
+                                <label for="expenseReceipt" class="block text-sm font-semibold text-gray-700">Receipt / Proof File</label>
                                 <span class="text-xs font-medium text-gray-500">Image or PDF</span>
                             </div>
-                            <input type="file" id="expenseReceipt" class="sr-only" accept="image/*,application/pdf">
+                            <input type="file" id="expenseReceipt" class="sr-only" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/rtf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation">
                             <input type="file" id="expenseReceiptCamera" class="sr-only" accept="image/*" capture="environment">
                             <div class="rounded-2xl border border-dashed border-blue-300 bg-blue-50/70 p-4">
                                 <div class="flex flex-col gap-3 sm:flex-row">
@@ -582,7 +556,7 @@
                                         Take Photo
                                     </button>
                                 </div>
-                                <p class="mt-3 text-xs text-gray-600">Optional receipt, proof photo, screenshot, or PDF up to 5MB.</p>
+                                <p class="mt-3 text-xs text-gray-600">Optional receipt, proof photo, screenshot, PDF, or document up to 10MB.</p>
                             </div>
                             <p id="expenseReceiptError" class="mt-1 hidden text-xs font-medium text-red-600"></p>
                         </div>
@@ -672,6 +646,7 @@
     const periodLabel = document.getElementById('liquidationPeriodLabel');
     const periodSubLabel = document.getElementById('liquidationPeriodSubLabel');
     const weekBreakdown = document.getElementById('liquidationWeekBreakdown');
+    const monthSelector = document.getElementById('liquidationMonthSelector');
     const prevPeriodBtn = document.getElementById('prevPeriodBtn');
     const nextPeriodBtn = document.getElementById('nextPeriodBtn');
     const currentWeekBtn = document.getElementById('liquidationCurrentWeekBtn');
@@ -1139,6 +1114,76 @@
         return `${year}-${month}`;
     }
 
+    function parseMonthKey(monthKey) {
+        const [year, month] = String(monthKey || '').split('-').map(Number);
+
+        if (!year || !month) {
+            return getMonthStart(new Date());
+        }
+
+        return new Date(year, month - 1, 1);
+    }
+
+    function addMonthOption(monthMap, dateValue) {
+        const parsed = parseDate(dateValue);
+
+        if (Number.isNaN(parsed.getTime())) {
+            return;
+        }
+
+        const monthStart = getMonthStart(parsed);
+        monthMap.set(formatMonthKey(monthStart), monthStart);
+    }
+
+    function populateMonthSelector(selectedDate = new Date()) {
+        if (!monthSelector) {
+            return;
+        }
+
+        const monthMap = new Map();
+        const today = getMonthStart(new Date());
+
+        for (let offset = -12; offset <= 12; offset += 1) {
+            addMonthOption(monthMap, addMonths(today, offset));
+        }
+
+        getExpenseRows().forEach(row => {
+            if (row.dataset.expenseDate) {
+                addMonthOption(monthMap, row.dataset.expenseDate);
+            }
+        });
+
+        myCashAdvanceRequestsCache.forEach(request => {
+            addMonthOption(monthMap, request.request_date || request.submitted_at || request.released_at || request.reviewed_at);
+        });
+
+        const selectedMonth = getMonthStart(selectedDate);
+        addMonthOption(monthMap, selectedMonth);
+
+        const options = [...monthMap.entries()]
+            .sort(([left], [right]) => right.localeCompare(left))
+            .map(([monthKey, monthDate]) => `<option value="${monthKey}">${formatMonthLabel(monthDate)}</option>`)
+            .join('');
+
+        monthSelector.innerHTML = options;
+        monthSelector.value = formatMonthKey(selectedMonth);
+    }
+
+    function syncMonthSelector() {
+        if (!monthSelector || !currentPeriodStart) {
+            return;
+        }
+
+        const selectedKey = formatMonthKey(currentPeriodStart);
+
+        if (![...monthSelector.options].some(option => option.value === selectedKey)) {
+            populateMonthSelector(currentPeriodStart);
+            return;
+        }
+
+        monthSelector.value = selectedKey;
+    }
+
     function getSubmissionMonthStart() {
         return getMonthStart(currentPeriodStart || new Date());
     }
@@ -1242,6 +1287,7 @@
         currentPeriodStart = startOfDay(start);
         currentPeriodEnd = endOfDay(end);
         currentViewMode = mode;
+        syncMonthSelector();
         renderLiquidationDashboard();
     }
 
@@ -1916,7 +1962,6 @@
         }
 
         renderExpenseSummary();
-        renderWeekBreakdown();
         feather.replace();
     }
 
@@ -1982,8 +2027,8 @@
             hasErrors = true;
         }
 
-        if (receiptFile && receiptFile.size > 5 * 1024 * 1024) {
-            setFieldError('expenseReceipt', 'Receipt files must be 5MB or smaller.');
+        if (receiptFile && receiptFile.size > 10 * 1024 * 1024) {
+            setFieldError('expenseReceipt', 'Receipt files must be 10MB or smaller.');
             hasErrors = true;
         }
 
@@ -2068,9 +2113,7 @@
         const displayCategory = escapeHtml(savedExpense?.category_name || categoryName);
         const displayDetails = escapeHtml(savedExpense?.transaction_details || details);
         const displayDescription = savedExpense?.description || description;
-        const receiptCell = savedExpense?.receipt_url
-            ? `<a href="${savedExpense.receipt_url}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"><i data-feather="paperclip" class="w-3.5 h-3.5"></i>View</a>`
-            : '<span class="text-xs text-gray-400">None</span>';
+        const receiptCell = receiptCellMarkup(savedExpense?.id || '', savedExpense?.receipt_url || '', Boolean(savedExpense?.receipt_url));
         newRow.innerHTML = `
             <td data-label="Date" class="py-4 px-4 text-sm text-gray-700">${formattedDate}</td>
             <td data-label="Category" class="py-4 px-4 text-sm text-gray-800 font-medium">${displayCategory}</td>
@@ -2172,6 +2215,100 @@
             setButtonLoading(submitBtn, false);
         }
     });
+
+    function receiptCellMarkup(expenseId, receiptUrl, hasReceipt = true) {
+        const viewLink = hasReceipt && receiptUrl
+            ? `<a href="${escapeHtml(receiptUrl)}" target="_blank" class="receipt-view-link inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"><i data-feather="paperclip" class="w-3.5 h-3.5"></i>View</a>`
+            : '<span class="receipt-empty-label text-xs text-gray-400">None</span>';
+        const buttonLabel = hasReceipt && receiptUrl ? 'Replace' : 'Upload';
+
+        return `
+            <div class="receipt-cell flex flex-wrap items-center justify-center gap-2">
+                ${viewLink}
+                <button type="button"
+                        onclick="uploadExpenseReceipt(this)"
+                        data-expense-id="${escapeHtml(expenseId)}"
+                        class="inline-flex items-center gap-1 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100">
+                    <i data-feather="upload" class="w-3.5 h-3.5"></i>
+                    ${buttonLabel}
+                </button>
+            </div>
+        `;
+    }
+
+    async function uploadExpenseReceipt(button) {
+        const row = button.closest('tr');
+        const expenseId = button.dataset.expenseId || row?.dataset?.expenseId;
+
+        if (!expenseId) {
+            showLiquidationToast('Unable to find the selected expense.', 'error');
+            return;
+        }
+
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/rtf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+        input.addEventListener('change', async function() {
+            const file = this.files?.[0] || null;
+
+            if (!file) {
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                showLiquidationToast('Receipt files must be 10MB or smaller.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('_token', document.querySelector('#addExpenseForm input[name="_token"]').value);
+            formData.append('receipt_image', file);
+
+            button.disabled = true;
+            button.classList.add('opacity-60', 'pointer-events-none');
+
+            try {
+                const response = await fetch(`{{ url('/admin/liquidation/expenses') }}/${expenseId}/receipt`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                });
+
+                const result = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    showLiquidationToast(result?.message || 'Failed to upload receipt.', 'error');
+                    return;
+                }
+
+                const receiptUrl = result.receipt_url || '';
+                row.dataset.receiptUrl = receiptUrl;
+                const receiptCell = row.querySelector('[data-label="Receipt"]');
+
+                if (receiptCell) {
+                    receiptCell.innerHTML = receiptCellMarkup(expenseId, receiptUrl, true);
+                }
+
+                showLiquidationToast(result?.message || 'Receipt uploaded successfully.', 'success');
+
+                if (window.feather) {
+                    feather.replace();
+                }
+            } catch (error) {
+                console.error('Receipt upload error:', error);
+                showLiquidationToast('Failed to upload receipt. Please try again.', 'error');
+            } finally {
+                button.disabled = false;
+                button.classList.remove('opacity-60', 'pointer-events-none');
+            }
+        });
+
+        input.click();
+    }
 
     // Delete expense function
     async function deleteExpense(button) {
@@ -2313,6 +2450,12 @@
         monthToggleBtn.addEventListener('click', () => setMonthView(currentPeriodStart));
     }
 
+    if (monthSelector) {
+        monthSelector.addEventListener('change', function() {
+            setMonthView(parseMonthKey(this.value));
+        });
+    }
+
     // Previous Balance Modal Event Listeners
     const openPrevBalanceBtn = document.getElementById('openPrevBalanceBtn');
     const closePreviousBalanceBtn = document.getElementById('closePreviousBalanceBtn');
@@ -2354,9 +2497,7 @@
     // ===============================================
     function renderLiquidationDashboard() {
         updatePeriodLabels();
-        updatePeriodToggles();
         renderExpensesForCurrentFilters();
-        renderWeekBreakdown();
         renderEmployeeRequests();
         renderExpenseSummary();
     }
@@ -2368,6 +2509,7 @@
             console.log('Fetched requests:', requests);
             
             const monthStart = getMonthStart(new Date());
+            populateMonthSelector(monthStart);
             console.log('Setting month view for:', monthStart);
             setMonthView(monthStart);
             

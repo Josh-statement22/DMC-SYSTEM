@@ -171,6 +171,22 @@
                 >
             </div>
 
+            <div>
+                <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <label for="expenseAttachments" class="block text-sm font-semibold text-gray-700">Attach Receipt</label>
+                    <p class="text-xs font-semibold text-gray-500">Images, PDFs, and common document files. Max 10 files, 10MB each.</p>
+                </div>
+                <input
+                    id="expenseAttachments"
+                    name="attachments[]"
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/rtf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    class="w-full rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-teal-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:border-teal-300 hover:bg-teal-50/40 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                >
+                <div id="expenseAttachmentPreview" class="mt-3 hidden rounded-2xl border border-gray-200 bg-white p-3"></div>
+            </div>
+
             <!-- Accounting Remarks (auto-set to 'Manually Recorded' for liquidation entries) -->
             <input type="hidden" id="accounting_remarks" name="accounting_remarks" value="Manually Recorded">
 
@@ -558,10 +574,10 @@
                     <div>
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <label class="block text-sm font-semibold text-gray-700">Attachments <span id="breakdownAttachmentCounter">(0)</span></label>
-                            <p class="text-xs font-semibold text-gray-500">PDF, JPG, JPEG, PNG, DOCX, XLSX. Max 10 files, 10MB each.</p>
+                            <p class="text-xs font-semibold text-gray-500">Images, PDFs, and common document files. Max 10 files, 10MB each.</p>
                         </div>
                         <div id="breakdownAttachmentDropzone" class="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center transition hover:border-teal-400 hover:bg-teal-50/40">
-                            <input id="breakdownAttachments" name="attachments[]" type="file" class="sr-only" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                            <input id="breakdownAttachments" name="attachments[]" type="file" class="sr-only" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/rtf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation">
                             <p class="text-sm font-semibold text-gray-700">Drag & Drop Files Here</p>
                             <p class="my-2 text-xs font-semibold uppercase tracking-wide text-gray-400">or</p>
                             <button id="breakdownSelectFilesBtn" type="button" class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700">
@@ -782,6 +798,8 @@
     const breakdownSelectFilesBtn = document.getElementById('breakdownSelectFilesBtn');
     const breakdownAttachmentPreview = document.getElementById('breakdownAttachmentPreview');
     const breakdownAttachmentCounter = document.getElementById('breakdownAttachmentCounter');
+    const expenseAttachments = document.getElementById('expenseAttachments');
+    const expenseAttachmentPreview = document.getElementById('expenseAttachmentPreview');
     const viewBreakdownModal = document.getElementById('viewBreakdownModal');
     const closeViewBreakdownBtn = document.getElementById('closeViewBreakdownBtn');
     const closeViewBreakdownFooterBtn = document.getElementById('closeViewBreakdownFooterBtn');
@@ -810,7 +828,7 @@
     const attachmentImagePreviewTitle = document.getElementById('attachmentImagePreviewTitle');
     const attachmentImagePreviewImg = document.getElementById('attachmentImagePreviewImg');
     const closeAttachmentImagePreviewBtn = document.getElementById('closeAttachmentImagePreviewBtn');
-    const allowedBreakdownAttachmentExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'xlsx'];
+    const allowedBreakdownAttachmentExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'svg', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'rtf', 'ppt', 'pptx'];
     const maxBreakdownAttachmentFiles = 10;
     const maxBreakdownAttachmentBytes = 10 * 1024 * 1024;
     let selectedBreakdownAttachmentFiles = [];
@@ -963,7 +981,11 @@
 
     function isImageAttachment(fileName, fileType = '') {
         const extension = getFileExtension(fileName);
-        return ['jpg', 'jpeg', 'png'].includes(extension) || String(fileType || '').startsWith('image/');
+        return ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'].includes(extension) || String(fileType || '').startsWith('image/');
+    }
+
+    function isPdfAttachment(fileName, fileType = '') {
+        return getFileExtension(fileName) === 'pdf' || String(fileType || '').includes('pdf');
     }
 
     function getAttachmentIcon(fileName, fileType = '') {
@@ -978,6 +1000,46 @@
         }
 
         return '📄';
+    }
+
+    function attachmentThumbnailMarkup(attachment) {
+        const url = escapeHtml(attachment.url || '');
+        const name = escapeHtml(attachment.name || 'Attachment');
+        const type = attachment.type || '';
+
+        if (isImageAttachment(attachment.name, type)) {
+            return `
+                <div class="flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
+                    <img src="${url}" alt="${name}" class="h-full w-full object-cover" loading="lazy">
+                </div>
+            `;
+        }
+
+        const label = isPdfAttachment(attachment.name, type) ? 'PDF' : getFileExtension(attachment.name).toUpperCase() || 'FILE';
+
+        return `
+            <div class="flex h-24 w-full flex-col items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-center">
+                <span class="text-2xl font-black text-teal-700">${escapeHtml(label)}</span>
+                <span class="mt-1 text-[11px] font-semibold text-gray-500">Preview file</span>
+            </div>
+        `;
+    }
+
+    function renderSelectedFilePreview(files, emptyText = 'No files selected') {
+        const selectedFiles = Array.from(files || []);
+
+        if (!selectedFiles.length) {
+            return `<p class="text-center text-sm text-gray-500">${emptyText}</p>`;
+        }
+
+        return selectedFiles.map(file => `
+            <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold text-gray-800">${getAttachmentIcon(file.name, file.type)} ${escapeHtml(file.name)}</p>
+                    <p class="text-xs text-gray-500">${escapeHtml(formatFileSize(file.size))}</p>
+                </div>
+            </div>
+        `).join('');
     }
 
     function syncBreakdownAttachmentInput() {
@@ -1108,6 +1170,20 @@
         });
     }
 
+    function renderExpenseAttachmentPreview() {
+        if (!expenseAttachments || !expenseAttachmentPreview) {
+            return;
+        }
+
+        const files = Array.from(expenseAttachments.files || []);
+        expenseAttachmentPreview.classList.toggle('hidden', files.length === 0);
+        expenseAttachmentPreview.innerHTML = renderSelectedFilePreview(files, 'No receipts selected');
+    }
+
+    if (expenseAttachments) {
+        expenseAttachments.addEventListener('change', renderExpenseAttachmentPreview);
+    }
+
     function parseLocalDate(value) {
         if (value instanceof Date && !Number.isNaN(value.getTime())) {
             return value;
@@ -1234,7 +1310,7 @@
                 id: `receipt-${row.id || index}`,
                 name: `${row.category_name || 'Receipt'} Receipt`,
                 url: row.receipt_url,
-                download_url: row.receipt_url,
+                download_url: row.receipt_download_url || row.receipt_url,
                 size: 0,
                 type: '',
                 label: row.category_name || 'Breakdown',
@@ -1245,10 +1321,12 @@
         counter.textContent = `Attachments (${attachments.length})`;
 
         if (!attachments.length) {
+            list.className = 'space-y-2';
             list.innerHTML = '<p class="text-sm text-gray-500">No attachments found.</p>';
             return;
         }
 
+        list.className = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3';
         list.innerHTML = attachments.map(attachment => {
             const canPreviewImage = isImageAttachment(attachment.name, attachment.type);
             const viewLabel = canPreviewImage ? 'View' : 'Open';
@@ -1257,12 +1335,15 @@
             `;
 
             return `
-                <div class="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="min-w-0">
+                <div class="rounded-2xl border border-gray-200 bg-white p-3">
+                    <button type="button" class="viewBreakdownAttachmentBtn block w-full text-left" data-url="${escapeHtml(attachment.url || '')}" data-name="${escapeHtml(attachment.name || 'Attachment')}" data-type="${escapeHtml(attachment.type || '')}">
+                        ${attachmentThumbnailMarkup(attachment)}
+                    </button>
+                    <div class="mt-3 min-w-0">
                         <p class="truncate text-sm font-semibold text-gray-800">${getAttachmentIcon(attachment.name, attachment.type)} ${escapeHtml(attachment.name || 'Attachment')}</p>
                         <p class="text-xs text-gray-500">${escapeHtml(attachment.label || 'Breakdown')}${attachment.size ? ' • ' + escapeHtml(formatFileSize(attachment.size)) : ''}</p>
                     </div>
-                    <div class="flex shrink-0 items-center gap-2">
+                    <div class="mt-3 flex shrink-0 items-center gap-2">
                         <button type="button" class="viewBreakdownAttachmentBtn rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-50" data-url="${escapeHtml(attachment.url || '')}" data-name="${escapeHtml(attachment.name || 'Attachment')}" data-type="${escapeHtml(attachment.type || '')}">${viewLabel}</button>
                         <a href="${escapeHtml(attachment.download_url || attachment.url || '#')}" download class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50">Download</a>
                         ${deleteButton}
@@ -2716,6 +2797,11 @@
 
         this.reset();
         syncCategoryRequirement();
+        renderExpenseAttachmentPreview();
+    });
+
+    expenseForm.addEventListener('reset', function() {
+        setTimeout(renderExpenseAttachmentPreview, 0);
     });
 
     function deleteTransactionFromButton(button) {
