@@ -3,7 +3,7 @@
 
 @section('content')
 
-<div class="admin-liquidation-page space-y-8">
+<div class="admin-liquidation-page space-y-6 md:space-y-8">
 
     <div id="liquidationToast"
          class="hidden fixed top-6 right-6 z-50 p-4 rounded-xl shadow-xl flex items-start gap-3 transition-opacity duration-500">
@@ -12,19 +12,18 @@
     </div>
 
     <!-- HEADER -->
-    <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-4">
-            <div class="w-14 h-14 bg-gradient-to-br from-[#1C446D] to-blue-700
-                        rounded-2xl flex items-center justify-center shadow-lg">
-                <i data-feather="credit-card" class="w-7 h-7 text-white"></i>
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 items-center gap-4">
+            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1C446D] to-blue-700 shadow-lg">
+                <i data-feather="credit-card" class="h-7 w-7 text-white"></i>
             </div>
-            <div>
-                <h2 class="text-3xl font-bold text-gray-800">Cash Advance Liquidation</h2>
-                <p class="text-gray-500">Track and manage your cash advance expenses</p>
+            <div class="min-w-0">
+                <h2 class="text-2xl font-bold leading-tight text-gray-800 md:text-3xl">Cash Advance Liquidation</h2>
+                <p class="mt-1 text-sm text-gray-500 md:text-base">Track and manage your cash advance expenses</p>
             </div>
         </div>
         <button onclick="openRequestAdvanceModal()"
-                class="inline-flex items-center space-x-2 px-6 py-3
+                class="inline-flex w-full items-center justify-center gap-2 px-6 py-3 sm:w-auto
                        bg-gradient-to-r from-amber-500 to-orange-600
                        text-white font-semibold rounded-xl
                        hover:shadow-xl hover:scale-[1.02]
@@ -140,11 +139,11 @@
     </div>
 
     <!-- ACTION BUTTON -->
-    <div class="flex items-center justify-between">
-        <h3 class="text-2xl font-bold text-gray-800">Expense Transactions</h3>
-        <div class="flex items-center space-x-3">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h3 class="text-xl font-bold text-gray-800 md:text-2xl">Expense Transactions</h3>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
             <button onclick="printLiquidationSummary()"
-                    class="inline-flex items-center space-x-2 px-6 py-3
+                    class="inline-flex w-full items-center justify-center gap-2 px-6 py-3 sm:w-auto
                            bg-gradient-to-r from-slate-600 to-slate-700
                            text-white font-semibold rounded-xl
                            hover:shadow-xl hover:scale-[1.02]
@@ -154,7 +153,7 @@
             </button>
 
             <button onclick="openAddExpenseModal()" 
-                    class="inline-flex items-center space-x-2 px-6 py-3
+                    class="inline-flex w-full items-center justify-center gap-2 px-6 py-3 sm:w-auto
                            bg-gradient-to-r from-[#0A3562] via-[#255EC7] to-[#6999F1]
                            text-white font-semibold rounded-xl
                            hover:shadow-xl hover:scale-[1.02]
@@ -165,24 +164,24 @@
         </div>
     </div>
 
-    <div class="rounded-3xl bg-white p-8 shadow-2xl border border-gray-100">
-        <div class="relative mb-5 flex items-center justify-between">
-            <div>
+    <div class="rounded-3xl bg-white p-5 shadow-2xl border border-gray-100 md:p-8">
+        <div class="relative mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
                 <h3 class="text-xl font-bold text-gray-800">My Cash Advance Requests</h3>
                 <span class="text-sm font-semibold text-gray-500">Today's history</span>
             </div>
 
-            <div class="relative" id="cashAdvanceNotificationWrapper">
+            <div class="relative w-full sm:w-auto" id="cashAdvanceNotificationWrapper">
                 <button id="cashAdvanceNotificationBtn"
                         type="button"
-                        class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100"
+                        class="inline-flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 sm:w-auto"
                         title="Cash advance notifications">
                     <i data-feather="inbox" class="w-4 h-4"></i>
                     <span id="cashAdvanceNotificationLabel">Cash Advance Notifications</span>
                 </button>
 
                 <div id="cashAdvanceNotificationPanel"
-                     class="hidden absolute right-0 top-14 z-40 w-[min(24rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                     class="hidden absolute left-0 right-auto top-14 z-40 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl sm:left-auto sm:right-0">
                     <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                         <div>
                             <p class="text-sm font-bold text-gray-900">Cash Advance Notifications</p>
@@ -222,7 +221,7 @@
         </div>
 
         <div class="admin-responsive-table-wrap overflow-x-auto">
-            <table class="admin-card-table employee-requests-table w-full">
+            <table class="admin-card-table employee-requests-table w-full min-w-[820px]">
                 <thead>
                     <tr class="border-b border-gray-200">
                         <th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Request Date</th>
@@ -244,10 +243,10 @@
     </div>
 
     <!-- EXPENSES TABLE -->
-    <div id="expensesTableContainer" class="relative overflow-hidden rounded-3xl bg-white p-8 shadow-2xl">
+    <div id="expensesTableContainer" class="relative overflow-hidden rounded-3xl bg-white p-5 shadow-2xl md:p-8">
         
         <div class="admin-responsive-table-wrap overflow-x-auto">
-            <table class="admin-card-table liquidation-expenses-table w-full">
+            <table class="admin-card-table liquidation-expenses-table w-full min-w-[760px]">
                 <thead>
                     <tr class="border-b-2 border-gray-200">
                         <th class="text-left py-4 px-4 text-sm font-semibold text-gray-700">Date</th>

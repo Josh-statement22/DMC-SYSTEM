@@ -156,20 +156,20 @@
         </div>
     </aside>
 
-    <div class="app-shell-main flex-1 flex flex-col relative z-10">
-        <header class="app-topbar h-16 glass bg-white/70 border-b flex items-center justify-between px-4 md:px-8 shadow-sm">
-            <div class="flex items-center space-x-4">
-                <button onclick="toggleSidebar()" class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
+    <div class="app-shell-main relative z-10 flex min-w-0 flex-1 flex-col">
+        <header class="app-topbar relative z-[80] h-16 glass bg-white/70 border-b flex items-center justify-between gap-3 px-4 md:px-8 shadow-sm">
+            <div class="flex min-w-0 items-center gap-3 md:gap-4">
+                <button onclick="toggleSidebar()" class="mobile-toggle shrink-0 p-2 rounded-lg hover:bg-gray-100 transition md:hidden">
                     <i data-feather="menu"></i>
                 </button>
 
-                <h1 id="accountingPageTitle" class="app-page-title text-lg font-semibold text-gray-700 tracking-wide">@yield('title')</h1>
+                <h1 id="accountingPageTitle" class="app-page-title min-w-0 text-base font-semibold leading-tight text-gray-700 tracking-wide sm:text-lg">@yield('title')</h1>
             </div>
 
             <x-user-profile-badge />
         </header>
 
-        <main class="app-content flex-1 p-4 md:p-8 overflow-y-auto">
+        <main class="app-content min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8">
             @yield('content')
         </main>
     </div>

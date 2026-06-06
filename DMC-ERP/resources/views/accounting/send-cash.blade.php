@@ -3,35 +3,35 @@
 
 @section('content')
 
-<div class="space-y-8">
+<div class="space-y-6 md:space-y-8">
 	<div id="accountingToast" class="hidden fixed top-6 right-6 z-50 p-4 rounded-xl shadow-xl flex items-start gap-3 transition-opacity duration-500">
 		<i id="accountingToastIcon" data-feather="check-circle" class="w-5 h-5 mt-0.5"></i>
 		<p id="accountingToastText" class="text-sm font-medium">Notification</p>
 	</div>
 
-	<div id="cashAdvanceTab" class="space-y-8">
+	<div id="cashAdvanceTab" class="space-y-6 md:space-y-8">
 
-	<div class="flex items-center justify-between">
-		<div class="flex items-center space-x-4">
-			<div class="w-14 h-14 bg-gradient-to-br from-emerald-700 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg">
-				<i data-feather="send" class="w-7 h-7 text-white"></i>
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex min-w-0 items-center gap-4">
+			<div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-700 to-teal-500 shadow-lg">
+				<i data-feather="send" class="h-7 w-7 text-white"></i>
 			</div>
-			<div>
-				<h2 class="text-3xl font-bold text-gray-800">Employee Cash Disbursement</h2>
-				<p class="text-gray-500">Send funds with a clear purpose statement</p>
+			<div class="min-w-0">
+				<h2 class="text-2xl font-bold leading-tight text-gray-800 md:text-3xl">Employee Cash Disbursement</h2>
+				<p class="mt-1 text-sm text-gray-500 md:text-base">Send funds with a clear purpose statement</p>
 			</div>
 		</div>
-		<button id="openQueueBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-sm border border-emerald-200 hover:bg-emerald-100 transition-all duration-200">
+		<button id="openQueueBtn" type="button" class="inline-flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all duration-200 hover:bg-emerald-100 sm:w-auto">
 			<i data-feather="inbox" class="w-4 h-4"></i>
 			<span id="queueBadgeText">Accounting Queue: 0 Pending</span>
 		</button>
 	</div>
 
-	<div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-		<div class="xl:col-span-2 rounded-3xl bg-white p-8 shadow-2xl border border-gray-100">
+	<div class="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:gap-8">
+		<div class="xl:col-span-2 rounded-3xl bg-white p-5 shadow-2xl border border-gray-100 md:p-8">
 			<div class="mb-6">
-				<h3 class="text-2xl font-bold text-gray-800">Send New Cash Advance</h3>
-				<p class="text-gray-500 mt-1">Submission now saves the monthly balance to the database.</p>
+				<h3 class="text-xl font-bold text-gray-800 md:text-2xl">Send New Cash Advance</h3>
+				<p class="mt-1 text-sm text-gray-500 md:text-base">Submission now saves the monthly balance to the database.</p>
 			</div>
 
 			<form id="sendCashAdvanceForm" class="space-y-6">
@@ -70,11 +70,11 @@
 					<textarea id="sendNotes" rows="2" placeholder="Optional internal note" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 resize-none"></textarea>
 				</div>
 
-				<div class="pt-2 flex items-center justify-end gap-3">
-					<button type="button" class="px-6 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
+				<div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-end">
+					<button type="button" class="w-full rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 transition-all duration-200 hover:bg-gray-200 sm:w-auto">
 						Save Draft
 					</button>
-					<button id="sendMoneyBtn" type="submit" class="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-xl hover:scale-[1.02] transition-all duration-300">
+					<button id="sendMoneyBtn" type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-7 py-3 font-semibold text-white transition-all duration-300 hover:shadow-xl hover:scale-[1.02] sm:w-auto">
 						<i data-feather="send" class="w-4 h-4"></i>
 						<span id="sendMoneyBtnText">Send Money</span>
 					</button>
@@ -82,20 +82,20 @@
 			</form>
 		</div>
 
-		<div class="rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 text-white p-7 shadow-2xl relative overflow-hidden">
+		<div class="rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 text-white p-5 shadow-2xl relative overflow-hidden md:p-7">
 			<div class="absolute -top-12 -right-12 w-40 h-40 bg-emerald-300/20 rounded-full blur-3xl"></div>
 			<div class="relative z-10 space-y-6">
 				<div>
 					<p class="text-sm uppercase tracking-wide text-emerald-200">Budget Window</p>
 					<p id="todayBudgetDate" class="text-xs text-emerald-100 mt-1">Today: --</p>
 					<p id="budgetMonthLabel" class="text-xs text-emerald-100 mt-1">Opening Balance for Current Month</p>
-					<p id="budgetWindowLimit" class="text-4xl font-extrabold mt-1">PHP 0.00</p>
+					<p id="budgetWindowLimit" class="mt-1 text-3xl font-extrabold md:text-4xl">PHP 0.00</p>
 					<button id="openMonthlyBudgetBtn" type="button" class="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-emerald-50 text-xs font-semibold border border-white/20 transition-all duration-200">
 						<i data-feather="edit-3" class="w-3.5 h-3.5"></i>
 						<span>Set Monthly Balance</span>
 					</button>
 				</div>
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div class="rounded-2xl bg-white/10 p-4">
 						<p class="text-xs text-gray-200">Expenses This Month</p>
 						<p id="budgetSentToday" class="text-xl font-bold mt-1">PHP 0.00</p>
@@ -113,13 +113,13 @@
 		</div>
 	</div>
 
-	<div class="rounded-3xl bg-white p-8 shadow-2xl border border-gray-100">
-		<div class="flex items-center justify-between mb-5">
+	<div class="rounded-3xl bg-white p-5 shadow-2xl border border-gray-100 md:p-8">
+		<div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<h3 class="text-xl font-bold text-gray-800">Recent Disbursements</h3>
 			<button class="text-sm font-semibold text-emerald-700 hover:text-emerald-800">View All</button>
 		</div>
 		<div class="overflow-x-auto">
-			<table class="w-full">
+			<table class="w-full min-w-[720px]">
 				<thead>
 					<tr class="border-b border-gray-200">
 						<th class="text-left py-3 px-3 text-sm font-semibold text-gray-600">Date</th>

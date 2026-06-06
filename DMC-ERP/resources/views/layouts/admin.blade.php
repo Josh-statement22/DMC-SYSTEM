@@ -185,19 +185,19 @@
     </aside>
 
     <!-- MAIN -->
-    <div class="app-shell-main flex-1 flex flex-col relative z-10">
+    <div class="app-shell-main relative z-10 flex min-w-0 flex-1 flex-col">
 
         <!-- TOPBAR -->
         <header class="app-topbar relative z-[80] h-16 glass bg-white/70 border-b
-                       flex items-center justify-between px-4 md:px-8 shadow-sm">
+                       flex items-center justify-between gap-3 px-4 md:px-8 shadow-sm">
 
-            <div class="flex items-center space-x-4">
+            <div class="flex min-w-0 items-center gap-3 md:gap-4">
                 <button onclick="toggleSidebar()"
-                    class="mobile-toggle p-2 rounded-lg hover:bg-gray-100 transition lg:hidden">
+                    class="mobile-toggle shrink-0 p-2 rounded-lg hover:bg-gray-100 transition lg:hidden">
                     <i data-feather="menu"></i>
                 </button>
 
-                <h1 class="app-page-title text-lg font-semibold text-gray-700 tracking-wide">
+                <h1 class="app-page-title min-w-0 text-base font-semibold leading-tight text-gray-700 tracking-wide sm:text-lg">
                     @yield('title')
                 </h1>
             </div>
@@ -207,7 +207,7 @@
         </header>
 
         <!-- CONTENT -->
-        <main class="app-content flex-1 overflow-y-auto p-4 md:p-10">
+        <main class="app-content min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-10">
 
             @if(request()->routeIs('admin.dashboard') || request()->routeIs('admin.liquidation'))
                 @yield('content')
