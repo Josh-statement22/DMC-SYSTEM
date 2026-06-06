@@ -12,83 +12,77 @@
     </div>
 
     <!-- HEADER -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex min-w-0 items-center gap-4">
-            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1C446D] to-blue-700 shadow-lg">
-                <i data-feather="credit-card" class="h-7 w-7 text-white"></i>
-            </div>
-            <div class="min-w-0">
-                <h2 class="text-2xl font-bold leading-tight text-gray-800 md:text-3xl">Cash Advance Liquidation</h2>
-                <p class="mt-1 text-sm text-gray-500 md:text-base">Track and manage your cash advance expenses</p>
-            </div>
+    <div class="space-y-2">
+        <div class="inline-flex items-center gap-2 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
+            <i data-feather="credit-card" class="h-3.5 w-3.5"></i>
+            <span>Cash Advance Liquidation</span>
         </div>
-        <button onclick="openRequestAdvanceModal()"
-                class="inline-flex w-full items-center justify-center gap-2 px-6 py-3 sm:w-auto
-                       bg-gradient-to-r from-amber-500 to-orange-600
-                       text-white font-semibold rounded-xl
-                       hover:shadow-xl hover:scale-[1.02]
-                       transition-all duration-300">
-            <i data-feather="credit-card" class="w-5 h-5"></i>
-            <span>Request Cash Advance</span>
-        </button>
+        <p class="max-w-3xl text-sm text-gray-500">Track and manage your cash advance expenses. Review requests, balances, and liquidation activity for the selected period.</p>
     </div>
 
-    <!-- CASH ADVANCE SUMMARY CARD -->
+    <!-- CASH ADVANCE PERIOD CONTROLS -->
     <div>
         <!-- Current Balance -->
-        <div class="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-5 text-white shadow-2xl md:p-6">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div class="flex flex-wrap items-center gap-3">
-                    <button id="prevPeriodBtn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
-                        <i data-feather="arrow-left" class="w-4 h-4"></i>
-                    </button>
+        <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
+                    <div class="flex w-full min-w-0 items-center gap-2 lg:w-auto">
+                        <button id="prevPeriodBtn" type="button" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700">
+                            <i data-feather="arrow-left" class="w-4 h-4"></i>
+                        </button>
 
-                    <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-200">Selected period</p>
-                        <h2 id="liquidationPeriodLabel" class="mt-1 text-2xl font-bold md:text-3xl">Loading...</h2>
-                        <p id="liquidationPeriodSubLabel" class="mt-1 text-sm text-blue-100">Month view</p>
+                    <div class="min-h-[44px] min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 lg:w-[260px] lg:flex-none">
+                        <h2 id="liquidationPeriodLabel" class="truncate text-sm font-semibold text-gray-800">Loading...</h2>
+                        <p id="liquidationPeriodSubLabel" class="mt-0.5 text-xs font-medium text-gray-500">Month view</p>
                     </div>
 
-                    <button id="nextPeriodBtn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white transition hover:bg-white/20 hover:scale-105">
-                        <i data-feather="arrow-right" class="w-4 h-4"></i>
-                    </button>
-                </div>
+                        <button id="nextPeriodBtn" type="button" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-600 transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700">
+                            <i data-feather="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
 
-                <div class="flex flex-col items-start gap-3">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <div class="inline-flex rounded-2xl border border-white/20 bg-white/10 p-1">
-                            <button id="liquidationWeekToggle" type="button" data-view-toggle="week" onclick="setWeekView()" class="rounded-xl px-4 py-2 text-sm font-semibold text-blue-100 transition hover:text-white">Week</button>
-                            <button id="liquidationMonthToggle" type="button" data-view-toggle="month" onclick="setMonthView(new Date())" class="rounded-xl px-4 py-2 text-sm font-semibold transition hover:text-white bg-white text-blue-900 shadow-lg">Month</button>
+                    <div class="inline-flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2 text-sm lg:w-auto lg:justify-start">
+                        <span class="font-semibold text-teal-700">Current Balance</span>
+                        <span id="currentBalanceAmount" class="rounded-full bg-white px-3 py-1 text-sm font-bold text-teal-900 shadow-sm">
+                            <span id="balanceAmountDisplay">₱0.00</span>
+                        </span>
+                    </div>
+
+                    <div class="flex w-full flex-wrap items-center gap-2 lg:w-auto">
+                        <div class="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                            <button id="liquidationWeekToggle" type="button" data-view-toggle="week" onclick="setWeekView()" class="rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 transition hover:text-teal-700">Week</button>
+                            <button id="liquidationMonthToggle" type="button" data-view-toggle="month" onclick="setMonthView(new Date())" class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-teal-800 shadow-sm transition hover:text-teal-700">Month</button>
                         </div>
 
-                        <button id="liquidationCurrentWeekBtn" type="button" onclick="setWeekView()" class="inline-flex items-center gap-2 rounded-xl border border-green-300/40 bg-green-500/20 px-4 py-2.5 text-sm font-semibold text-green-100 transition hover:bg-green-500/30">
+                        <button id="liquidationCurrentWeekBtn" type="button" onclick="setWeekView()" class="inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-xl border border-teal-100 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-100 sm:flex-none">
                             <i data-feather="calendar" class="w-4 h-4"></i>
                             Current Week
                         </button>
 
-                        <button id="liquidationCurrentMonthBtn" type="button" onclick="setMonthView(new Date())" class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20">
+                        <button id="liquidationCurrentMonthBtn" type="button" onclick="setMonthView(new Date())" class="inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 sm:flex-none">
                             <i data-feather="grid" class="w-4 h-4"></i>
                             Current Month
                         </button>
 
-                        <button id="openPrevBalanceBtn" type="button" class="hidden inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">
+                        <button id="openPrevBalanceBtn" type="button" class="hidden min-h-[42px] items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700">
                             <i data-feather="dollar-sign" class="w-4 h-4"></i>
                             Set Previous Balance
                         </button>
                     </div>
                 </div>
+
+                <button onclick="openRequestAdvanceModal()"
+                        class="inline-flex w-full min-w-[190px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 xl:w-auto">
+                    <i data-feather="credit-card" class="h-4 w-4"></i>
+                    <span>Request Cash Advance</span>
+                </button>
             </div>
 
-            <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div class="mt-3">
                 <div id="liquidationWeekBreakdown" class="flex flex-wrap gap-2">
                     <!-- Week chips will be rendered here -->
                 </div>
 
-                <div class="w-full rounded-2xl border border-green-300/40 bg-green-500/15 p-6 md:max-w-xl lg:w-[34rem] lg:max-w-none lg:flex-shrink-0">
-                    <div class="flex flex-col items-start gap-3 text-lg font-semibold md:text-xl">
-                        <span id="currentBalanceAmount" class="text-green-100">Current Balance: <span id="balanceAmountDisplay">₱0.00</span></span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -1362,16 +1356,16 @@
     function updatePeriodToggles() {
         if (weekToggleBtn) {
             weekToggleBtn.classList.toggle('bg-white', currentViewMode === 'week');
-            weekToggleBtn.classList.toggle('text-blue-900', currentViewMode === 'week');
-            weekToggleBtn.classList.toggle('text-blue-100', currentViewMode !== 'week');
-            weekToggleBtn.classList.toggle('shadow-lg', currentViewMode === 'week');
+            weekToggleBtn.classList.toggle('text-teal-800', currentViewMode === 'week');
+            weekToggleBtn.classList.toggle('text-gray-600', currentViewMode !== 'week');
+            weekToggleBtn.classList.toggle('shadow-sm', currentViewMode === 'week');
         }
 
         if (monthToggleBtn) {
             monthToggleBtn.classList.toggle('bg-white', currentViewMode === 'month');
-            monthToggleBtn.classList.toggle('text-blue-900', currentViewMode === 'month');
-            monthToggleBtn.classList.toggle('text-blue-100', currentViewMode !== 'month');
-            monthToggleBtn.classList.toggle('shadow-lg', currentViewMode === 'month');
+            monthToggleBtn.classList.toggle('text-teal-800', currentViewMode === 'month');
+            monthToggleBtn.classList.toggle('text-gray-600', currentViewMode !== 'month');
+            monthToggleBtn.classList.toggle('shadow-sm', currentViewMode === 'month');
         }
     }
 
@@ -1404,11 +1398,11 @@
 
             return `
                 <button type="button"
-                        class="liquidation-week-chip inline-flex min-w-[140px] flex-col rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition border-white/20 bg-white/10 text-blue-100 hover:border-white/30 hover:bg-white/15"
+                        class="liquidation-week-chip inline-flex min-w-[140px] flex-col rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-semibold text-gray-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
                         data-range-start="${formatDateKey(range.start)}"
                         data-range-end="${formatDateKey(range.end)}">
                     <span>${label}</span>
-                    <span class="text-xs font-medium text-blue-200">${rangeCount.toLocaleString('en-US')} expense${rangeCount === 1 ? '' : 's'}</span>
+                    <span class="text-xs font-medium text-gray-500">${rangeCount.toLocaleString('en-US')} expense${rangeCount === 1 ? '' : 's'}</span>
                 </button>
             `;
         }).join('');
