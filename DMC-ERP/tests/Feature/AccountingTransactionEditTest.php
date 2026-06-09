@@ -302,4 +302,82 @@ class AccountingTransactionEditTest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
     }
+
+    public function test_borrow_not_yet_returned_breakdown_does_not_reduce_parent_budget(): void
+    {
+        DB::table('roles')->insert([
+            ['id' => 2, 'name' => 'Admin', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => 3, 'name' => 'Accounting', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $employee = User::query()->create([
+            'employee_id' => '1008',
+            'name' => 'Borrow Employee',
+            'email' => 'borrow-employee@example.com',
+            'password' => 'password',
+            'role_id' => 2,
+        ]);
+
+        $accounting = User::query()->create([
+            'employee_id' => '2008',
+            'name' => 'Accounting User',
+            'email' => 'accounting-borrow@example.com',
+            'password' => 'password',
+            'role_id' => 3,
+        ]);
+
+        $borrowCategoryId = DB::table('categories')
+            ->where('particulars_category', 'Borrow')
+            ->value('id');
+
+        if (! $borrowCategoryId) {
+            $borrowCategoryId = DB::table('categories')->insertGetId([
+                'particulars_category' => 'Borrow',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $cashAdvanceId = DB::table('cash_advance_requests')->insertGetId([
+            'reference_no' => 'BR-001',
+            'requester_id' => $employee->id,
+            'requested_amount' => 10000,
+            'approved_amount' => 10000,
+            'purpose' => 'borrow tracking',
+            'category' => 'Borrow',
+            'category_id' => $borrowCategoryId,
+            'request_date' => '2026-06-01',
+            'date_needed' => '2026-06-01',
+            'status' => 'approved',
+            'accounting_remarks' => 'Manually Recorded',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this
+            ->actingAs($accounting)
+            ->postJson(route('accounting.store-expense'), [
+                'record_source' => 'breakdown',
+                'cash_advance_request_id' => $cashAdvanceId,
+                'expense_date' => '2026-06-02',
+                'employee_id' => $employee->id,
+                'category_id' => $borrowCategoryId,
+                'amount' => 2500,
+                'transaction_details' => '',
+                'description' => '',
+                'borrow_return_status' => 'not_yet_returned',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('allocation.allocated_amount', 0)
+            ->assertJsonPath('allocation.remaining_amount', 10000);
+
+        $this->assertDatabaseHas('liquidation_expenses', [
+            'cash_advance_request_id' => $cashAdvanceId,
+            'category_id' => $borrowCategoryId,
+            'amount' => 2500,
+            'transaction_details' => 'Not yet returned',
+            'borrow_return_status' => 'not_yet_returned',
+        ]);
+    }
 }

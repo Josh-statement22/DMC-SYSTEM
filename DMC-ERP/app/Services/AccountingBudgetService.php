@@ -33,24 +33,33 @@ class AccountingBudgetService
         $this->ensureExistingUsagesRecorded($cashAdvanceRequestId);
 
         $changeReference = Str::uuid()->toString();
-        $this->recordUsageLines(
-            $cashAdvanceRequestId,
-            $liquidationExpenseId,
-            -$this->nonZeroAmount($oldAmount),
-            "liquidation-expense:{$liquidationExpenseId}:{$changeReference}:reversal",
-            'Budget usage reversed before update'
-        );
-        $this->recordUsageLines(
-            $cashAdvanceRequestId,
-            $liquidationExpenseId,
-            $this->nonZeroAmount($newAmount),
-            "liquidation-expense:{$liquidationExpenseId}:{$changeReference}:updated",
-            'Updated budget usage recorded'
-        );
+        if (abs(round($oldAmount, 2)) >= 0.01) {
+            $this->recordUsageLines(
+                $cashAdvanceRequestId,
+                $liquidationExpenseId,
+                -$this->nonZeroAmount($oldAmount),
+                "liquidation-expense:{$liquidationExpenseId}:{$changeReference}:reversal",
+                'Budget usage reversed before update'
+            );
+        }
+
+        if (abs(round($newAmount, 2)) >= 0.01) {
+            $this->recordUsageLines(
+                $cashAdvanceRequestId,
+                $liquidationExpenseId,
+                $this->nonZeroAmount($newAmount),
+                "liquidation-expense:{$liquidationExpenseId}:{$changeReference}:updated",
+                'Updated budget usage recorded'
+            );
+        }
     }
 
     public function removeUsage(int $cashAdvanceRequestId, int $liquidationExpenseId, float $amount): void
     {
+        if (abs(round($amount, 2)) < 0.01) {
+            return;
+        }
+
         $this->ensureParentAllocation($cashAdvanceRequestId);
         $this->ensureExistingUsagesRecorded($cashAdvanceRequestId);
         $this->recordUsageLines(
@@ -70,6 +79,10 @@ class AccountingBudgetService
         $budgetAmount = $this->parentBudgetAmount($transaction);
         $usedAmount = round((float) DB::table('liquidation_expenses')
             ->where('cash_advance_request_id', $cashAdvanceRequestId)
+            ->where(function ($query) {
+                $query->whereNull('borrow_return_status')
+                    ->orWhere('borrow_return_status', '<>', 'not_yet_returned');
+            })
             ->sum('amount'), 2);
         $remainingAmount = round($budgetAmount - $usedAmount, 2);
         $overspentAmount = round(max(0, -$remainingAmount), 2);
@@ -122,6 +135,10 @@ class AccountingBudgetService
     {
         $expenses = DB::table('liquidation_expenses')
             ->where('cash_advance_request_id', $cashAdvanceRequestId)
+            ->where(function ($query) {
+                $query->whereNull('borrow_return_status')
+                    ->orWhere('borrow_return_status', '<>', 'not_yet_returned');
+            })
             ->select('id', 'amount')
             ->orderBy('id')
             ->get();

@@ -346,6 +346,8 @@ if (!function_exists('buildDashboardCategoryExpenseMatrix')) {
         $monthKeys = $months->pluck('key');
         $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
         $debitWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) NOT LIKE ?";
+        $effectiveBreakdownWhereSql = "COALESCE(liquidation_expenses.borrow_return_status, '') <> 'not_yet_returned'";
+        $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' ELSE categories.particulars_category END";
         $allBreakdownsSubquery = DB::table('liquidation_expenses')
             ->whereNotNull('cash_advance_request_id')
             ->groupBy('cash_advance_request_id')
@@ -357,10 +359,11 @@ if (!function_exists('buildDashboardCategoryExpenseMatrix')) {
             ->whereBetween('cash_advance_requests.request_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->whereRaw($debitWhereSql, ['%manual credit entry%'])
             ->whereNotNull('categories.particulars_category')
-            ->groupBy('month_key', 'categories.particulars_category')
+            ->whereRaw($effectiveBreakdownWhereSql)
+            ->groupBy('month_key', 'category_name')
             ->selectRaw("
                 DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
-                categories.particulars_category as category_name,
+                {$breakdownCategoryNameSql} as category_name,
                 SUM(liquidation_expenses.amount) as total_amount
             ");
 
@@ -650,6 +653,8 @@ Route::get('/admin/dashboard', function () {
     $monthStart = $selectedMonth->toDateString();
     $monthEnd = $selectedMonth->copy()->endOfMonth()->toDateString();
     $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
+    $effectiveBreakdownWhereSql = "COALESCE(liquidation_expenses.borrow_return_status, '') <> 'not_yet_returned'";
+    $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' ELSE categories.particulars_category END";
 
     $allBreakdownsSubquery = DB::table('liquidation_expenses')
         ->whereNotNull('cash_advance_request_id')
@@ -666,6 +671,7 @@ Route::get('/admin/dashboard', function () {
         ->join('cash_advance_requests', 'liquidation_expenses.cash_advance_request_id', '=', 'cash_advance_requests.id')
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('liquidation_expenses.expense_date', [$monthStart, $monthEnd])
+        ->whereRaw($effectiveBreakdownWhereSql)
         ->count();
 
     $breakdownCategoryQuery = DB::table('cash_advance_requests')
@@ -674,8 +680,9 @@ Route::get('/admin/dashboard', function () {
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('request_date', [$monthStart, $monthEnd])
         ->whereNotNull('categories.particulars_category')
-        ->groupBy('categories.particulars_category')
-        ->selectRaw("\n            categories.particulars_category as category_name,\n            SUM(liquidation_expenses.amount) as total_amount,\n            COUNT(DISTINCT cash_advance_requests.id) as transaction_count\n        ");
+        ->whereRaw($effectiveBreakdownWhereSql)
+        ->groupBy('category_name')
+        ->selectRaw("\n            {$breakdownCategoryNameSql} as category_name,\n            SUM(liquidation_expenses.amount) as total_amount,\n            COUNT(DISTINCT cash_advance_requests.id) as transaction_count\n        ");
 
     $transactionCategoryQuery = DB::table('cash_advance_requests')
         ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
@@ -726,8 +733,9 @@ Route::get('/admin/dashboard', function () {
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
         ->whereNotNull('categories.particulars_category')
-        ->groupBy('month_key', 'categories.particulars_category')
-        ->selectRaw("\n            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,\n            categories.particulars_category as category_name,\n            SUM(liquidation_expenses.amount) as total_amount\n        ");
+        ->whereRaw($effectiveBreakdownWhereSql)
+        ->groupBy('month_key', 'category_name')
+        ->selectRaw("\n            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,\n            {$breakdownCategoryNameSql} as category_name,\n            SUM(liquidation_expenses.amount) as total_amount\n        ");
 
     $trendTransactionCategoryQuery = DB::table('cash_advance_requests')
         ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id')
@@ -891,6 +899,8 @@ Route::get('/accounting/dashboard', function (Request $request) {
     $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
     $debitWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) NOT LIKE ?";
     $creditWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE ?";
+    $effectiveBreakdownWhereSql = "COALESCE(liquidation_expenses.borrow_return_status, '') <> 'not_yet_returned'";
+    $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' ELSE categories.particulars_category END";
 
     $currentMonthlyBalance = (object) AccountingMonthlyBalance::forMonth($selectedMonth);
 
@@ -922,9 +932,10 @@ Route::get('/accounting/dashboard', function (Request $request) {
         ->whereBetween('request_date', [$monthStart, $monthEnd])
         ->whereRaw($debitWhereSql, ['%manual credit entry%'])
         ->whereNotNull('categories.particulars_category')
-        ->groupBy('categories.particulars_category')
+        ->whereRaw($effectiveBreakdownWhereSql)
+        ->groupBy('category_name')
         ->selectRaw("
-            categories.particulars_category as category_name,
+            {$breakdownCategoryNameSql} as category_name,
             SUM(liquidation_expenses.amount) as total_amount,
             COUNT(DISTINCT cash_advance_requests.id) as transaction_count
         ");

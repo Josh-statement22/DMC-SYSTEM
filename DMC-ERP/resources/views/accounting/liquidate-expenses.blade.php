@@ -560,6 +560,24 @@
                     </div>
                 </div>
 
+                <div id="borrowReturnStatusWrap" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <label class="text-sm font-semibold text-amber-900">Borrow Return Status</label>
+                        <p class="text-xs font-semibold text-amber-700">Required only for Borrow breakdowns</p>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition hover:border-amber-300">
+                            <input type="radio" name="borrow_return_status" value="returned" class="h-4 w-4 text-teal-600 focus:ring-teal-500">
+                            <span>Returned</span>
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition hover:border-amber-300">
+                            <input type="radio" name="borrow_return_status" value="not_yet_returned" class="h-4 w-4 text-teal-600 focus:ring-teal-500">
+                            <span>Not yet returned</span>
+                        </label>
+                    </div>
+                    <p id="borrowReturnStatusHelp" class="mt-3 text-xs font-medium text-amber-700">Not yet returned is saved as an indicator only and is not counted as liquidated spending.</p>
+                </div>
+
                 <div class="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_390px]">
                     <div class="grid grid-cols-1 gap-4">
                         <div>
@@ -788,6 +806,7 @@
     const breakdownForm = document.getElementById('breakdownForm');
     const breakdownCategory = document.getElementById('breakdownCategory');
     const breakdownAmount = document.getElementById('breakdownAmount');
+    const borrowReturnStatusWrap = document.getElementById('borrowReturnStatusWrap');
     const breakdownParentTotal = document.getElementById('breakdownParentTotal');
     const breakdownAllocatedTotal = document.getElementById('breakdownAllocatedTotal');
     const breakdownRemainingTotal = document.getElementById('breakdownRemainingTotal');
@@ -1266,7 +1285,11 @@
 
     function normalizeBreakdownReport(data) {
         const breakdowns = Array.isArray(data?.breakdowns) ? data.breakdowns : [];
-        const total = breakdowns.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const total = breakdowns.reduce((sum, row) => {
+            return row.borrow_return_status === 'not_yet_returned'
+                ? sum
+                : sum + Number(row.amount || 0);
+        }, 0);
 
         return {
             debit: data?.debit || {},
@@ -1801,6 +1824,27 @@
             breakdownBudgetStatus.classList.toggle('bg-gray-50', !isOverspent);
             breakdownBudgetStatus.classList.toggle('text-gray-700', !isOverspent);
         }
+    }
+
+    function selectedBreakdownCategoryName() {
+        const option = breakdownCategory?.selectedOptions?.[0];
+        return option?.dataset?.categoryName || option?.textContent?.trim() || '';
+    }
+
+    function isBorrowBreakdownCategory() {
+        return selectedBreakdownCategoryName().toLowerCase() === 'borrow';
+    }
+
+    function syncBorrowReturnStatusVisibility() {
+        const show = isBorrowBreakdownCategory();
+        borrowReturnStatusWrap?.classList.toggle('hidden', !show);
+
+        document.querySelectorAll('input[name="borrow_return_status"]').forEach(input => {
+            input.required = show;
+            if (!show) {
+                input.checked = false;
+            }
+        });
     }
 
     async function loadBreakdownAllocation(transactionId) {
@@ -2565,6 +2609,10 @@
         document.getElementById('breakdownDetails').value = '';
         document.getElementById('breakdownDescription').value = '';
         document.getElementById('breakdownCategory').value = '';
+        document.querySelectorAll('input[name="borrow_return_status"]').forEach(input => {
+            input.checked = false;
+        });
+        syncBorrowReturnStatusVisibility();
         resetBreakdownAttachments();
         setBreakdownAllocation({
             parentAmount,
@@ -2607,6 +2655,22 @@
     if (breakdownForm) {
         breakdownForm.addEventListener('submit', function(e) {
             e.preventDefault();
+
+            syncBorrowReturnStatusVisibility();
+
+            if (isBorrowBreakdownCategory()) {
+                const selectedStatus = document.querySelector('input[name="borrow_return_status"]:checked')?.value || '';
+
+                if (!selectedStatus) {
+                    showErrorModal('Please choose Returned or Not yet returned for Borrow breakdowns.');
+                    return;
+                }
+
+                const detailsInput = document.getElementById('breakdownDetails');
+                if (detailsInput && !detailsInput.value.trim()) {
+                    detailsInput.value = selectedStatus === 'returned' ? 'Returned' : 'Not yet returned';
+                }
+            }
 
             const formData = new FormData(this);
 
@@ -2756,7 +2820,12 @@
         transactionTypeInput.addEventListener('change', syncCategoryRequirement);
     }
 
+    if (breakdownCategory) {
+        breakdownCategory.addEventListener('change', syncBorrowReturnStatusVisibility);
+    }
+
     syncCategoryRequirement();
+    syncBorrowReturnStatusVisibility();
 
     expenseForm.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -2917,10 +2986,15 @@
                 tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No breakdown entries found</td></tr>';
             } else {
                 currentViewBreakdownReport.breakdowns.forEach(row => {
+                    const statusBadge = row.borrow_return_status === 'not_yet_returned'
+                        ? '<span class="ml-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">Not yet returned</span>'
+                        : row.borrow_return_status === 'returned'
+                            ? '<span class="ml-2 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Returned</span>'
+                            : '';
                     tbody.insertAdjacentHTML('beforeend', `
                         <tr class="border-b border-gray-200 last:border-b-0">
                             <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(formatReportDate(row.expense_date))}</td>
-                            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(row.category_name ?? '-')}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(row.category_name ?? '-')}${statusBadge}</td>
                             <td class="px-4 py-3 text-sm text-gray-900">${escapeHtml(row.transaction_details ?? '-')}</td>
                             <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(row.description ?? '-')}</td>
                             <td class="px-4 py-3 text-sm text-right font-semibold text-teal-700">${escapeHtml(formatCurrencyValue(row.amount))}</td>

@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -169,6 +170,7 @@ class AccountingController extends Controller
                 'amount' => 'required|numeric',
                 'transaction_details' => 'nullable|string|max:255',
                 'description' => 'nullable|string',
+                'borrow_return_status' => 'nullable|in:returned,not_yet_returned',
                 'attachments' => 'nullable|array|max:10',
                 'attachments.*' => 'file|mimes:pdf,jpg,jpeg,png,webp,heic,heif,gif,bmp,svg,doc,docx,xls,xlsx,csv,txt,rtf,ppt,pptx|max:10240',
             ]);
@@ -182,6 +184,27 @@ class AccountingController extends Controller
                     'message' => 'Breakdown amount must be greater than zero.',
                 ], 422);
             }
+
+            $categoryName = (string) DB::table('categories')
+                ->where('id', $validated['category_id'])
+                ->value('particulars_category');
+            $isBorrowCategory = strcasecmp($categoryName, 'Borrow') === 0;
+            $borrowReturnStatus = $isBorrowCategory ? ($validated['borrow_return_status'] ?? null) : null;
+
+            if ($isBorrowCategory && ! $borrowReturnStatus) {
+                throw ValidationException::withMessages([
+                    'borrow_return_status' => 'Please choose Returned or Not yet returned for Borrow breakdowns.',
+                ]);
+            }
+
+            $transactionDetails = trim((string) ($validated['transaction_details'] ?? ''));
+            if ($isBorrowCategory && $borrowReturnStatus && $transactionDetails === '') {
+                $transactionDetails = $borrowReturnStatus === 'returned'
+                    ? 'Returned'
+                    : 'Not yet returned';
+            }
+            $validated['transaction_details'] = $transactionDetails !== '' ? $transactionDetails : null;
+            $validated['borrow_return_status'] = $borrowReturnStatus;
 
             $result = DB::transaction(function () use ($validated, $cutoffPeriod, $breakdownAmount, $expenseDate) {
                 $transaction = DB::table('cash_advance_requests')
@@ -212,7 +235,7 @@ class AccountingController extends Controller
                     $liquidation = DB::table('liquidations')->where('id', $liquidationId)->first();
                 }
 
-                $expenseId = DB::table('liquidation_expenses')->insertGetId([
+                $expensePayload = [
                     'liquidation_id' => $liquidation->id,
                     'cash_advance_request_id' => $validated['cash_advance_request_id'],
                     'expense_date' => $validated['expense_date'],
@@ -220,9 +243,18 @@ class AccountingController extends Controller
                     'transaction_details' => $validated['transaction_details'] ?? null,
                     'description' => $validated['description'] ?? null,
                     'amount' => $breakdownAmount,
+                    'borrow_return_status' => $validated['borrow_return_status'] ?? null,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ];
+
+                if (Schema::hasColumn('liquidation_expenses', 'particular_id')) {
+                    $expensePayload['particular_id'] = $this->defaultParticularIdForCategory(
+                        (int) $validated['category_id']
+                    );
+                }
+
+                $expenseId = DB::table('liquidation_expenses')->insertGetId($expensePayload);
 
                 $allocation = app(AccountingBudgetService::class)->recordUsage((int) $transaction->id);
 
@@ -248,6 +280,7 @@ class AccountingController extends Controller
                     'liquidation_expenses.transaction_details',
                     'liquidation_expenses.description',
                     'liquidation_expenses.amount',
+                    'liquidation_expenses.borrow_return_status',
                     'users.name as employee_name',
                     DB::raw('categories.particulars_category as category_name')
                 )
@@ -946,6 +979,7 @@ class AccountingController extends Controller
                 'liquidation_expenses.description',
                 'liquidation_expenses.amount',
                 'liquidation_expenses.receipt_path',
+                'liquidation_expenses.borrow_return_status',
                 DB::raw('categories.particulars_category as category_name')
             )
             ->orderBy('liquidation_expenses.expense_date')
@@ -1002,6 +1036,7 @@ class AccountingController extends Controller
                     'transaction_details' => $row->transaction_details,
                     'description' => $row->description,
                     'amount' => (float) $row->amount,
+                    'borrow_return_status' => $row->borrow_return_status,
                     'receipt_url' => $row->receipt_path
                         ? $this->attachmentRouteUrl('receipt', (int) $row->id, $request)
                         : null,
@@ -1046,6 +1081,8 @@ class AccountingController extends Controller
             $newAmount = array_key_exists('amount', $validated)
                 ? round((float) $validated['amount'], 2)
                 : $oldAmount;
+            $oldEffectiveAmount = $expense->borrow_return_status === 'not_yet_returned' ? 0.0 : $oldAmount;
+            $newEffectiveAmount = $expense->borrow_return_status === 'not_yet_returned' ? 0.0 : $newAmount;
 
             if ($newAmount <= 0) {
                 throw ValidationException::withMessages([
@@ -1053,12 +1090,14 @@ class AccountingController extends Controller
                 ]);
             }
 
-            app(AccountingBudgetService::class)->replaceUsage(
-                (int) $expense->cash_advance_request_id,
-                (int) $expense->id,
-                $oldAmount,
-                $newAmount
-            );
+            if (abs($oldEffectiveAmount) >= 0.01 || abs($newEffectiveAmount) >= 0.01) {
+                app(AccountingBudgetService::class)->replaceUsage(
+                    (int) $expense->cash_advance_request_id,
+                    (int) $expense->id,
+                    $oldEffectiveAmount,
+                    $newEffectiveAmount
+                );
+            }
 
             DB::table('liquidation_expenses')
                 ->where('id', $id)
@@ -1081,6 +1120,7 @@ class AccountingController extends Controller
                     'liquidation_expenses.transaction_details',
                     'liquidation_expenses.description',
                     'liquidation_expenses.amount',
+                    'liquidation_expenses.borrow_return_status',
                     DB::raw('categories.particulars_category as category_name')
                 )
                 ->first();
@@ -1112,14 +1152,15 @@ class AccountingController extends Controller
                     'liquidation_expenses.id',
                     'liquidation_expenses.cash_advance_request_id',
                     'liquidation_expenses.expense_date',
-                    'liquidation_expenses.amount'
+                    'liquidation_expenses.amount',
+                    'liquidation_expenses.borrow_return_status'
                 )
                 ->lockForUpdate()
                 ->first();
 
             abort_unless($expense, 404);
 
-            $allocation = $expense->cash_advance_request_id
+            $allocation = ($expense->cash_advance_request_id && $expense->borrow_return_status !== 'not_yet_returned')
                 ? app(AccountingBudgetService::class)->removeUsage(
                     (int) $expense->cash_advance_request_id,
                     (int) $expense->id,
@@ -1386,6 +1427,53 @@ class AccountingController extends Controller
         }
 
         return DB::table('users')->where('id', $employeeUserId)->value('employee_id');
+    }
+
+    private function defaultParticularIdForCategory(int $categoryId): int
+    {
+        if (! Schema::hasTable('particulars')) {
+            throw ValidationException::withMessages([
+                'category_id' => 'Particulars table is required before saving breakdown expenses.',
+            ]);
+        }
+
+        $query = DB::table('particulars');
+        if (Schema::hasColumn('particulars', 'category_id')) {
+            $query->where('category_id', $categoryId);
+        }
+
+        $particularId = $query->orderBy('id')->value('id');
+        if ($particularId) {
+            return (int) $particularId;
+        }
+
+        $categoryName = DB::table('categories')
+            ->where('id', $categoryId)
+            ->value('particulars_category') ?: 'General';
+
+        $payload = [];
+
+        if (Schema::hasColumn('particulars', 'category_id')) {
+            $payload['category_id'] = $categoryId;
+        }
+
+        if (Schema::hasColumn('particulars', 'particular_name')) {
+            $payload['particular_name'] = $categoryName;
+        }
+
+        if (Schema::hasColumn('particulars', 'description')) {
+            $payload['description'] = null;
+        }
+
+        if (Schema::hasColumn('particulars', 'created_at')) {
+            $payload['created_at'] = now();
+        }
+
+        if (Schema::hasColumn('particulars', 'updated_at')) {
+            $payload['updated_at'] = now();
+        }
+
+        return (int) DB::table('particulars')->insertGetId($payload);
     }
 
     private function downloadFileName(?string $fileName): string
