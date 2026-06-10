@@ -63,20 +63,27 @@
 					<div class="p-6 space-y-5">
 						<div>
 							<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
-							<select id="summaryEmployeeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-								<option value="">All Employees</option>
-								@foreach($employees as $employee)
-									<option value="{{ $employee->id }}">{{ $employee->name }}{{ $employee->employee_id ? ' (' . $employee->employee_id . ')' : '' }}</option>
-								@endforeach
-							</select>
+							<div class="relative">
+								<div id="summarySelectedEmployees" class="mb-2 flex min-h-0 flex-wrap gap-2"></div>
+								<input
+									id="summaryEmployeeSearch"
+									type="text"
+									autocomplete="off"
+									placeholder="Type employee name or ID"
+									class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white"
+								>
+								<div id="summaryEmployeeSuggestions" class="absolute z-20 mt-2 hidden max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"></div>
+							</div>
 						</div>
 						<div>
 							<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
 							<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
 								<option value="">All Categories</option>
 								@foreach($categories as $category)
-									<option value="{{ $category->id }}">{{ $category->particulars_category }}</option>
+									<option value="category:{{ $category->id }}">{{ $category->particulars_category }}</option>
 								@endforeach
+								<option value="borrow_returned">Borrow / Returned</option>
+								<option value="borrow_not_yet_spent">Borrow / Not yet spent</option>
 							</select>
 						</div>
 						<div>
@@ -217,10 +224,17 @@
 	// Balance settings
 	let openingBalance = @json($pageOpeningBalance);
 	let endingBalance = @json($pageRemainingBalance);
-	let appliedCategoryId = '';
-	let appliedEmployeeId = '';
+	let appliedCategoryKey = '';
+	let appliedEmployeeIds = [];
+	let draftEmployeeIds = [];
 	let appliedType = '';
 	const summaryPrintedByName = @json(Auth::user()->name ?? Auth::user()->email ?? 'Current User');
+	const summaryEmployees = @json(($employees ?? collect())->map(fn ($employee) => [
+		'id' => (int) $employee->id,
+		'name' => $employee->name,
+		'employee_id' => $employee->employee_id,
+		'label' => $employee->name . ($employee->employee_id ? ' (' . $employee->employee_id . ')' : ''),
+	])->values());
 
 	function updateBalanceDisplay() {
 		document.getElementById('displayOpeningBalance').textContent = formatCurrencyValue(openingBalance);
@@ -237,10 +251,88 @@
 		return select?.selectedOptions[0]?.textContent || 'All Categories';
 	}
 
-	function getSelectedEmployeeLabel() {
-		const select = document.getElementById('summaryEmployeeFilter');
+	function getEmployeeById(employeeId) {
+		return summaryEmployees.find(employee => String(employee.id) === String(employeeId));
+	}
 
-		return select?.selectedOptions[0]?.textContent || 'All Employees';
+	function getSelectedEmployeeLabel(employeeIds = appliedEmployeeIds) {
+		if (!employeeIds.length) {
+			return 'All Employees';
+		}
+
+		return employeeIds
+			.map(employeeId => getEmployeeById(employeeId)?.label)
+			.filter(Boolean)
+			.join(', ') || 'All Employees';
+	}
+
+	function renderSelectedEmployees() {
+		const container = document.getElementById('summarySelectedEmployees');
+		if (!container) return;
+
+		if (draftEmployeeIds.length === 0) {
+			container.innerHTML = '<span class="text-xs font-semibold text-gray-500">All Employees</span>';
+			return;
+		}
+
+		container.innerHTML = draftEmployeeIds.map(employeeId => {
+			const employee = getEmployeeById(employeeId);
+			if (!employee) return '';
+
+			return `
+				<span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+					${escapeHtml(employee.label)}
+					<button type="button" class="summaryRemoveEmployee text-emerald-700 hover:text-emerald-900" data-id="${employee.id}" aria-label="Remove ${escapeHtml(employee.label)}">&times;</button>
+				</span>
+			`;
+		}).join('');
+	}
+
+	function hideEmployeeSuggestions() {
+		const suggestions = document.getElementById('summaryEmployeeSuggestions');
+		suggestions?.classList.add('hidden');
+	}
+
+	function renderEmployeeSuggestions() {
+		const input = document.getElementById('summaryEmployeeSearch');
+		const suggestions = document.getElementById('summaryEmployeeSuggestions');
+		if (!input || !suggestions) return;
+
+		const search = input.value.trim().toLowerCase();
+		const matches = summaryEmployees
+			.filter(employee => !draftEmployeeIds.includes(employee.id))
+			.filter(employee => {
+				if (!search) return true;
+				return employee.label.toLowerCase().includes(search)
+					|| String(employee.employee_id || '').toLowerCase().includes(search);
+			})
+			.slice(0, 8);
+
+		if (!matches.length) {
+			suggestions.innerHTML = '<div class="px-4 py-3 text-sm text-gray-500">No employee found.</div>';
+			suggestions.classList.remove('hidden');
+			return;
+		}
+
+		suggestions.innerHTML = matches.map((employee, index) => `
+			<button type="button" class="summaryEmployeeSuggestion flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-emerald-50 ${index === 0 ? 'bg-emerald-50' : ''}" data-id="${employee.id}">
+				<span class="font-semibold text-gray-800">${escapeHtml(employee.name)}</span>
+				<span class="text-xs text-gray-500">${escapeHtml(employee.employee_id || '')}</span>
+			</button>
+		`).join('');
+		suggestions.classList.remove('hidden');
+	}
+
+	function addDraftEmployee(employeeId) {
+		const normalizedId = Number(employeeId);
+		if (!normalizedId || draftEmployeeIds.includes(normalizedId)) {
+			return;
+		}
+
+		draftEmployeeIds.push(normalizedId);
+		document.getElementById('summaryEmployeeSearch').value = '';
+		renderSelectedEmployees();
+		renderEmployeeSuggestions();
 	}
 
 	function getSelectedTypeLabel() {
@@ -252,11 +344,11 @@
 	function getActiveFilterLabel(data = null) {
 		const filters = [];
 
-		if (appliedCategoryId) {
+		if (appliedCategoryKey) {
 			filters.push(data?.summary?.selected_category_name || getSelectedCategoryLabel());
 		}
 
-		if (appliedEmployeeId) {
+		if (appliedEmployeeIds.length) {
 			filters.push(data?.summary?.selected_employee_name || getSelectedEmployeeLabel());
 		}
 
@@ -269,15 +361,18 @@
 
 	function getAppliedFilters() {
 		return {
-			categoryId: appliedCategoryId,
-			employeeId: appliedEmployeeId,
+			categoryKey: appliedCategoryKey,
+			employeeIds: [...appliedEmployeeIds],
 			type: appliedType,
 		};
 	}
 
 	function syncFilterModalFields() {
-		document.getElementById('summaryCategoryFilter').value = appliedCategoryId;
-		document.getElementById('summaryEmployeeFilter').value = appliedEmployeeId;
+		document.getElementById('summaryCategoryFilter').value = appliedCategoryKey;
+		draftEmployeeIds = [...appliedEmployeeIds];
+		document.getElementById('summaryEmployeeSearch').value = '';
+		renderSelectedEmployees();
+		hideEmployeeSuggestions();
 		document.getElementById('summaryTypeFilter').value = appliedType;
 	}
 
@@ -295,8 +390,8 @@
 	}
 
 	function applyFilterSelections() {
-		appliedCategoryId = document.getElementById('summaryCategoryFilter').value;
-		appliedEmployeeId = document.getElementById('summaryEmployeeFilter').value;
+		appliedCategoryKey = document.getElementById('summaryCategoryFilter').value;
+		appliedEmployeeIds = [...draftEmployeeIds];
 		appliedType = document.getElementById('summaryTypeFilter').value;
 		closeFilterModal();
 		loadExpenses(1);
@@ -304,11 +399,14 @@
 
 	function resetFilterSelections() {
 		document.getElementById('summaryCategoryFilter').value = '';
-		document.getElementById('summaryEmployeeFilter').value = '';
+		document.getElementById('summaryEmployeeSearch').value = '';
 		document.getElementById('summaryTypeFilter').value = '';
-		appliedCategoryId = '';
-		appliedEmployeeId = '';
+		appliedCategoryKey = '';
+		appliedEmployeeIds = [];
+		draftEmployeeIds = [];
 		appliedType = '';
+		renderSelectedEmployees();
+		hideEmployeeSuggestions();
 		closeFilterModal();
 		loadExpenses(1);
 	}
@@ -352,7 +450,7 @@
 
 	// Load expenses data
 	async function loadExpenses(page = 1) {
-		const { categoryId, employeeId, type } = getAppliedFilters();
+		const { categoryKey, employeeIds, type } = getAppliedFilters();
 		const dateRange = getDateRange();
 
 		if (!dateRange) return;
@@ -363,13 +461,11 @@
 			params.set('from_date', dateRange.from_date);
 			params.set('to_date', dateRange.to_date);
 
-			if (categoryId) {
-				params.set('category_id', categoryId);
+			if (categoryKey) {
+				params.set('category_key', categoryKey);
 			}
 
-			if (employeeId) {
-				params.set('employee_id', employeeId);
-			}
+			employeeIds.forEach(employeeId => params.append('employee_ids[]', employeeId));
 
 			if (type) {
 				params.set('type', type);
@@ -387,26 +483,24 @@
 	}
 
 	function getSummaryFilters() {
-		const { categoryId, employeeId, type } = getAppliedFilters();
+		const { categoryKey, employeeIds, type } = getAppliedFilters();
 		const dateRange = getDateRange();
 
-		return { categoryId, employeeId, type, dateRange };
+		return { categoryKey, employeeIds, type, dateRange };
 	}
 
 	async function fetchAllExpenses() {
-		const { categoryId, employeeId, type, dateRange } = getSummaryFilters();
+		const { categoryKey, employeeIds, type, dateRange } = getSummaryFilters();
 		const params = new URLSearchParams();
 		params.set('all', '1');
 		params.set('from_date', dateRange.from_date);
 		params.set('to_date', dateRange.to_date);
 
-		if (categoryId) {
-			params.set('category_id', categoryId);
+		if (categoryKey) {
+			params.set('category_key', categoryKey);
 		}
 
-		if (employeeId) {
-			params.set('employee_id', employeeId);
-		}
+		employeeIds.forEach(employeeId => params.append('employee_ids[]', employeeId));
 
 		if (type) {
 			params.set('type', type);
@@ -427,8 +521,8 @@
 
 	function buildPrintHtml(expenses, summary, balance) {
 		const periodLabel = document.getElementById('summaryPeriodLabel').textContent || 'Current Period';
-		const categoryActive = Boolean(appliedCategoryId);
-		const employeeActive = Boolean(appliedEmployeeId);
+		const categoryActive = Boolean(appliedCategoryKey);
+		const employeeActive = appliedEmployeeIds.length > 0;
 		const typeActive = Boolean(appliedType);
 		const categoryLabel = getSelectedCategoryLabel();
 		const employeeLabel = summary.selected_employee_name || getSelectedEmployeeLabel();
@@ -574,7 +668,7 @@
 	}
 
 	function updateSummaryCards(data) {
-		const categoryActive = Boolean(appliedCategoryId);
+		const categoryActive = Boolean(appliedCategoryKey);
 		const totalCategoryAmount = Number(data.summary.total_category_amount ?? 0);
 
 		document.getElementById('summaryExpenseCount').textContent = data.summary.total_count;
@@ -647,15 +741,50 @@
 	document.getElementById('summaryCloseModalBtn').addEventListener('click', closeFilterModal);
 	document.getElementById('summarySaveFiltersBtn').addEventListener('click', applyFilterSelections);
 	document.getElementById('summaryResetModalBtn').addEventListener('click', resetFilterSelections);
+	document.getElementById('summaryEmployeeSearch').addEventListener('focus', renderEmployeeSuggestions);
+	document.getElementById('summaryEmployeeSearch').addEventListener('input', renderEmployeeSuggestions);
+	document.getElementById('summaryEmployeeSearch').addEventListener('keydown', (event) => {
+		if (event.key !== 'Enter') {
+			return;
+		}
+
+		event.preventDefault();
+		const firstSuggestion = document.querySelector('#summaryEmployeeSuggestions .summaryEmployeeSuggestion');
+		if (firstSuggestion) {
+			addDraftEmployee(firstSuggestion.dataset.id);
+		}
+	});
+	document.getElementById('summaryEmployeeSuggestions').addEventListener('click', (event) => {
+		const suggestion = event.target.closest('.summaryEmployeeSuggestion');
+		if (suggestion) {
+			addDraftEmployee(suggestion.dataset.id);
+		}
+	});
+	document.getElementById('summarySelectedEmployees').addEventListener('click', (event) => {
+		const removeButton = event.target.closest('.summaryRemoveEmployee');
+		if (!removeButton) {
+			return;
+		}
+
+		draftEmployeeIds = draftEmployeeIds.filter(employeeId => String(employeeId) !== String(removeButton.dataset.id));
+		renderSelectedEmployees();
+		renderEmployeeSuggestions();
+	});
 	document.getElementById('summaryFilterModal').addEventListener('click', (event) => {
 		if (event.target.id === 'summaryFilterModal') {
 			closeFilterModal();
+		}
+	});
+	document.addEventListener('click', (event) => {
+		if (!event.target.closest('#summaryEmployeeSearch') && !event.target.closest('#summaryEmployeeSuggestions')) {
+			hideEmployeeSuggestions();
 		}
 	});
 
 	document.getElementById('summaryPrintBtn').addEventListener('click', printSummary);
 
 	// Initial load
+	renderSelectedEmployees();
 	updateBalanceDisplay();
 	loadExpenses(1);
 </script>

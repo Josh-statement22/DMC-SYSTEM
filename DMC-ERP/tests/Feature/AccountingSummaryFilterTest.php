@@ -291,4 +291,119 @@ class AccountingSummaryFilterTest extends TestCase
             ->assertJsonPath('expenses.0.particular_name', 'Taxi fare')
             ->assertJsonPath('expenses.0.debit', 700);
     }
+
+    public function test_summary_filters_virtual_borrow_not_yet_spent_for_multiple_employees(): void
+    {
+        DB::table('roles')->insert([
+            ['id' => 2, 'name' => 'Admin', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => 3, 'name' => 'Accounting', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $employeeOne = User::query()->create([
+            'employee_id' => '1004',
+            'name' => 'Liza Cruz',
+            'email' => 'liza@example.com',
+            'password' => 'password',
+            'role_id' => 2,
+        ]);
+
+        $employeeTwo = User::query()->create([
+            'employee_id' => '1005',
+            'name' => 'Mark Tan',
+            'email' => 'mark@example.com',
+            'password' => 'password',
+            'role_id' => 2,
+        ]);
+
+        $employeeThree = User::query()->create([
+            'employee_id' => '1006',
+            'name' => 'Outside Employee',
+            'email' => 'outside@example.com',
+            'password' => 'password',
+            'role_id' => 2,
+        ]);
+
+        $accounting = User::query()->create([
+            'employee_id' => '2004',
+            'name' => 'Accounting User',
+            'email' => 'accounting-borrow-summary@example.com',
+            'password' => 'password',
+            'role_id' => 3,
+        ]);
+
+        $borrowCategoryId = DB::table('categories')->insertGetId([
+            'particulars_category' => 'Borrow',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $borrowParticularId = DB::table('particulars')->insertGetId([
+            'category_id' => $borrowCategoryId,
+            'particular_name' => 'Borrow',
+            'description' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $cashAdvanceIds = collect([$employeeOne, $employeeTwo, $employeeThree])->map(function (User $employee, int $index) use ($borrowCategoryId) {
+            return DB::table('cash_advance_requests')->insertGetId([
+                'reference_no' => 'BR-SUM-' . ($index + 1),
+                'requester_id' => $employee->id,
+                'requested_amount' => 5000,
+                'approved_amount' => 5000,
+                'purpose' => 'Borrow tracking',
+                'category' => 'Borrow',
+                'category_id' => $borrowCategoryId,
+                'request_date' => '2026-06-20',
+                'date_needed' => '2026-06-20',
+                'status' => 'approved',
+                'accounting_remarks' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        foreach ([$employeeOne, $employeeTwo, $employeeThree] as $index => $employee) {
+            $liquidationId = DB::table('liquidations')->insertGetId([
+                'user_id' => $employee->id,
+                'cutoff_period' => 'June 2026',
+                'amount' => 0,
+                'status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('liquidation_expenses')->insert([
+                'liquidation_id' => $liquidationId,
+                'cash_advance_request_id' => $cashAdvanceIds[$index],
+                'expense_date' => '2026-06-20',
+                'particular_id' => $borrowParticularId,
+                'category_id' => $borrowCategoryId,
+                'transaction_type' => 'debit',
+                'transaction_details' => 'Not yet returned',
+                'description' => null,
+                'amount' => 1000 * ($index + 1),
+                'borrow_return_status' => 'not_yet_returned',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $response = $this
+            ->actingAs($accounting)
+            ->getJson(route('accounting.summary.data', [
+                'from_date' => '2026-06-01',
+                'to_date' => '2026-06-30',
+                'category_key' => 'borrow_not_yet_spent',
+                'employee_ids' => [$employeeOne->id, $employeeTwo->id],
+            ]));
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('summary.total_count', 2)
+            ->assertJsonPath('summary.total_debits', 3000)
+            ->assertJsonPath('summary.selected_category_name', 'Borrow / Not yet spent')
+            ->assertJsonPath('summary.selected_employee_name', 'Liza Cruz (1004), Mark Tan (1005)')
+            ->assertJsonPath('expenses.0.category_name', 'Borrow / Not yet spent');
+    }
 }

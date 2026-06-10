@@ -346,8 +346,7 @@ if (!function_exists('buildDashboardCategoryExpenseMatrix')) {
         $monthKeys = $months->pluck('key');
         $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
         $debitWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) NOT LIKE ?";
-        $effectiveBreakdownWhereSql = "COALESCE(liquidation_expenses.borrow_return_status, '') <> 'not_yet_returned'";
-        $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' ELSE categories.particulars_category END";
+        $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'not_yet_returned' THEN 'Borrow / Not yet spent' ELSE categories.particulars_category END";
         $allBreakdownsSubquery = DB::table('liquidation_expenses')
             ->whereNotNull('cash_advance_request_id')
             ->groupBy('cash_advance_request_id')
@@ -359,7 +358,6 @@ if (!function_exists('buildDashboardCategoryExpenseMatrix')) {
             ->whereBetween('cash_advance_requests.request_date', [$startDate->toDateString(), $endDate->toDateString()])
             ->whereRaw($debitWhereSql, ['%manual credit entry%'])
             ->whereNotNull('categories.particulars_category')
-            ->whereRaw($effectiveBreakdownWhereSql)
             ->groupBy('month_key', 'category_name')
             ->selectRaw("
                 DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,
@@ -654,7 +652,7 @@ Route::get('/admin/dashboard', function () {
     $monthEnd = $selectedMonth->copy()->endOfMonth()->toDateString();
     $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
     $effectiveBreakdownWhereSql = "COALESCE(liquidation_expenses.borrow_return_status, '') <> 'not_yet_returned'";
-    $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' ELSE categories.particulars_category END";
+    $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'not_yet_returned' THEN 'Borrow / Not yet spent' ELSE categories.particulars_category END";
 
     $allBreakdownsSubquery = DB::table('liquidation_expenses')
         ->whereNotNull('cash_advance_request_id')
@@ -680,7 +678,6 @@ Route::get('/admin/dashboard', function () {
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('request_date', [$monthStart, $monthEnd])
         ->whereNotNull('categories.particulars_category')
-        ->whereRaw($effectiveBreakdownWhereSql)
         ->groupBy('category_name')
         ->selectRaw("\n            {$breakdownCategoryNameSql} as category_name,\n            SUM(liquidation_expenses.amount) as total_amount,\n            COUNT(DISTINCT cash_advance_requests.id) as transaction_count\n        ");
 
@@ -705,7 +702,9 @@ Route::get('/admin/dashboard', function () {
 
     $topCategories = $categorySummaries->take(5)->values();
     $totalCategoryAmount = (float) $categorySummaries->sum('total_amount');
-    $monthlyTransactionSummary->total_liquidated = $totalCategoryAmount;
+    $monthlyTransactionSummary->total_liquidated = (float) $categorySummaries
+        ->reject(fn ($category) => $category->category_name === 'Borrow / Not yet spent')
+        ->sum('total_amount');
     $monthlyTransactionSummary->transaction_count = $liquidationCount;
     $distribution = $categorySummaries->take(4)->map(function ($category) use ($totalCategoryAmount) {
         return [
@@ -733,7 +732,6 @@ Route::get('/admin/dashboard', function () {
         ->where('cash_advance_requests.requester_id', $currentUserId)
         ->whereBetween('cash_advance_requests.request_date', [$trendStart->toDateString(), $trendEnd->toDateString()])
         ->whereNotNull('categories.particulars_category')
-        ->whereRaw($effectiveBreakdownWhereSql)
         ->groupBy('month_key', 'category_name')
         ->selectRaw("\n            DATE_FORMAT(cash_advance_requests.request_date, '%Y-%m') as month_key,\n            {$breakdownCategoryNameSql} as category_name,\n            SUM(liquidation_expenses.amount) as total_amount\n        ");
 
@@ -899,8 +897,7 @@ Route::get('/accounting/dashboard', function (Request $request) {
     $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
     $debitWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) NOT LIKE ?";
     $creditWhereSql = "LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE ?";
-    $effectiveBreakdownWhereSql = "COALESCE(liquidation_expenses.borrow_return_status, '') <> 'not_yet_returned'";
-    $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' ELSE categories.particulars_category END";
+    $breakdownCategoryNameSql = "CASE WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'returned' THEN 'Borrow / Returned' WHEN LOWER(categories.particulars_category) = 'borrow' AND liquidation_expenses.borrow_return_status = 'not_yet_returned' THEN 'Borrow / Not yet spent' ELSE categories.particulars_category END";
 
     $currentMonthlyBalance = (object) AccountingMonthlyBalance::forMonth($selectedMonth);
 
@@ -932,7 +929,6 @@ Route::get('/accounting/dashboard', function (Request $request) {
         ->whereBetween('request_date', [$monthStart, $monthEnd])
         ->whereRaw($debitWhereSql, ['%manual credit entry%'])
         ->whereNotNull('categories.particulars_category')
-        ->whereRaw($effectiveBreakdownWhereSql)
         ->groupBy('category_name')
         ->selectRaw("
             {$breakdownCategoryNameSql} as category_name,
@@ -1206,16 +1202,38 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $page = max(1, (int) $request->query('page', 1));
     $perPage = 20;
     $showAll = $request->boolean('all', false);
-    $employeeId = $request->filled('employee_id') ? (int) $request->query('employee_id') : null;
-    $categoryId = $request->filled('category_id') ? (int) $request->query('category_id') : null;
+    $employeeIds = collect((array) $request->query('employee_ids', []))
+        ->merge($request->filled('employee_id') ? [(int) $request->query('employee_id')] : [])
+        ->map(fn ($employeeId) => (int) $employeeId)
+        ->filter(fn ($employeeId) => $employeeId > 0)
+        ->unique()
+        ->values();
+    $categoryKey = trim((string) $request->query('category_key', ''));
+    $categoryId = null;
+    $borrowStatusFilter = null;
+    $categoryName = null;
+    $employeeName = null;
+
+    if ($categoryKey === '' && $request->filled('category_id')) {
+        $categoryKey = 'category:' . (int) $request->query('category_id');
+    }
+
+    if ($categoryKey === 'borrow_returned') {
+        $borrowStatusFilter = 'returned';
+        $categoryName = 'Borrow / Returned';
+    } elseif ($categoryKey === 'borrow_not_yet_spent') {
+        $borrowStatusFilter = 'not_yet_returned';
+        $categoryName = 'Borrow / Not yet spent';
+    } elseif (str_starts_with($categoryKey, 'category:')) {
+        $categoryId = (int) substr($categoryKey, strlen('category:'));
+    }
+
     $selectedType = strtolower((string) $request->query('type', ''));
     $selectedType = in_array($selectedType, ['credit', 'debit'], true) ? $selectedType : '';
     $fromDate = $request->query('from_date');
     $toDate = $request->query('to_date');
     $transactionTypeSql = "CASE WHEN LOWER(COALESCE(cash_advance_requests.accounting_remarks, '')) LIKE '%manual credit entry%' THEN 'credit' ELSE 'debit' END";
     $transactionAmountSql = 'COALESCE(cash_advance_requests.approved_amount, cash_advance_requests.requested_amount, 0)';
-    $categoryName = null;
-    $employeeName = null;
 
     try {
         $periodDate = $fromDate
@@ -1238,15 +1256,16 @@ Route::get('/accounting/summary/data', function (Request $request) {
             ->value('particulars_category');
     }
 
-    if ($employeeId) {
-        $employee = DB::table('users')
-            ->where('id', $employeeId)
+    if ($employeeIds->isNotEmpty()) {
+        $employees = DB::table('users')
+            ->whereIn('id', $employeeIds)
             ->select('name', 'employee_id')
-            ->first();
+            ->orderBy('name')
+            ->get();
 
-        if ($employee) {
-            $employeeName = $employee->name . ($employee->employee_id ? ' (' . $employee->employee_id . ')' : '');
-        }
+        $employeeName = $employees
+            ->map(fn ($employee) => $employee->name . ($employee->employee_id ? ' (' . $employee->employee_id . ')' : ''))
+            ->implode(', ');
     }
 
     // Match the Recorded Transactions source used by Accounting > Liquidate Expenses.
@@ -1255,8 +1274,8 @@ Route::get('/accounting/summary/data', function (Request $request) {
         ->leftJoin('categories as request_categories', 'cash_advance_requests.category_id', '=', 'request_categories.id');
 
     // Apply filters
-    if ($employeeId) {
-        $expenseQuery->where('cash_advance_requests.requester_id', $employeeId);
+    if ($employeeIds->isNotEmpty()) {
+        $expenseQuery->whereIn('cash_advance_requests.requester_id', $employeeIds);
     }
 
     if ($selectedType) {
@@ -1270,7 +1289,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $categoryDescriptionSql = 'cash_advance_requests.accounting_remarks';
     $categoryNameSql = 'COALESCE(request_categories.particulars_category, cash_advance_requests.category)';
 
-    if ($categoryId) {
+    if ($categoryId || $borrowStatusFilter) {
         if ($categoryName) {
             $allBreakdownsSubquery = DB::table('liquidation_expenses')
                 ->whereNotNull('liquidation_expenses.cash_advance_request_id')
@@ -1290,8 +1309,8 @@ Route::get('/accounting/summary/data', function (Request $request) {
 
             $categoryBreakdownsSubquery = DB::table('liquidation_expenses')
                 ->leftJoin('particulars as summary_particulars', 'liquidation_expenses.particular_id', '=', 'summary_particulars.id')
+                ->leftJoin('categories as summary_categories', 'liquidation_expenses.category_id', '=', 'summary_categories.id')
                 ->whereNotNull('liquidation_expenses.cash_advance_request_id')
-                ->whereRaw('COALESCE(liquidation_expenses.category_id, summary_particulars.category_id) = ?', [$categoryId])
                 ->groupBy('liquidation_expenses.cash_advance_request_id')
                 ->selectRaw("
                     liquidation_expenses.cash_advance_request_id as cash_advance_request_id,
@@ -1301,6 +1320,15 @@ Route::get('/accounting/summary/data', function (Request $request) {
                     {$descriptionConcatSql} as matching_description
                 ");
 
+            if ($borrowStatusFilter) {
+                $categoryBreakdownsSubquery
+                    ->whereRaw("LOWER(COALESCE(summary_categories.particulars_category, '')) = 'borrow'")
+                    ->where('liquidation_expenses.borrow_return_status', $borrowStatusFilter);
+            } else {
+                $categoryBreakdownsSubquery
+                    ->whereRaw('COALESCE(liquidation_expenses.category_id, summary_particulars.category_id) = ?', [$categoryId]);
+            }
+
             $expenseQuery
                 ->leftJoinSub($allBreakdownsSubquery, 'summary_breakdowns', function ($join) {
                     $join->on('summary_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
@@ -1308,11 +1336,17 @@ Route::get('/accounting/summary/data', function (Request $request) {
                 ->leftJoinSub($categoryBreakdownsSubquery, 'summary_category_breakdowns', function ($join) {
                     $join->on('summary_category_breakdowns.cash_advance_request_id', '=', 'cash_advance_requests.id');
                 })
-                ->where(function ($query) use ($categoryId, $categoryName) {
+                ->where(function ($query) use ($categoryId, $categoryName, $borrowStatusFilter) {
                     $query->where(function ($breakdownQuery) {
                         $breakdownQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) > 0')
                             ->whereRaw('COALESCE(summary_category_breakdowns.matching_amount, 0) > 0');
-                    })->orWhere(function ($transactionQuery) use ($categoryId, $categoryName) {
+                    })->orWhere(function ($transactionQuery) use ($categoryId, $categoryName, $borrowStatusFilter) {
+                        if ($borrowStatusFilter) {
+                            $transactionQuery->whereRaw('1 = 0');
+
+                            return;
+                        }
+
                         $transactionQuery->whereRaw('COALESCE(summary_breakdowns.breakdown_count, 0) = 0')
                             ->where(function ($categoryQuery) use ($categoryId, $categoryName) {
                                 $categoryQuery->where('cash_advance_requests.category_id', $categoryId)
@@ -1352,7 +1386,7 @@ Route::get('/accounting/summary/data', function (Request $request) {
     $page = min($page, $totalPages);
     $balance = AccountingMonthlyBalance::forMonth($periodDate);
 
-    if ($categoryId) {
+    if ($categoryId || $borrowStatusFilter) {
         $balance['debit_total'] = round((float) $summary->total_debits, 2);
         $balance['credit_total'] = round((float) $summary->total_credits, 2);
         $balance['expense_total'] = round((float) $summary->net_amount, 2);
