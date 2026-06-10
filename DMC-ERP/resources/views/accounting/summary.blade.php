@@ -27,16 +27,13 @@
 		</div>
 	</div>
 
-	<!-- Main Content with Balance Card on Right -->
-	<div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
-		<!-- Table Section (takes 3 columns) -->
-		<div class="xl:col-span-3 space-y-6">
-			<!-- Filter Section -->
-			<div class="rounded-3xl bg-white p-6 shadow-lg border border-gray-100">
-				<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-					<div class="w-full sm:max-w-xs">
-						<label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
-						<select id="summaryMonthFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+	<div class="space-y-6">
+		<div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+			<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+				<div class="flex w-full flex-col gap-3 md:flex-row md:items-center">
+					<div class="w-full md:w-[340px]">
+						<label for="summaryMonthFilter" class="sr-only">Month</label>
+						<select id="summaryMonthFilter" class="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20">
 							@foreach($summaryMonths ?? [] as $summaryMonth)
 								<option value="{{ $summaryMonth['value'] }}" {{ $summaryMonth['value'] === ($defaultSummaryMonth ?? '2026-01') ? 'selected' : '' }}>
 									{{ $summaryMonth['label'] }}
@@ -45,177 +42,158 @@
 						</select>
 					</div>
 
-					<div class="w-full sm:w-64">
-						<button id="summaryFilterBtn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
-							<i data-feather="filter" class="w-4 h-4"></i>
-							<span>Filters</span>
-						</button>
+					<div class="inline-flex min-h-[42px] w-full items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm md:w-auto md:justify-start">
+						<span class="font-semibold text-emerald-700">Current Period</span>
+						<span class="rounded-full bg-white px-3 py-1 text-sm font-bold text-emerald-900 shadow-sm" id="summaryPeriodLabel">Current Period</span>
 					</div>
 				</div>
+
+				<button id="summaryFilterBtn" type="button" class="inline-flex w-full min-w-[170px] items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 md:w-[170px]">
+					<i data-feather="filter" class="w-4 h-4"></i>
+					<span>Filters</span>
+				</button>
 			</div>
+		</div>
 
-			<!-- Filter Modal -->
-			<div id="summaryFilterModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 px-4">
-				<div class="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-gray-100 overflow-hidden">
-					<div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-						<div>
-							<h3 class="text-xl font-bold text-gray-800">Summary Filters</h3>
-							<p class="text-sm text-gray-500 mt-1">Choose a category and employee to update the table and print view.</p>
-						</div>
-						<button id="summaryCloseModalBtn" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
-							<i data-feather="x" class="w-5 h-5"></i>
-						</button>
-					</div>
-					<div class="p-6 space-y-5">
-						<div>
-							<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
-							<div class="relative">
-								<div id="summarySelectedEmployees" class="mb-2 flex min-h-0 flex-wrap gap-2"></div>
-								<input
-									id="summaryEmployeeSearch"
-									type="text"
-									autocomplete="off"
-									placeholder="Type employee name or ID"
-									class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white"
-								>
-								<div id="summaryEmployeeSuggestions" class="absolute z-20 mt-2 hidden max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"></div>
-							</div>
-						</div>
-						<div>
-							<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-							<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-								<option value="">All Categories</option>
-								@foreach($categories as $category)
-									<option value="category:{{ $category->id }}">{{ $category->particulars_category }}</option>
-								@endforeach
-								<option value="borrow_returned">Borrow / Returned</option>
-								<option value="borrow_not_yet_spent">Borrow / Not yet spent</option>
-							</select>
-						</div>
-						<div>
-							<label class="block text-sm font-semibold text-gray-700 mb-2">Type</label>
-							<select id="summaryTypeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
-								<option value="">All Types</option>
-								<option value="debit">Debit</option>
-								<option value="credit">Credit</option>
-							</select>
-						</div>
-						<div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
-							<button id="summaryResetModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
-								<i data-feather="rotate-ccw" class="w-4 h-4"></i>
-								Reset
-							</button>
-							<button id="summarySaveFiltersBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold hover:shadow-lg transition-all duration-300">
-								<i data-feather="check" class="w-4 h-4"></i>
-								Apply Filters
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-
-
-
-			<!-- Expenses Table -->
-			<div class="rounded-3xl bg-white p-6 shadow-lg border border-gray-100 overflow-hidden">
-				<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+		<div id="summaryFilterModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 px-4">
+			<div class="w-full max-w-md overflow-visible rounded-2xl border border-gray-100 bg-white shadow-2xl">
+				<div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
 					<div>
-						<h3 class="text-xl font-bold text-gray-800">Liquidation Expenses</h3>
-						<p class="text-sm text-gray-500 mt-1">
-							<span id="summaryExpenseCount">0</span> records
-							<span id="summaryActiveFilters" class="block text-xs text-emerald-700 mt-1"></span>
-						</p>
+						<h3 class="text-xl font-bold text-gray-800">Summary Filters</h3>
+						<p class="text-sm text-gray-500 mt-1">Choose employees, category, and type.</p>
 					</div>
-					<button id="summaryPrintBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all duration-200 shadow-sm">
-						<i data-feather="printer" class="w-4 h-4"></i>
-						<span>Print</span>
+					<button id="summaryCloseModalBtn" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+						<i data-feather="x" class="w-5 h-5"></i>
 					</button>
 				</div>
-
-				<div class="overflow-x-auto">
-					<table class="w-full">
-						<thead>
-							<tr class="border-b border-gray-200 text-left text-sm font-semibold text-gray-600 bg-gray-50">
-								<th class="py-4 px-4">Date</th>
-								<th class="py-4 px-4">Employee Name</th>
-								<th class="py-4 px-4">Category</th>
-								<th class="py-4 px-4">Particulars</th>
-								<th class="py-4 px-4">Type</th>
-								<th class="py-4 px-4 text-right">Credit</th>
-								<th class="py-4 px-4 text-right">Debit</th>
-							</tr>
-						</thead>
-						<tbody id="summaryTableBody">
-							<tr class="border-b border-gray-100 hover:bg-gray-50 transition">
-								<td colspan="7" class="py-8 px-4 text-center text-gray-500">
-									<p class="text-sm">No data available</p>
-								</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
-
-				<!-- Pagination -->
-				<div id="summaryPaginationContainer" class="mt-6 hidden">
-					<div class="flex items-center justify-between">
-						<p class="text-sm text-gray-600">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></p>
-						<div class="flex gap-2">
-							<button id="summaryPrevBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 font-semibold hover:bg-gray-50 transition">
-								<i data-feather="chevron-left" class="w-4 h-4"></i>
-								Previous
-							</button>
-							<button id="summaryNextBtn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 font-semibold hover:bg-gray-50 transition">
-								Next
-								<i data-feather="chevron-right" class="w-4 h-4"></i>
-							</button>
+				<div class="p-6 space-y-5">
+					<div>
+						<label class="block text-sm font-semibold text-gray-700 mb-2">Employee</label>
+						<div class="relative">
+							<div id="summarySelectedEmployees" class="mb-2 flex min-h-0 flex-wrap gap-2"></div>
+							<input
+								id="summaryEmployeeSearch"
+								type="text"
+								autocomplete="off"
+								placeholder="Type employee name or ID"
+								class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white"
+							>
+							<div id="summaryEmployeeSuggestions" class="absolute z-[90] mt-2 hidden max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"></div>
 						</div>
+					</div>
+					<div>
+						<label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+						<select id="summaryCategoryFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+							<option value="">All Categories</option>
+							@foreach($categories as $category)
+								<option value="category:{{ $category->id }}">{{ $category->particulars_category }}</option>
+							@endforeach
+							<option value="borrow_returned">Borrow / Returned</option>
+							<option value="borrow_not_yet_spent">Borrow / Not yet spent</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-sm font-semibold text-gray-700 mb-2">Type</label>
+						<select id="summaryTypeFilter" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 bg-white">
+							<option value="">All Types</option>
+							<option value="debit">Debit</option>
+							<option value="credit">Credit</option>
+						</select>
+					</div>
+					<div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
+						<button id="summaryResetModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition-all duration-200">
+							<i data-feather="rotate-ccw" class="w-4 h-4"></i>
+							Reset
+						</button>
+						<button id="summarySaveFiltersBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-all duration-200">
+							<i data-feather="check" class="w-4 h-4"></i>
+							Apply Filters
+						</button>
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<!-- Balance Card Section (takes 1 column) -->
-		<div class="xl:col-span-1 h-fit">
-			<div class="rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 text-white p-7 shadow-2xl relative overflow-hidden">
-				<div class="absolute -top-12 -right-12 w-40 h-40 bg-emerald-300/20 rounded-full blur-3xl"></div>
-				<div class="relative z-10 space-y-6">
-					<div>
-						<p class="text-sm uppercase tracking-wide text-emerald-200 font-semibold">Period Summary</p>
-						<p id="summaryPeriodLabel" class="text-xs text-emerald-100 mt-2">Current Period</p>
-					</div>
+		<div id="periodSummaryCards" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+				<p class="text-sm font-semibold text-emerald-700">Opening Balance</p>
+				<p id="displayOpeningBalance" class="mt-2 text-2xl font-bold text-emerald-900">PHP 0.00</p>
+			</div>
+			<div class="rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
+				<p class="text-sm font-semibold text-cyan-700">Ending Balance</p>
+				<p id="displayEndingBalance" class="mt-2 text-2xl font-bold text-cyan-900">PHP 0.00</p>
+			</div>
+			<div class="rounded-2xl border border-orange-200 bg-orange-50 p-5">
+				<p class="text-sm font-semibold text-orange-700">Total Debits</p>
+				<p id="summaryTotalDebits" class="mt-2 text-2xl font-bold text-orange-900">PHP 0.00</p>
+			</div>
+			<div class="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+				<p class="text-sm font-semibold text-rose-700">Total Credits</p>
+				<p id="summaryTotalCredits" class="mt-2 text-2xl font-bold text-rose-900">PHP 0.00</p>
+			</div>
+		</div>
 
-					<div id="periodSummaryCards" class="space-y-4">
-						<div class="rounded-2xl bg-emerald-500/15 border border-emerald-300/30 p-4">
-							<p class="text-xs text-emerald-200 uppercase tracking-wide font-semibold">Opening Balance</p>
-							<p id="displayOpeningBalance" class="text-2xl font-bold text-emerald-100 mt-2">PHP 0.00</p>
-						</div>
+		<div id="categorySummaryCards" class="hidden grid grid-cols-1 gap-4 md:grid-cols-2">
+			<div class="rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
+				<p class="text-sm font-semibold text-cyan-700">Category</p>
+				<p id="summarySelectedCategory" class="mt-2 break-words text-xl font-bold text-cyan-900">All Categories</p>
+			</div>
+			<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+				<p class="text-sm font-semibold text-emerald-700">Total Category Amount</p>
+				<p id="summaryTotalCategoryAmount" class="mt-2 text-2xl font-bold text-emerald-900">PHP 0.00</p>
+			</div>
+		</div>
 
-						<div class="rounded-2xl bg-cyan-500/15 border border-cyan-300/30 p-4">
-							<p class="text-xs text-cyan-200 uppercase tracking-wide font-semibold">Ending Balance</p>
-							<p id="displayEndingBalance" class="text-2xl font-bold text-cyan-100 mt-2">PHP 0.00</p>
-						</div>
+		<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+				<div>
+					<h3 class="text-lg font-semibold text-gray-900">Liquidation Expenses</h3>
+					<p class="mt-1 text-sm text-gray-500">
+						<span id="summaryExpenseCount">0</span> records
+						<span id="summaryActiveFilters" class="block text-xs font-semibold text-emerald-700 mt-1"></span>
+					</p>
+				</div>
+				<button id="summaryPrintBtn" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800">
+					<i data-feather="printer" class="w-4 h-4"></i>
+					<span>Print</span>
+				</button>
+			</div>
 
-						<div class="rounded-2xl bg-emerald-500/15 border border-emerald-300/30 p-4">
-							<p class="text-xs text-emerald-200 uppercase tracking-wide font-semibold">Total Debits</p>
-							<p id="summaryTotalDebits" class="text-2xl font-bold text-emerald-100 mt-2">PHP 0.00</p>
-						</div>
+			<div class="overflow-x-auto">
+				<table class="w-full min-w-[920px]">
+					<thead>
+						<tr class="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+							<th class="py-3 px-4">Date</th>
+							<th class="py-3 px-4">Employee Name</th>
+							<th class="py-3 px-4">Category</th>
+							<th class="py-3 px-4">Particulars</th>
+							<th class="py-3 px-4">Type</th>
+							<th class="py-3 px-4 text-right">Credit</th>
+							<th class="py-3 px-4 text-right">Debit</th>
+						</tr>
+					</thead>
+					<tbody id="summaryTableBody">
+						<tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+							<td colspan="7" class="py-8 px-4 text-center text-gray-500">
+								<p class="text-sm">No data available</p>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
 
-						<div class="rounded-2xl bg-rose-500/15 border border-rose-300/30 p-4">
-							<p class="text-xs text-rose-200 uppercase tracking-wide font-semibold">Total Credits</p>
-							<p id="summaryTotalCredits" class="text-2xl font-bold text-rose-100 mt-2">PHP 0.00</p>
-						</div>
-					</div>
-
-					<div id="categorySummaryCards" class="hidden space-y-4">
-						<div class="rounded-2xl bg-cyan-500/15 border border-cyan-300/30 p-4">
-							<p class="text-xs text-cyan-200 uppercase tracking-wide font-semibold">Category</p>
-							<p id="summarySelectedCategory" class="text-xl font-bold text-cyan-100 mt-2 break-words">All Categories</p>
-						</div>
-
-						<div class="rounded-2xl bg-emerald-500/15 border border-emerald-300/30 p-4">
-							<p class="text-xs text-emerald-200 uppercase tracking-wide font-semibold">Total Category Amount</p>
-							<p id="summaryTotalCategoryAmount" class="text-2xl font-bold text-emerald-100 mt-2">PHP 0.00</p>
-						</div>
+			<div id="summaryPaginationContainer" class="mt-6 hidden">
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<p class="text-sm text-gray-600">Page <span id="currentPage">1</span> of <span id="totalPages">1</span></p>
+					<div class="flex gap-2">
+						<button id="summaryPrevBtn" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 transition hover:bg-gray-50">
+							<i data-feather="chevron-left" class="w-4 h-4"></i>
+							Previous
+						</button>
+						<button id="summaryNextBtn" type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 transition hover:bg-gray-50">
+							Next
+							<i data-feather="chevron-right" class="w-4 h-4"></i>
+						</button>
 					</div>
 				</div>
 			</div>
