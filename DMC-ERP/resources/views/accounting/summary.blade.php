@@ -5,6 +5,12 @@
 @php
 	$pageOpeningBalance = (float) ($accountingBudgetBalance['opening_balance'] ?? 0);
 	$pageRemainingBalance = (float) ($accountingBudgetBalance['remaining_balance'] ?? 0);
+	$summaryEmployeeOptions = ($employees ?? collect())->map(fn ($employee) => [
+		'id' => (int) $employee->id,
+		'name' => $employee->name,
+		'employee_id' => $employee->employee_id,
+		'label' => $employee->name . ($employee->employee_id ? ' (' . $employee->employee_id . ')' : ''),
+	])->values();
 @endphp
 
 <div class="space-y-8">
@@ -229,12 +235,7 @@
 	let draftEmployeeIds = [];
 	let appliedType = '';
 	const summaryPrintedByName = @json(Auth::user()->name ?? Auth::user()->email ?? 'Current User');
-	const summaryEmployees = @json(($employees ?? collect())->map(fn ($employee) => [
-		'id' => (int) $employee->id,
-		'name' => $employee->name,
-		'employee_id' => $employee->employee_id,
-		'label' => $employee->name . ($employee->employee_id ? ' (' . $employee->employee_id . ')' : ''),
-	])->values());
+	const summaryEmployees = @json($summaryEmployeeOptions);
 
 	function updateBalanceDisplay() {
 		document.getElementById('displayOpeningBalance').textContent = formatCurrencyValue(openingBalance);
