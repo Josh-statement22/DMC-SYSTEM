@@ -1847,6 +1847,21 @@
         });
     }
 
+    function markTransactionRowAsReturnedBorrow(transactionId) {
+        const row = document.querySelector(`.transaction-row[data-id="${CSS.escape(String(transactionId))}"]`);
+        const categoryCell = row?.children?.[4];
+        const categoryWrap = categoryCell?.querySelector('span.inline-flex');
+
+        if (!categoryWrap || categoryWrap.querySelector('.borrow-returned-badge')) {
+            return;
+        }
+
+        categoryWrap.insertAdjacentHTML(
+            'beforeend',
+            '<span class="borrow-returned-badge inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Returned</span>'
+        );
+    }
+
     async function loadBreakdownAllocation(transactionId) {
         if (!transactionId) {
             return;
@@ -2673,6 +2688,8 @@
             }
 
             const formData = new FormData(this);
+            const savedTransactionId = formData.get('cash_advance_request_id');
+            const savedBorrowReturnStatus = formData.get('borrow_return_status');
 
             fetch(storeExpenseRoute, {
                 method: 'POST',
@@ -2693,6 +2710,10 @@
                 if (data.success) {
                     if (data.allocation) {
                         setBreakdownAllocation(data.allocation);
+                    }
+
+                    if (savedBorrowReturnStatus === 'returned') {
+                        markTransactionRowAsReturnedBorrow(savedTransactionId);
                     }
 
                     const remaining = Number(data.allocation?.remaining_amount ?? 0);

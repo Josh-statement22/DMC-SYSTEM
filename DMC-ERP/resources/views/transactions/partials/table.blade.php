@@ -37,7 +37,14 @@
                         </span>
                     </td>
                     <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->transaction_details ?? '-' }}</td>
-                    <td class="px-6 py-3 text-sm text-gray-900">{{ $expense->category ?? 'Uncategorized' }}</td>
+                    <td class="px-6 py-3 text-sm text-gray-900">
+                        <span class="inline-flex flex-wrap items-center gap-2">
+                            <span>{{ $expense->category ?? 'Uncategorized' }}</span>
+                            @if(strcasecmp((string) ($expense->category ?? ''), 'Borrow') === 0 && ! empty($expense->has_returned_borrow))
+                                <span class="borrow-returned-badge inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Returned</span>
+                            @endif
+                        </span>
+                    </td>
                     <td class="px-6 py-3 text-sm text-gray-600">{{ $expense->description ?? '-' }}</td>
                     <td class="px-6 py-3 text-sm text-right font-semibold {{ $expense->transaction_type === 'debit' ? 'text-red-600' : 'text-green-600' }}">
                         {{ $expense->transaction_type === 'debit' ? '-' : '+' }}PHP {{ number_format($expense->amount, 2) }}

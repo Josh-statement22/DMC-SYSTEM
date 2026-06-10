@@ -66,6 +66,15 @@ class AccountingController extends Controller
         $selectedCategory = trim((string) $request->query('category', ''));
         $search = trim((string) $request->query('search', ''));
 
+        $returnedBorrowSelect = Schema::hasColumn('liquidation_expenses', 'borrow_return_status')
+            ? DB::raw("EXISTS (
+                SELECT 1
+                FROM liquidation_expenses
+                WHERE liquidation_expenses.cash_advance_request_id = cash_advance_requests.id
+                    AND liquidation_expenses.borrow_return_status = 'returned'
+            ) as has_returned_borrow")
+            : DB::raw('0 as has_returned_borrow');
+
         // Show recorded transactions coming from cash advance requests (backtracking)
         $expensesQuery = DB::table('cash_advance_requests')
             ->leftJoin('users', 'cash_advance_requests.requester_id', '=', 'users.id')
@@ -84,7 +93,8 @@ class AccountingController extends Controller
                 DB::raw('COALESCE(transaction_categories.particulars_category, cash_advance_requests.category) as category'),
                 'cash_advance_requests.accounting_remarks as description',
                 'cash_advance_requests.approved_amount as amount',
-                'users.name as employee_name'
+                'users.name as employee_name',
+                $returnedBorrowSelect
             );
 
         if ($selectedType) {
